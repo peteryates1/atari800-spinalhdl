@@ -1,0 +1,3 @@
+[submodule "jop-spinalhdl"]
+	path = jop-spinalhdl
+	url = git@github.com:peteryates1/jop-spinalhdl.git

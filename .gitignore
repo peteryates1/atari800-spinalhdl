@@ -1,0 +1,28 @@
+# SBT
+target/
+project/target/
+project/project/
+
+# SpinalHDL generated output
+generated/
+
+# Quartus build artifacts
+quartus/db/
+quartus/incremental_db/
+quartus/output_files/
+quartus/*.sv.bak
+
+# Quartus-copied generated files (from make quartus-prep)
+quartus/Atari800JopTop.sv
+quartus/Atari800JopTop.sv_*.bin
+quartus/JopCoreForAtari.sv
+quartus/JopCoreForAtari.sv_*.bin
+
+# Simulation
+sim_workspace/
+
+# IDE
+.idea/
+.bsp/
+.metals/
+.vscode/
