@@ -1,12 +1,13 @@
 package atari800
 
 import spinal.core._
+import jop.io.HasBusIo
 
 // JOP I/O peripheral for controlling the Atari 800 core.
 // Replaces PicoBus functionality: config registers, paddle injection,
 // keyboard matrix, joystick overrides, OSD control, cold reset.
 //
-// Uses the same simple register interface as BmbVgaText (addr/rd/wr/data).
+// Uses the same simple register interface as VgaText (addr/rd/wr/data).
 // JopCore's I/O decoder routes accesses to this peripheral.
 //
 // Register map (4-bit address, 32-bit data):
@@ -25,15 +26,16 @@ import spinal.core._
 //   0xA  R/W: joy4_n[4:0]
 //   0xB  R/W: keyboard response[1:0]
 //   0xC  R/W: throttle count[5:0]
-class BmbAtariCtrl extends Component {
-  val io = new Bundle {
-    // JOP I/O bus
+class AtariCtrl extends Component with HasBusIo {
+  val bus = new Bundle {
     val addr   = in  UInt(4 bits)
     val rd     = in  Bool()
     val wr     = in  Bool()
     val wrData = in  Bits(32 bits)
     val rdData = out Bits(32 bits)
+  }
 
+  val io = new Bundle {
     // Atari core control outputs
     val osdEnable              = out Bool()
     val coldReset              = out Bool()
@@ -87,43 +89,43 @@ class BmbAtariCtrl extends Component {
   coldResetReg := False
 
   // Write handling
-  when(io.wr) {
-    switch(io.addr) {
+  when(bus.wr) {
+    switch(bus.addr) {
       is(0x0) {
-        osdEnableReg := io.wrData(0)
-        when(io.wrData(7)) { coldResetReg := True }
+        osdEnableReg := bus.wrData(0)
+        when(bus.wrData(7)) { coldResetReg := True }
       }
-      is(0x1) { cartSelectReg := io.wrData(5 downto 0) }
-      is(0x2) { configReg     := io.wrData(7 downto 0) }
-      is(0x3) { paddle0Reg    := io.wrData(7 downto 0).asSInt }
-      is(0x4) { paddle1Reg    := io.wrData(7 downto 0).asSInt }
-      is(0x5) { paddle2Reg    := io.wrData(7 downto 0).asSInt }
-      is(0x6) { paddle3Reg    := io.wrData(7 downto 0).asSInt }
-      is(0x7) { joy1Reg       := io.wrData(4 downto 0) }
-      is(0x8) { joy2Reg       := io.wrData(4 downto 0) }
-      is(0x9) { joy3Reg       := io.wrData(4 downto 0) }
-      is(0xA) { joy4Reg       := io.wrData(4 downto 0) }
-      is(0xB) { kbResponseReg := io.wrData(1 downto 0) }
-      is(0xC) { throttleReg   := io.wrData(5 downto 0) }
+      is(0x1) { cartSelectReg := bus.wrData(5 downto 0) }
+      is(0x2) { configReg     := bus.wrData(7 downto 0) }
+      is(0x3) { paddle0Reg    := bus.wrData(7 downto 0).asSInt }
+      is(0x4) { paddle1Reg    := bus.wrData(7 downto 0).asSInt }
+      is(0x5) { paddle2Reg    := bus.wrData(7 downto 0).asSInt }
+      is(0x6) { paddle3Reg    := bus.wrData(7 downto 0).asSInt }
+      is(0x7) { joy1Reg       := bus.wrData(4 downto 0) }
+      is(0x8) { joy2Reg       := bus.wrData(4 downto 0) }
+      is(0x9) { joy3Reg       := bus.wrData(4 downto 0) }
+      is(0xA) { joy4Reg       := bus.wrData(4 downto 0) }
+      is(0xB) { kbResponseReg := bus.wrData(1 downto 0) }
+      is(0xC) { throttleReg   := bus.wrData(5 downto 0) }
     }
   }
 
   // Read handling
-  io.rdData := B(0, 32 bits)
-  switch(io.addr) {
-    is(0x0) { io.rdData := B(0, 30 bits) ## io.pllLocked ## osdEnableReg }
-    is(0x1) { io.rdData := B(0, 26 bits) ## cartSelectReg }
-    is(0x2) { io.rdData := B(0, 24 bits) ## configReg }
-    is(0x3) { io.rdData := B(0, 24 bits) ## paddle0Reg.asBits }
-    is(0x4) { io.rdData := B(0, 24 bits) ## paddle1Reg.asBits }
-    is(0x5) { io.rdData := B(0, 24 bits) ## paddle2Reg.asBits }
-    is(0x6) { io.rdData := B(0, 24 bits) ## paddle3Reg.asBits }
-    is(0x7) { io.rdData := B(0, 27 bits) ## joy1Reg }
-    is(0x8) { io.rdData := B(0, 27 bits) ## joy2Reg }
-    is(0x9) { io.rdData := B(0, 27 bits) ## joy3Reg }
-    is(0xA) { io.rdData := B(0, 27 bits) ## joy4Reg }
-    is(0xB) { io.rdData := B(0, 30 bits) ## kbResponseReg }
-    is(0xC) { io.rdData := B(0, 26 bits) ## throttleReg }
+  bus.rdData := B(0, 32 bits)
+  switch(bus.addr) {
+    is(0x0) { bus.rdData := B(0, 30 bits) ## io.pllLocked ## osdEnableReg }
+    is(0x1) { bus.rdData := B(0, 26 bits) ## cartSelectReg }
+    is(0x2) { bus.rdData := B(0, 24 bits) ## configReg }
+    is(0x3) { bus.rdData := B(0, 24 bits) ## paddle0Reg.asBits }
+    is(0x4) { bus.rdData := B(0, 24 bits) ## paddle1Reg.asBits }
+    is(0x5) { bus.rdData := B(0, 24 bits) ## paddle2Reg.asBits }
+    is(0x6) { bus.rdData := B(0, 24 bits) ## paddle3Reg.asBits }
+    is(0x7) { bus.rdData := B(0, 27 bits) ## joy1Reg }
+    is(0x8) { bus.rdData := B(0, 27 bits) ## joy2Reg }
+    is(0x9) { bus.rdData := B(0, 27 bits) ## joy3Reg }
+    is(0xA) { bus.rdData := B(0, 27 bits) ## joy4Reg }
+    is(0xB) { bus.rdData := B(0, 30 bits) ## kbResponseReg }
+    is(0xC) { bus.rdData := B(0, 26 bits) ## throttleReg }
   }
 
   // Output assignments
@@ -148,4 +150,12 @@ class BmbAtariCtrl extends Component {
   io.joy4_n := joy4Reg
 
   io.keyboardResponse := kbResponseReg
+
+  // HasBusIo implementation
+  override def busAddr: UInt   = bus.addr
+  override def busRd: Bool     = bus.rd
+  override def busWr: Bool     = bus.wr
+  override def busWrData: Bits = bus.wrData
+  override def busRdData: Bits = bus.rdData
+  override def busExternalIo: Option[Bundle] = Some(io)
 }

@@ -2,7 +2,7 @@ QUARTUS     = /opt/altera/18.1/quartus/bin
 QUARTUS_DIR = quartus
 GEN_DIR     = generated
 
-.PHONY: bootstrap generate-jop generate-atari generate quartus-prep \
+.PHONY: bootstrap generate quartus-prep \
         quartus-map quartus-fit quartus-sta quartus-asm quartus all clean
 
 # --- Bootstrap (after fresh clone) ---
@@ -12,21 +12,14 @@ GEN_DIR     = generated
 bootstrap:
 	cd jop-spinalhdl/asm && $(MAKE) all serial flash dsp div hwmath
 
-# --- SpinalHDL generation ---
+# --- SpinalHDL generation (unified build — single step) ---
 
-generate-jop:
-	sbt "jopBridge/runMain jop.system.GenerateJopForAtari"
-
-generate-atari:
+generate:
 	sbt "atari/runMain atari800.Atari800JopTopSv"
-
-generate: generate-jop generate-atari
 
 # --- Quartus build ---
 
 quartus-prep: generate
-	cp $(GEN_DIR)/JopCoreForAtari.sv $(QUARTUS_DIR)/
-	cp $(GEN_DIR)/JopCoreForAtari.sv_*.bin $(QUARTUS_DIR)/
 	cp $(GEN_DIR)/Atari800JopTop.sv $(QUARTUS_DIR)/
 	cp $(GEN_DIR)/Atari800JopTop.sv_*.bin $(QUARTUS_DIR)/
 
@@ -53,4 +46,3 @@ clean:
 	rm -f $(GEN_DIR)/*.sv $(GEN_DIR)/*.bin
 	rm -rf $(QUARTUS_DIR)/db $(QUARTUS_DIR)/incremental_db $(QUARTUS_DIR)/output_files
 	rm -f $(QUARTUS_DIR)/Atari800JopTop.sv $(QUARTUS_DIR)/Atari800JopTop.sv_*.bin
-	rm -f $(QUARTUS_DIR)/JopCoreForAtari.sv $(QUARTUS_DIR)/JopCoreForAtari.sv_*.bin

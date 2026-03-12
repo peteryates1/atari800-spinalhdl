@@ -9,9 +9,9 @@ with 32MB SDR SDRAM (W9825G6KH).
 
 ## Origins
 
-This is a ground-up SpinalHDL rewrite of the Atari 800 core from
+This is a ground-up SpinalHDL rewrite of the **Atari 800 core from
 [gyurco/Atari800XL](https://github.com/gyurco/Atari800XL), which targets
-multiple FPGA boards with VHDL. The chip implementations (6502 CPU, ANTIC,
+multiple FPGA boards with VHDL.** The chip implementations (6502 CPU, ANTIC,
 GTIA, POKEY, PIA) were rewritten in SpinalHDL based on the original VHDL
 and Atari hardware documentation.
 

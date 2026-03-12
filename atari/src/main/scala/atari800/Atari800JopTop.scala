@@ -3,68 +3,8 @@ package atari800
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.bmb._
-
-// =========================================================================
-// JOP Core BlackBox — wraps the real JopCoreForAtari generated SV module
-//
-// Generated from /home/peter/jop-spinalhdl (Scala 2.13 / SpinalHDL 1.12.2)
-// via: sbt "runMain jop.system.GenerateJopCoreForAtari"
-//
-// Port names match the generated JopCoreForAtari.sv exactly via noIoPrefix()
-// and SpinalHDL's bundle flattening (io.io_bmb.cmd.valid → io_bmb_cmd_valid).
-// =========================================================================
-class JopCoreForAtariBlackBox extends BlackBox {
-  setDefinitionName("JopCoreForAtari")
-
-  // BMB parameters matching real JOP config (26-bit byte address, 2-bit length)
-  val bmbParam = BmbParameter(
-    access = BmbAccessParameter(
-      addressWidth = 26,
-      dataWidth    = 32
-    ).addSources(1, BmbSourceParameter(
-      contextWidth = 4,
-      lengthWidth  = 2,
-      canWrite     = true
-    ))
-  )
-
-  val io = new Bundle {
-    // BMB master — port names flatten to io_bmb_cmd_valid, etc.
-    val io_bmb = master(Bmb(bmbParam))
-
-    // SPI (single CS — CH376T; MCP3208 CS1 not yet exposed)
-    val io_spiSclk = out Bool()
-    val io_spiMosi = out Bool()
-    val io_spiMiso = in  Bool()
-    val io_spiCs   = out Bool()
-
-    // VGA text output (RGB565, 25MHz pixel domain)
-    val io_vgaHsync = out Bool()
-    val io_vgaVsync = out Bool()
-    val io_vgaR     = out Bits(5 bits)
-    val io_vgaG     = out Bits(6 bits)
-    val io_vgaB     = out Bits(5 bits)
-
-    // UART debug
-    val io_txd = out Bool()
-    val io_rxd = in  Bool()
-
-    // External I/O bus (to BmbAtariCtrl)
-    val io_extIoAddr   = out UInt(4 bits)
-    val io_extIoRd     = out Bool()
-    val io_extIoWr     = out Bool()
-    val io_extIoWrData = out Bits(32 bits)
-    val io_extIoRdData = in  Bits(32 bits)
-
-    // Clock domains (manually wired, not auto-mapped)
-    val clk        = in Bool()
-    val resetn     = in Bool()
-    val vga_clk    = in Bool()
-    val vga_resetn = in Bool()
-  }
-
-  noIoPrefix()
-}
+import jop.system._
+import jop.io._
 
 // =========================================================================
 // HDMI pin bundle
@@ -84,7 +24,7 @@ case class HdmiPins() extends Bundle with IMasterSlave {
 
 // =========================================================================
 // PLL BlackBox for 10CL025 board
-// 50MHz → 56.67MHz system, 56.67MHz phase-shifted SDRAM, 25MHz VGA text
+// 50MHz -> 56.67MHz system, 56.67MHz phase-shifted SDRAM, 25MHz VGA text
 // (Quartus IP: ALTPLL, 3 outputs)
 // =========================================================================
 class PllAtari800 extends BlackBox {
@@ -103,7 +43,7 @@ class PllAtari800 extends BlackBox {
 //
 // Integrates:
 //   Atari 800 core + scandoubler
-//   JOP soft-core (SD/USB/OSD/config)
+//   JOP soft-core (SD/USB/OSD/config) — direct instantiation, no BlackBox
 //   SDRAM arbiter (Atari priority)
 //   VGA overlay mux (Atari video / JOP text)
 //   HDMI TMDS encoder (DvidOut)
@@ -192,13 +132,30 @@ class Atari800JopTop extends Component {
   val sysArea = new ClockingArea(sysDomain) {
 
     // =====================================================================
-    // BmbAtariCtrl — JOP controls Atari config, paddles, joysticks, OSD
+    // JOP Soft-Core (direct instantiation)
     // =====================================================================
-    val atariCtrl = new BmbAtariCtrl
-    atariCtrl.io.pllLocked := pllLocked
+    val jopConfig = JopCoreForAtari.config
+    val jopCore = JopCore(config = jopConfig, vgaCd = Some(vgaTextDomain))
+
+    // Single core — tie off multicore signals
+    jopCore.io.syncIn.halted := False
+    jopCore.io.syncIn.s_out  := False
+    jopCore.io.syncIn.status := False
+    jopCore.io.snoopIn.foreach { si =>
+      si.valid := False; si.isArray := False; si.handle := 0; si.index := 0
+    }
+    jopCore.io.debugHalt    := False
+    jopCore.io.debugRamAddr := 0
+
+    // AtariCtrl — access external pins via JopCore passthrough (no hierarchy violation)
+    val atariPins = jopCore.devicePins("atariCtrl")
+    def atariPin[T <: Data](name: String): T =
+      atariPins.elements.find(_._1 == name).get._2.asInstanceOf[T]
+
+    atariPin[Bool]("pllLocked") := pllLocked
 
     // Reset: PLL lock + JOP cold-reset control
-    val resetN = pllLocked & ~atariCtrl.io.coldReset
+    val resetN = pllLocked & ~atariPin[Bool]("coldReset")
 
     // Enable dividers (same as AC608)
     val colourEnable  = Reg(Bool()) init False
@@ -234,19 +191,19 @@ class Atari800JopTop extends Component {
 
     // Joysticks: merge hardware DB-9 ports with JOP software overrides
     // Active low — AND hardware pins with JOP override (both must release)
-    atariCore.io.JOY1_n := io.joy1.packed & atariCtrl.io.joy1_n
-    atariCore.io.JOY2_n := io.joy2.packed & atariCtrl.io.joy2_n
-    atariCore.io.JOY3_n := io.joy3.packed & atariCtrl.io.joy3_n
-    atariCore.io.JOY4_n := io.joy4.packed & atariCtrl.io.joy4_n
+    atariCore.io.JOY1_n := io.joy1.packed & atariPin[Bits]("joy1_n")
+    atariCore.io.JOY2_n := io.joy2.packed & atariPin[Bits]("joy2_n")
+    atariCore.io.JOY3_n := io.joy3.packed & atariPin[Bits]("joy3_n")
+    atariCore.io.JOY4_n := io.joy4.packed & atariPin[Bits]("joy4_n")
 
-    // Paddles (from MCP3208 via JOP → BmbAtariCtrl)
-    atariCore.io.PADDLE0 := atariCtrl.io.paddle0
-    atariCore.io.PADDLE1 := atariCtrl.io.paddle1
-    atariCore.io.PADDLE2 := atariCtrl.io.paddle2
-    atariCore.io.PADDLE3 := atariCtrl.io.paddle3
+    // Paddles (from MCP3208 via JOP -> AtariCtrl)
+    atariCore.io.PADDLE0 := atariPin[SInt]("paddle0")
+    atariCore.io.PADDLE1 := atariPin[SInt]("paddle1")
+    atariCore.io.PADDLE2 := atariPin[SInt]("paddle2")
+    atariCore.io.PADDLE3 := atariPin[SInt]("paddle3")
 
-    // Keyboard (from USB via JOP → BmbAtariCtrl)
-    atariCore.io.KEYBOARD_RESPONSE := atariCtrl.io.keyboardResponse
+    // Keyboard (from USB via JOP -> AtariCtrl)
+    atariCore.io.KEYBOARD_RESPONSE := atariPin[Bits]("keyboardResponse")
 
     // SIO (no SIO on this board — directly unused)
     atariCore.io.SIO_RXD := True
@@ -258,17 +215,17 @@ class Atari800JopTop extends Component {
     atariCore.io.CONSOL_SELECT := False
     atariCore.io.CONSOL_START  := False
 
-    // Config from BmbAtariCtrl
-    atariCore.io.RAM_SELECT                := atariCtrl.io.ramSelect
-    atariCore.io.PAL                       := atariCtrl.io.pal
+    // Config from AtariCtrl
+    atariCore.io.RAM_SELECT                := atariPin[Bits]("ramSelect")
+    atariCore.io.PAL                       := atariPin[Bool]("pal")
     atariCore.io.HALT                      := False
-    atariCore.io.TURBO_VBLANK_ONLY         := atariCtrl.io.turboVblankOnly
-    atariCore.io.THROTTLE_COUNT_6502       := atariCtrl.io.throttleCount
-    atariCore.io.emulated_cartridge_select := atariCtrl.io.cartSelect
+    atariCore.io.TURBO_VBLANK_ONLY         := atariPin[Bool]("turboVblankOnly")
+    atariCore.io.THROTTLE_COUNT_6502       := atariPin[Bits]("throttleCount")
+    atariCore.io.emulated_cartridge_select := atariPin[Bits]("cartSelect")
     atariCore.io.freezer_enable            := False
     atariCore.io.freezer_activate          := False
-    atariCore.io.atari800mode              := atariCtrl.io.atari800mode
-    atariCore.io.HIRES_ENA                 := atariCtrl.io.hiresEna
+    atariCore.io.atari800mode              := atariPin[Bool]("atari800mode")
+    atariCore.io.HIRES_ENA                 := atariPin[Bool]("hiresEna")
 
     // DMA — JOP uses SDRAM arbiter directly, not the DMA path
     atariCore.io.DMA_FETCH              := False
@@ -280,42 +237,27 @@ class Atari800JopTop extends Component {
     atariCore.io.DMA_WRITE_DATA         := B(0, 32 bits)
 
     // =====================================================================
-    // JOP Soft-Core (real JopCoreForAtari via BlackBox)
-    // =====================================================================
-    val jopCore = new JopCoreForAtariBlackBox
-
-    // Clock domains
-    jopCore.io.clk        := clkSys
-    jopCore.io.resetn     := pllLocked
-    jopCore.io.vga_clk    := clkVgaText
-    jopCore.io.vga_resetn := pllLocked
-
     // SPI pins (single CS to CH376T; MCP3208 CS1 not yet in JOP)
-    io.spiSclk := jopCore.io.io_spiSclk
-    io.spiMosi := jopCore.io.io_spiMosi
-    jopCore.io.io_spiMiso := io.spiMiso
-    io.spiCs0 := jopCore.io.io_spiCs
+    // =====================================================================
+    io.spiSclk := jopCore.devicePin[Bool]("sdSpi", "sclk")
+    io.spiMosi := jopCore.devicePin[Bool]("sdSpi", "mosi")
+    jopCore.devicePin[Bool]("sdSpi", "miso") := io.spiMiso
+    io.spiCs0 := jopCore.devicePin[Bool]("sdSpi", "cs")
+    jopCore.devicePin[Bool]("sdSpi", "cd") := True   // card always present
     io.spiCs1 := True   // MCP3208 deselected (CS1 not yet exposed by JOP)
 
     // UART debug
-    io.uartTx := jopCore.io.io_txd
-    jopCore.io.io_rxd := io.uartRx
-
-    // Wire JOP external I/O bus to BmbAtariCtrl
-    atariCtrl.io.addr   := jopCore.io.io_extIoAddr
-    atariCtrl.io.rd     := jopCore.io.io_extIoRd
-    atariCtrl.io.wr     := jopCore.io.io_extIoWr
-    atariCtrl.io.wrData := jopCore.io.io_extIoWrData
-    jopCore.io.io_extIoRdData := atariCtrl.io.rdData
+    io.uartTx := jopCore.devicePin[Bool]("uart", "txd")
+    jopCore.devicePin[Bool]("uart", "rxd") := io.uartRx
 
     // =====================================================================
-    // BmbToSdramReq — JOP BMB → SDRAM request protocol
+    // BmbToSdramReq — JOP BMB -> SDRAM request protocol
     // =====================================================================
-    val bmbBridge = BmbToSdramReq(jopCore.bmbParam)
-    bmbBridge.io.bmb <> jopCore.io.io_bmb
+    val bmbBridge = BmbToSdramReq(jopConfig.memConfig.bmbParameter)
+    bmbBridge.io.bmb <> jopCore.io.bmb
 
     // =====================================================================
-    // SDRAM Arbiter — Atari (priority) + JOP → SdramStatemachine
+    // SDRAM Arbiter — Atari (priority) + JOP -> SdramStatemachine
     // =====================================================================
     val arbiter = new SdramArbiter
 
@@ -323,7 +265,7 @@ class Atari800JopTop extends Component {
     arbiter.io.a.request        := atariCore.io.SDRAM_REQUEST
     arbiter.io.a.readEnable     := atariCore.io.SDRAM_READ_ENABLE
     arbiter.io.a.writeEnable    := atariCore.io.SDRAM_WRITE_ENABLE
-    arbiter.io.a.addr           := B"0" ## atariCore.io.SDRAM_ADDR  // 23→24, bank 0
+    arbiter.io.a.addr           := B"0" ## atariCore.io.SDRAM_ADDR  // 23->24, bank 0
     arbiter.io.a.dataIn         := atariCore.io.SDRAM_DI
     arbiter.io.a.byteAccess     := atariCore.io.SDRAM_8BIT_WRITE_ENABLE
     arbiter.io.a.wordAccess     := atariCore.io.SDRAM_16BIT_WRITE_ENABLE
@@ -357,7 +299,7 @@ class Atari800JopTop extends Component {
     sdramCtrl.io.CLK_SDRAM       := clkSdram
     sdramCtrl.io.RESET_N         := resetN
 
-    // Arbiter → SDRAM controller
+    // Arbiter -> SDRAM controller
     sdramCtrl.io.REQUEST         := arbiter.io.sdram.request
     sdramCtrl.io.READ_EN         := arbiter.io.sdram.readEnable
     sdramCtrl.io.WRITE_EN        := arbiter.io.sdram.writeEnable
@@ -368,7 +310,7 @@ class Atari800JopTop extends Component {
     sdramCtrl.io.ADDRESS_IN      := arbiter.io.sdram.addr
     sdramCtrl.io.DATA_IN         := arbiter.io.sdram.dataIn
 
-    // SDRAM controller → Arbiter
+    // SDRAM controller -> Arbiter
     arbiter.io.sdram.complete := sdramCtrl.io.COMPLETE
     arbiter.io.sdram.dataOut  := sdramCtrl.io.DATA_OUT
 
@@ -388,7 +330,7 @@ class Atari800JopTop extends Component {
     }
 
     // =====================================================================
-    // Scandoubler: 15kHz Atari → 31kHz VGA
+    // Scandoubler: 15kHz Atari -> 31kHz VGA
     // =====================================================================
     val scandoubler = new Scandoubler(video_bits = 8)
     scandoubler.io.VGA                := True
@@ -396,7 +338,7 @@ class Atari800JopTop extends Component {
     scandoubler.io.colour_enable      := colourEnable
     scandoubler.io.doubled_enable     := doubledEnable
     scandoubler.io.scanlines_on       := False
-    scandoubler.io.pal                := atariCtrl.io.pal
+    scandoubler.io.pal                := atariPin[Bool]("pal")
     scandoubler.io.colour_in          := videoB
     scandoubler.io.vsync_in           := videoVs
     scandoubler.io.hsync_in           := videoHs
@@ -406,21 +348,21 @@ class Atari800JopTop extends Component {
     // VGA Overlay Mux — Atari video / JOP OSD text
     // =====================================================================
     val vgaMux = new VgaOverlayMux
-    vgaMux.io.osdEnable := atariCtrl.io.osdEnable
+    vgaMux.io.osdEnable := atariPin[Bool]("osdEnable")
 
-    // Atari scandoubler → mux
+    // Atari scandoubler -> mux
     vgaMux.io.atariR     := scandoubler.io.R
     vgaMux.io.atariG     := scandoubler.io.G
     vgaMux.io.atariB     := scandoubler.io.B
     vgaMux.io.atariHsync := scandoubler.io.HSYNC
     vgaMux.io.atariVsync := scandoubler.io.VSYNC
 
-    // JOP VGA text → mux
-    vgaMux.io.jopR     := jopCore.io.io_vgaR
-    vgaMux.io.jopG     := jopCore.io.io_vgaG
-    vgaMux.io.jopB     := jopCore.io.io_vgaB
-    vgaMux.io.jopHsync := jopCore.io.io_vgaHsync
-    vgaMux.io.jopVsync := jopCore.io.io_vgaVsync
+    // JOP VGA text -> mux
+    vgaMux.io.jopR     := jopCore.devicePin[Bits]("vgaText", "vgaR")
+    vgaMux.io.jopG     := jopCore.devicePin[Bits]("vgaText", "vgaG")
+    vgaMux.io.jopB     := jopCore.devicePin[Bits]("vgaText", "vgaB")
+    vgaMux.io.jopHsync := jopCore.devicePin[Bool]("vgaText", "vgaHsync")
+    vgaMux.io.jopVsync := jopCore.devicePin[Bool]("vgaText", "vgaVsync")
 
     // VGA output (top 4 bits via resistor DAC)
     io.vga.r     := vgaMux.io.r(7 downto 4)
@@ -471,8 +413,8 @@ class Atari800JopTop extends Component {
     // LEDs
     // =====================================================================
     io.led(0) := pllLocked
-    io.led(1) := ~atariCtrl.io.osdEnable   // on when Atari running
-    io.led(2) := arbiter.io.sdram.request   // SDRAM activity
-    io.led(3) := jopCore.io.io_txd           // UART activity (inverted)
+    io.led(1) := ~atariPin[Bool]("osdEnable")  // on when Atari running
+    io.led(2) := arbiter.io.sdram.request      // SDRAM activity
+    io.led(3) := jopCore.devicePin[Bool]("uart", "txd")  // UART activity (inverted)
   }
 }

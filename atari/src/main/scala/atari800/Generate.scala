@@ -41,5 +41,6 @@ object Atari800JopTopSv extends App {
     defaultClockDomainFrequency = FixedFrequency(56.67 MHz)
   )
 
+  // Unified build: generates complete design (Atari + JOP) as single .sv
   config.generateSystemVerilog(new Atari800JopTop).printPruned()
 }
