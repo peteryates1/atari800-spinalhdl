@@ -1,10 +1,12 @@
 package atari800
 
 import spinal.core._
+import java.nio.file.{Files, Paths}
 
 // Internal ROM/RAM wrapper
 // Conditionally instantiates OS ROM, BASIC ROM, and internal RAM based on generics
-class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384) extends Component {
+// cartridgeRom: path to 8K ROM file for $A000-$BFFF slot (empty = use built-in BASIC)
+class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRom: String = "") extends Component {
   val io = new Bundle {
     val clock   = in  Bool()
     val resetN  = in  Bool()
@@ -44,7 +46,7 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384) extends Com
     romRequestNext := io.romRequest & ~io.romWrEnable
     io.romRequestComplete := romRequestReg
   } else if (internalRom == 3) {
-    // d800-dfff (2K) + e000-ffff (8K)
+    // d800-dfff (2K) + e000-ffff (8K) + a000-bfff (8K cartridge slot)
     val rom2 = new Os2
     rom2.io.clock   := io.clock
     rom2.io.address := io.romAddr(10 downto 0).asUInt
@@ -53,13 +55,32 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384) extends Com
     rom10.io.clock   := io.clock
     rom10.io.address := io.romAddr(12 downto 0).asUInt
 
-    switch(io.romAddr(13 downto 11)) {
-      is(B"011") { io.romData := rom2.io.q }
-      is(B"100") { io.romData := rom10.io.q }
-      is(B"101") { io.romData := rom10.io.q }
-      is(B"110") { io.romData := rom10.io.q }
-      is(B"111") { io.romData := rom10.io.q }
-      default    { io.romData := B(0xFF, 8 bits) }
+    // Cartridge slot: load from file or fall back to built-in BASIC
+    val cartData: Seq[Bits] = if (cartridgeRom.nonEmpty) {
+      val bytes = Files.readAllBytes(Paths.get(cartridgeRom))
+      println(s"[InternalRomRam] Loading cartridge ROM: $cartridgeRom (${bytes.length} bytes)")
+      bytes.map(b => B((b.toInt & 0xFF), 8 bits)).toSeq
+    } else {
+      val basic1 = new Basic
+      // Extract BASIC ROM data at elaboration time
+      basic1.romData
+    }
+    val cartRom = Mem(Bits(8 bits), initialContent = cartData)
+    val cartAddr = io.romAddr(12 downto 0).asUInt
+    val cartQ = RegNext(cartRom.readAsync(cartAddr))
+
+    when(io.romAddr(15)) {
+      // Cartridge ROM at $A000-$BFFF (romAddr bit 15 set by AddressDecoder)
+      io.romData := cartQ
+    } otherwise {
+      switch(io.romAddr(13 downto 11)) {
+        is(B"011") { io.romData := rom2.io.q }
+        is(B"100") { io.romData := rom10.io.q }
+        is(B"101") { io.romData := rom10.io.q }
+        is(B"110") { io.romData := rom10.io.q }
+        is(B"111") { io.romData := rom10.io.q }
+        default    { io.romData := B(0xFF, 8 bits) }
+      }
     }
 
     io.romRequestComplete := romRequestReg

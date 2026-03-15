@@ -711,7 +711,7 @@ class AddressDecoder(
               ramChipSelect := False
             }
           } otherwise {
-            when(~io.atari800mode & ~io.portb(1)) {
+            when((~io.atari800mode & ~io.portb(1)) | (io.atari800mode & ~io.cartRd5)) {
               sdramChipSelect := False
               ramChipSelect := False
               when(io.romInRam) {

@@ -3,14 +3,15 @@ package atari800
 import spinal.core._
 
 class Atari800CoreSimpleSdram(
-  cycle_length : Int = 16,
-  video_bits   : Int = 8,
-  palette      : Int = 1,
-  internal_rom : Int = 1,
-  internal_ram : Int = 16384,
-  low_memory   : Int = 0,
-  stereo       : Int = 1,
-  covox        : Int = 1
+  cycle_length  : Int = 16,
+  video_bits    : Int = 8,
+  palette       : Int = 1,
+  internal_rom  : Int = 1,
+  internal_ram  : Int = 16384,
+  low_memory    : Int = 0,
+  stereo        : Int = 1,
+  covox         : Int = 1,
+  cartridge_rom : String = ""
 ) extends Component {
   val io = new Bundle {
     // Video
@@ -197,7 +198,7 @@ class Atari800CoreSimpleSdram(
   POT_IN(7 downto 4) := B"0000"
 
   // Internal ROM/RAM
-  val internalromram1 = new InternalRomRam(internalRom = internal_rom, internalRam = internal_ram)
+  val internalromram1 = new InternalRomRam(internalRom = internal_rom, internalRam = internal_ram, cartridgeRom = cartridge_rom)
   internalromram1.io.clock                := ClockDomain.current.readClockWire
   internalromram1.io.resetN               := ClockDomain.current.readResetWire
   internalromram1.io.romAddr              := ROM_ADDR
@@ -277,7 +278,7 @@ class Atari800CoreSimpleSdram(
   atari800xl.io.PBI_REQUEST_COMPLETE := False
   atari800xl.io.PBI_DISABLE         := True
 
-  atari800xl.io.CART_RD5  := True   // True = no cartridge present (active-low signal)
+  atari800xl.io.CART_RD5  := Bool(internal_rom != 3)  // False when BASIC cartridge present (internal_rom=3)
   atari800xl.io.PBI_MPD_N := True
   atari800xl.io.PBI_IRQ_N := True
 
