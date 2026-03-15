@@ -28,17 +28,28 @@ class Cpu extends Component {
   val debugA       = UInt(8 bits)
   debugA.simPublic()
   val debugX       = UInt(8 bits)
+  debugX.simPublic()
   val debugY       = UInt(8 bits)
+  debugY.simPublic()
   val debugS       = UInt(8 bits)
+  debugS.simPublic()
+  val debugFlags   = UInt(8 bits)
+  debugFlags.simPublic()
   val diUnsigned   = UInt(8 bits)
+  diUnsigned.simPublic()
   val doUnsigned   = UInt(8 bits)
+  doUnsigned.simPublic()
   val addrUnsigned = UInt(16 bits)
+  addrUnsigned.simPublic()
   val CPU_ENABLE_RDY = Bool()
+  CPU_ENABLE_RDY.simPublic()
   val WE           = Bool()
   WE.simPublic()
   val nmiPendingNext = Bool()
   val nmiPendingReg  = Reg(Bool()) init False
+  nmiPendingReg.simPublic()
   val nmiNAdjusted   = Bool()
+  nmiNAdjusted.simPublic()
   val nmiNReg        = Reg(Bool()) init True
   val nmiEdge        = Bool()
   val CPU_ENABLE_RESET = Bool()
@@ -66,6 +77,7 @@ class Cpu extends Component {
   debugX                 := cpu6502.io.debugX
   debugY                 := cpu6502.io.debugY
   debugS                 := cpu6502.io.debugS
+  debugFlags             := cpu6502.io.debug_flags
 
   CPU_ENABLE_RDY    := (CPU_ENABLE & (io.RDY | WE)) | clockDomain.isResetActive
   CPU_ENABLE_RESET  := CPU_ENABLE | clockDomain.isResetActive

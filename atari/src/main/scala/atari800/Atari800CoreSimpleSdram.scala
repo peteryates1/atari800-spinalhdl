@@ -94,6 +94,13 @@ class Atari800CoreSimpleSdram(
     val dbgMemReadyCpu  = out Bool()
     val dbgSharedEnable = out Bool()
     val dbgAnticRdy     = out Bool()
+    val dbgColbk        = out Bits(7 bits)
+    val dbgVisibleLive  = out Bool()
+    val dbgColourClock  = out Bool()
+    val dbgAN           = out Bits(3 bits)
+    val dbgGtiaWrEn     = out Bool()
+    val dbgAnticWrEn    = out Bool()
+    val dbgDmactl       = out Bits(7 bits)
   }
 
   // Internal signals
@@ -270,7 +277,7 @@ class Atari800CoreSimpleSdram(
   atari800xl.io.PBI_REQUEST_COMPLETE := False
   atari800xl.io.PBI_DISABLE         := True
 
-  atari800xl.io.CART_RD5  := False
+  atari800xl.io.CART_RD5  := True   // True = no cartridge present (active-low signal)
   atari800xl.io.PBI_MPD_N := True
   atari800xl.io.PBI_IRQ_N := True
 
@@ -341,5 +348,12 @@ class Atari800CoreSimpleSdram(
   io.dbgMemReadyCpu  := atari800xl.io.memory_ready_cpu_out
   io.dbgSharedEnable := atari800xl.io.shared_enable_out
   io.dbgAnticRdy     := atari800xl.io.rdy_out
+  io.dbgColbk        := atari800xl.io.dbgColbk
+  io.dbgVisibleLive  := atari800xl.io.dbgVisibleLive
+  io.dbgColourClock  := atari800xl.io.dbgColourClock
+  io.dbgAN           := atari800xl.io.AN_out
+  io.dbgGtiaWrEn     := atari800xl.io.dbgGtiaWrEn
+  io.dbgAnticWrEn    := atari800xl.io.dbgAnticWrEn
+  io.dbgDmactl       := atari800xl.io.dbgDmactl
 }
 

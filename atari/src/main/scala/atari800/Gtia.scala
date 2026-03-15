@@ -1,6 +1,7 @@
 package atari800
 
 import spinal.core._
+import spinal.core.sim._
 
 class Gtia extends Component {
   val io = new Bundle {
@@ -28,6 +29,10 @@ class Gtia extends Component {
     val burst               = out Bool()
     val startOfField        = out Bool()
     val oddLine             = out Bool()
+
+    // debug
+    val dbgColbk       = out Bits(7 bits)
+    val dbgVisibleLive = out Bool()
   }
 
   // address decoder
@@ -119,6 +124,7 @@ class Gtia extends Component {
   val activeHrReg = Reg(Bits(2 bits)) init B(0, 2 bits)
 
   val trigReg = Reg(Bits(4 bits)) init B(0, 4 bits)
+  trigReg.simPublic()
   val oddScanlineReg = Reg(Bool()) init False
 
   val PMG_DMA_MISSILE     = B"000"
@@ -551,7 +557,11 @@ class Gtia extends Component {
   // priority
   val setP0 = Bool(); val setP1 = Bool(); val setP2 = Bool(); val setP3 = Bool()
   val setPf0 = Bool(); val setPf1 = Bool(); val setPf2 = Bool(); val setPf3 = Bool()
+  setPf0.simPublic(); setPf1.simPublic(); setPf2.simPublic(); setPf3.simPublic()
+  activePf0Live.simPublic(); activePf1Live.simPublic(); activePf2Live.simPublic(); activePf3Live.simPublic()
+  activeBkLive.simPublic(); visibleLive.simPublic()
   val setBk = Bool()
+  setBk.simPublic()
 
   val priorityRules = new GtiaPriority
   priorityRules.io.colourEnable := io.colourClock
@@ -598,8 +608,8 @@ class Gtia extends Component {
       ((colpm3DelayedReg ## False) & fillBits(setP3))
 
     when(~setBk & highresReg) {
-      when(activeHrReg(1)) { colourNext(3 downto 0) := colpf1DelayedReg(3 downto 1) ## False }
-      when(activeHrReg(0)) { hrcolourNext(3 downto 0) := colpf1DelayedReg(3 downto 1) ## False }
+      when(activeHrReg(1)) { colourNext(3 downto 0) := colpf1DelayedReg(2 downto 0) ## False }
+      when(activeHrReg(0)) { hrcolourNext(3 downto 0) := colpf1DelayedReg(2 downto 0) ## False }
       when(activeHrReg(1) & gractlReg(4)) { colourNext(7 downto 4) := colpf1DelayedReg(6 downto 3) }
       when(activeHrReg(0) & gractlReg(4)) { hrcolourNext(7 downto 4) := colpf1DelayedReg(6 downto 3) }
     }
@@ -810,4 +820,8 @@ class Gtia extends Component {
   io.burst     := burstValReg
   io.oddLine   := oddScanlineReg
   io.consolOut := consolOutputReg
+
+  // debug
+  io.dbgColbk     := colbkRawReg
+  io.dbgVisibleLive := visibleLive
 }

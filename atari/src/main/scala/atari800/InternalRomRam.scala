@@ -32,11 +32,6 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384) extends Com
   romRequestReg := romRequestNext
   ramRequestReg := ramRequestNext
 
-  // RAM defaults (may be overridden if internalRam > 0)
-  io.ramData := B(0xFF, 8 bits)
-  io.ramRequestComplete := True
-  ramRequestNext := False
-
   // =========================================================================
   // ROM section
   // =========================================================================
@@ -119,17 +114,22 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384) extends Com
   // =========================================================================
   // RAM section
   // =========================================================================
-  if (internalRam > 0) {
+  val ramInt = if (internalRam > 0) {
     val ramweTemp = io.ramWrEnable & io.ramRequest
 
-    val ramInt = new GenericRamInfer(ADDRESS_WIDTH = 19, SPACE = internalRam, DATA_WIDTH = 8)
-    ramInt.io.address := io.ramAddr
-    ramInt.io.data    := io.ramDataIn
-    ramInt.io.we      := ramweTemp
-    io.ramData := ramInt.io.q
+    val r = new GenericRamInfer(ADDRESS_WIDTH = 19, SPACE = internalRam, DATA_WIDTH = 8)
+    r.io.address := io.ramAddr
+    r.io.data    := io.ramDataIn
+    r.io.we      := ramweTemp
+    io.ramData := r.io.q
 
     ramRequestNext := io.ramRequest & ~io.ramWrEnable
     io.ramRequestComplete := ramweTemp | ramRequestReg
+    Some(r)
+  } else {
+    io.ramData := B(0xFF, 8 bits)
+    io.ramRequestComplete := True
+    ramRequestNext := False
+    None
   }
-  // else: defaults (ramRequestComplete=True, ramData=0xFF) already set above
 }

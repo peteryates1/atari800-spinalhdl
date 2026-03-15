@@ -1,6 +1,7 @@
 package atari800
 
 import spinal.core._
+import spinal.core.sim._
 
 class GenericRamInfer(
   ADDRESS_WIDTH: Int = 9,
@@ -13,34 +14,42 @@ class GenericRamInfer(
     val we      = in  Bool()
     val q       = out Bits(DATA_WIDTH bits)
   }
+  io.data.simPublic()
+  io.we.simPublic()
 
   val ramBlock = Mem(Bits(DATA_WIDTH bits), SPACE)
+  ramBlock.simPublic()
 
   // Address range check: if SPACE covers the full address range, skip the check
   val fullRange = SPACE >= (1 << ADDRESS_WIDTH)
+  val memAddrWidth = log2Up(SPACE)
 
-  val weRam    = Bool()
-  val address2 = UInt(ADDRESS_WIDTH bits)
+  val weRam     = Bool()
+  weRam.simPublic()
+  val memAddr   = UInt(memAddrWidth bits)
+  memAddr.simPublic()
 
   if (fullRange) {
-    weRam    := io.we
-    address2 := io.address.asUInt
+    weRam   := io.we
+    memAddr := io.address.asUInt.resize(memAddrWidth)
   } else {
     val inRange = io.address.asUInt < U(SPACE)
     when(inRange) {
-      weRam    := io.we
-      address2 := io.address.asUInt
+      weRam   := io.we
+      memAddr := io.address.asUInt.resize(memAddrWidth)
     } otherwise {
-      weRam    := False
-      address2 := U(0, ADDRESS_WIDTH bits)
+      weRam   := False
+      memAddr := U(0, memAddrWidth bits)
     }
   }
 
-  // Synchronous read with write-through
+  // Synchronous read with write-through (matches VHDL: single clocked process)
+  // Uses readAsync + Reg for exactly one cycle of latency (not readSync which adds two)
   val qRam = Reg(Bits(DATA_WIDTH bits))
+  qRam.simPublic()
 
   ramBlock.write(
-    address = address2,
+    address = memAddr,
     data    = io.data,
     enable  = weRam
   )
@@ -48,7 +57,7 @@ class GenericRamInfer(
   when(weRam) {
     qRam := io.data
   } otherwise {
-    qRam := ramBlock.readSync(address2)
+    qRam := ramBlock.readAsync(memAddr)
   }
 
   if (fullRange) {

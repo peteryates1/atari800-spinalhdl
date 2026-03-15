@@ -1,6 +1,7 @@
 package atari800
 
 import spinal.core._
+import spinal.core.sim._
 
 class AnticDmaClock extends Component {
   val io = new Bundle {
@@ -18,6 +19,7 @@ class AnticDmaClock extends Component {
   }
 
   val dmaShiftregReg  = Reg(Bits(8 bits)) init B(0, 8 bits)
+  dmaShiftregReg.simPublic()
   val dmaShiftregNext = Bits(8 bits)
 
   dmaShiftregReg := dmaShiftregNext
@@ -30,7 +32,7 @@ class AnticDmaClock extends Component {
   when(io.enableDma) {
     dmaShiftregNext :=
       (~(~tick | io.playfieldEnd | io.vblank)).asBits ##
-      (~(io.playfieldStart | ~dmaShiftregReg(7) | io.vblank)).asBits ##
+      (~(~io.playfieldStart & ~dmaShiftregReg(7) | io.vblank)).asBits ##
       dmaShiftregReg(6 downto 1)
   }
 

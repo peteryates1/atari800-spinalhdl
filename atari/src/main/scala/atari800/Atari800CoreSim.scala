@@ -57,6 +57,11 @@ class Atari800CoreSim extends Component {
     val dbgCpuFetch    = out Bool()
     val dbgCpuAddr     = out Bits(16 bits)
     val dbgCpuRwN      = out Bool()
+    val dbgVideoB      = out Bits(8 bits)
+    val dbgDmactl      = out Bits(7 bits)
+    val dbgColbk       = out Bits(7 bits)
+    val dbgGtiaWrEn    = out Bool()
+    val dbgAnticWrEn   = out Bool()
   }
 
   // Enable signals (same divider chain as real top-level)
@@ -68,14 +73,14 @@ class Atari800CoreSim extends Component {
   }
 
   // =================================================================
-  // Atari 800 Core with internal ROM, NO internal RAM (uses SDRAM)
+  // Atari 800 Core with internal ROM + 48K internal RAM (fast sim boot)
   // =================================================================
   val atariCore = new Atari800CoreSimpleSdram(
     cycle_length = 32,
     video_bits   = 8,
     palette      = 0,
-    internal_rom = 1,
-    internal_ram = 0,
+    internal_rom = 3,
+    internal_ram = 16384,
     low_memory   = 0,
     stereo       = 1,
     covox        = 1
@@ -144,7 +149,7 @@ class Atari800CoreSim extends Component {
   atariCore.io.emulated_cartridge_select := B(0, 6 bits)
   atariCore.io.freezer_enable            := False
   atariCore.io.freezer_activate          := False
-  atariCore.io.atari800mode              := False
+  atariCore.io.atari800mode              := True
   atariCore.io.HIRES_ENA                 := False
 
   // =================================================================
@@ -176,6 +181,13 @@ class Atari800CoreSim extends Component {
   io.dbgCpuFetch  := False  // TODO: needs exposing
   io.dbgCpuAddr   := B(0, 16 bits)  // TODO
   io.dbgCpuRwN    := True  // TODO
+
+  // Debug video + GTIA/ANTIC
+  io.dbgVideoB    := atariCore.io.VIDEO_B
+  io.dbgDmactl    := atariCore.io.dbgDmactl
+  io.dbgColbk     := atariCore.io.dbgColbk
+  io.dbgGtiaWrEn  := atariCore.io.dbgGtiaWrEn
+  io.dbgAnticWrEn := atariCore.io.dbgAnticWrEn
 
   // LEDs
   io.led(0) := ~io.reset_btn

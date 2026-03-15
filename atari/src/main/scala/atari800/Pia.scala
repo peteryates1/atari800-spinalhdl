@@ -1,6 +1,7 @@
 package atari800
 
 import spinal.core._
+import spinal.core.sim._
 
 class Pia extends Component {
   val io = new Bundle {
@@ -65,8 +66,10 @@ class Pia extends Component {
   val portaControlReg   = Reg(Bits(6 bits)) init B(0, 6 bits)
 
   val portbOutputReg    = Reg(Bits(8 bits)) init B"xFF"
+  portbOutputReg.simPublic()
   val portbInputReg     = Reg(Bits(8 bits)) init B(0, 8 bits)
   val portbDirectionReg = Reg(Bits(8 bits)) init B"xFF"
+  portbDirectionReg.simPublic()
   val portbControlReg   = Reg(Bits(6 bits)) init B(0, 6 bits)
 
   val irqaReg = Reg(Bits(2 bits)) init B(0, 2 bits)

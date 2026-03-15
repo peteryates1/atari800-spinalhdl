@@ -1,6 +1,7 @@
 package atari800
 
 import spinal.core._
+import spinal.core.sim._
 
 class AddressDecoder(
   LOW_MEMORY   : Int = 0,  // 0=8MB SDRAM, 1=1MB, 2=512KB
@@ -111,6 +112,7 @@ class AddressDecoder(
   // registers
   val addrReg            = Reg(Bits(24 bits)) init B(0, 24 bits)
   val stateReg           = Reg(Bits(2 bits)) init STATE_IDLE
+  stateReg.simPublic()
   val width8bitReg       = Reg(Bool()) init False
   val width16bitReg      = Reg(Bool()) init False
   val width32bitReg      = Reg(Bool()) init False
@@ -125,6 +127,7 @@ class AddressDecoder(
 
   // next signals
   val addrNext            = Bits(24 bits)
+  addrNext.simPublic()
   val stateNext           = Bits(2 bits)
   val width8bitNext       = Bool()
   val width16bitNext      = Bool()
@@ -140,12 +143,18 @@ class AddressDecoder(
 
   // internal signals
   val requestComplete     = Bool()
+  requestComplete.simPublic()
   val notifyAntic         = Bool()
+  notifyAntic.simPublic()
   val notifyDma           = Bool()
   val notifyCpu           = Bool()
+  notifyCpu.simPublic()
   val startRequest        = Bool()
+  startRequest.simPublic()
   val ramChipSelect       = Bool()
+  ramChipSelect.simPublic()
   val sdramChipSelect     = Bool()
+  sdramChipSelect.simPublic()
 
   val extendedAccessAddr  = Bool()
   val extendedAccessCpuOrAntic = Bool()
@@ -183,6 +192,7 @@ class AddressDecoder(
   val freezerActivateN    = Bool()
 
   val memoryDataInt       = Bits(32 bits)
+  memoryDataInt.simPublic()
 
   // SDRAM address constants
   val sdramCartAddr       = Bits(23 bits)
@@ -276,7 +286,7 @@ class AddressDecoder(
   freezerRequestComplete := freezer.io.requestComplete
   io.freezerStateOut    := freezer.io.stateOut
 
-  io.cartTrig3Out := io.cartRd5 | emuCartRd5
+  io.cartTrig3Out := io.cartRd5 | (emuCartEnable & emuCartRd5)
 
   // pbi takeover adjusted for freezer
   pbiTakeoverAdj := Mux(~io.freezerEnable | ~freezerDisableAtari, io.pbiTakeover, False)

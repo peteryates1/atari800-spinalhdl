@@ -51,12 +51,18 @@ class Cpu65xx(
   theCpuCycle.simPublic()
   val nextCpuCycle = CpuCycle()
   val updateRegisters = Bool()
+  updateRegisters.simPublic()
 
   val processNmi = Reg(Bool()) init False
+  processNmi.simPublic()
   val processIrq = Reg(Bool()) init False
   val processInt = Reg(Bool()) init False
+  processInt.simPublic()
   val nmiReg     = Reg(Bool())
+  nmiReg.simPublic()
   val nmiEdge    = Reg(Bool())
+  nmiEdge.simPublic()
+  val nmiProcessing = Reg(Bool()) init False  // latched at interrupt start, used for vector selection
   val irqReg     = Reg(Bool())
   val so_reg     = Reg(Bool())
 
@@ -685,7 +691,9 @@ class Cpu65xx(
 
   // Status register
   val Creg = Reg(Bool())
+  Creg.simPublic()
   val Zreg = Reg(Bool())
+  Zreg.simPublic()
   val Ireg = Reg(Bool())
   val Dreg = Reg(Bool())
   val Vreg = Reg(Bool())
@@ -693,11 +701,14 @@ class Cpu65xx(
 
   // ALU
   val aluInput    = UInt(8 bits)
+  aluInput.simPublic()
   val aluCmpInput = UInt(8 bits)
+  aluCmpInput.simPublic()
   val aluRegisterOut = UInt(8 bits)
   val aluRmwOut   = UInt(8 bits)
   val aluC = Bool()
   val aluZ = Bool()
+  aluZ.simPublic()
   val aluV = Bool()
   val aluN = Bool()
   // Pipeline registers
@@ -986,7 +997,11 @@ class Cpu65xx(
   when(io.enable && ~io.halt) {
     when(theCpuCycle === opcodeFetch) {
       irqActive := False
-      when(processInt) { irqActive := True }
+      nmiProcessing := False
+      when(processInt) {
+        irqActive := True
+        nmiProcessing := processNmi  // latch: is this NMI or IRQ?
+      }
       theOpcode := nextOpcode
     }
   }
@@ -1403,7 +1418,7 @@ class Cpu65xx(
       is(nextAddrPc)         { myAddr := PC }
       is(nextAddrIrq)        {
         myAddr := U"xFFFE"
-        when(~nmiReg) { myAddr := U"xFFFA" }
+        when(nmiProcessing) { myAddr := U"xFFFA" }
       }
       is(nextAddrReset)      { myAddr := U"xFFFC" }
       is(nextAddrAbs)        { myAddr := io.d @@ T }

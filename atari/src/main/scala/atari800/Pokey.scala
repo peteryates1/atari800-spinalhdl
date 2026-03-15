@@ -1,6 +1,7 @@
 package atari800
 
 import spinal.core._
+import spinal.core.sim._
 
 class Pokey(CUSTOM_KEYBOARD_SCAN: Int = 0) extends Component {
   val io = new Bundle {
@@ -79,6 +80,9 @@ class Pokey(CUSTOM_KEYBOARD_SCAN: Int = 0) extends Component {
   val irqenReg = Reg(Bits(8 bits)) init B(0, 8 bits)
   val irqstReg = Reg(Bits(8 bits)) init B"xFF"
   val irqNReg  = Reg(Bool()) init True
+  irqenReg.simPublic()
+  irqstReg.simPublic()
+  irqNReg.simPublic()
 
   val irqenNext = Bits(8 bits)
   val irqstNext = Bits(8 bits)

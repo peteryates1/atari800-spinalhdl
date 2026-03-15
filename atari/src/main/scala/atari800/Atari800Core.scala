@@ -1,6 +1,7 @@
 package atari800
 
 import spinal.core._
+import spinal.core.sim._
 
 class Sid8580Stub extends Component {
   val io = new Bundle {
@@ -179,15 +180,24 @@ class Atari800Core(
     val irq_n_out               = out Bool()
     val rdy_out                 = out Bool()
     val AN_out                  = out Bits(3 bits)
+    val dbgColbk                = out Bits(7 bits)
+    val dbgVisibleLive          = out Bool()
+    val dbgColourClock          = out Bool()
+    val dbgGtiaWrEn             = out Bool()
+    val dbgAnticWrEn            = out Bool()
+    val dbgDmactl               = out Bits(7 bits)
   }
 
   // ---- Internal signals ----
   val ANTIC_ADDR                      = Bits(16 bits)
+  ANTIC_ADDR.simPublic()
   val ANTIC_AN                        = Bits(3 bits)
+  ANTIC_AN.simPublic()
   val ANTIC_COLOUR_CLOCK_OUT          = Bool()
   val ANTIC_DO                        = Bits(8 bits)
   val CACHE_ANTIC_DO                  = Bits(8 bits)
   val ANTIC_FETCH                     = Bool()
+  ANTIC_FETCH.simPublic()
   val ANTIC_HIGHRES_COLOUR_CLOCK_OUT  = Bool()
   val ANTIC_ORIGINAL_COLOUR_CLOCK_OUT = Bool()
   val ANTIC_RDY                       = Bool()
@@ -264,9 +274,11 @@ class Atari800Core(
   val PIA_WRITE_ENABLE = Bool()
   val PORTB_OUT_INT    = Bits(8 bits)
   val PORTB_OPTIONS    = Bits(8 bits)
+  PORTB_OPTIONS.simPublic()
 
   val PBI_ADDR_INT = Bits(16 bits)
   val cart_trig3_out = Bool()
+  cart_trig3_out.simPublic()
 
   val freezer_trigger_activate = Bool()
   val freezer_activate_combined = Bool()
@@ -759,6 +771,12 @@ class Atari800Core(
   io.irq_n_out              := IRQ_n
   io.rdy_out                := ANTIC_RDY
   io.AN_out                 := ANTIC_AN
+  io.dbgColbk               := gtia1.io.dbgColbk
+  io.dbgVisibleLive         := gtia1.io.dbgVisibleLive
+  io.dbgColourClock         := ANTIC_COLOUR_CLOCK_OUT
+  io.dbgGtiaWrEn            := GTIA_WRITE_ENABLE
+  io.dbgAnticWrEn           := ANTIC_WRITE_ENABLE
+  io.dbgDmactl              := antic1.io.dbgDmactl
   io.freezer_state_out      := freezer_state
 }
 

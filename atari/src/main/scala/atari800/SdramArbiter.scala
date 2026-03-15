@@ -17,16 +17,21 @@ class SdramReqPort extends Bundle {
 }
 
 // Priority arbiter: two SDRAM request ports → one SdramStatemachine
-// Port A (Atari) has priority over Port B (JOP).
-// Single-cycle REQUEST pulse protocol; COMPLETE is level-high when idle/done.
+// Port A (Atari) has priority and zero-latency combinational passthrough.
+// Port B (JOP) is queued and served only when SDRAM is idle and A is not requesting.
 //
-// The SdramStatemachine's COMPLETE has a combinational path from REQUEST
-// (~REQUEST term), so we must not derive REQUEST from COMPLETE in the
-// same cycle.  All REQUEST pulses come from registered state (aPending/
-// bPending), breaking the loop.
+// The Atari core's AddressDecoder uses a pipelined protocol:
+//   - SDRAM_REQUEST is a single-cycle pulse during STATE_IDLE
+//   - SDRAM_REQUEST_COMPLETE must arrive with zero added latency for the
+//     AddressDecoder to complete fetches within the colour clock window
+//   - REQUEST_COMPLETE = True means "idle/previous request done + data valid"
+//
+// Port A passes straight through (combinational); this matches the standalone
+// behavioral-model wiring.  Port B requests are captured into a pending register
+// and forwarded only when the SDRAM is idle and A is quiet.
 class SdramArbiter extends Component {
   val io = new Bundle {
-    // Port A: Atari core (high priority)
+    // Port A: Atari core (high priority, zero-latency passthrough)
     val a = new Bundle {
       val request         = in  Bool()
       val complete        = out Bool()
@@ -41,7 +46,7 @@ class SdramArbiter extends Component {
       val refresh         = in  Bool()
     }
 
-    // Port B: JOP (low priority)
+    // Port B: JOP (low priority, queued)
     val b = new Bundle {
       val request         = in  Bool()
       val complete        = out Bool()
@@ -71,80 +76,39 @@ class SdramArbiter extends Component {
     }
   }
 
-  // States
-  val IDLE    = B"00"
-  val SEND    = B"01"   // pulse REQUEST for one cycle
-  val WAIT    = B"10"   // wait for COMPLETE
+  // B state tracking
+  val bActive  = RegInit(False)   // B's transaction in flight (owns SDRAM channel)
+  val bPending = RegInit(False)   // B wants to request (queued)
+  val aPending = RegInit(False)   // A was blocked by B, needs retry
 
-  val state     = RegInit(IDLE)
-  val activeIsB = RegInit(False)
-  val aPending  = RegInit(False)
-  val bPending  = RegInit(False)
+  // Capture B requests (edge detect to avoid re-capture)
+  val bReqPrev = RegNext(io.b.request) init False
+  when(io.b.request && !bReqPrev) { bPending := True }
 
-  // Capture incoming request pulses
-  when(io.a.request) { aPending := True }
-  when(io.b.request) { bPending := True }
-
-  // Default outputs
-  io.sdram.request := False
-  io.a.complete    := False
-  io.b.complete    := False
-
-  // Read data broadcast (only active port uses it)
+  // Read data broadcast
   io.a.dataOut := io.sdram.dataOut
   io.b.dataOut := io.sdram.dataOut
 
-  // Refresh pass-through from Atari (ANTIC generates it)
+  // Refresh pass-through from Atari
   io.sdram.refresh := io.a.refresh
 
-  switch(state) {
-    is(IDLE) {
-      // Pass through COMPLETE to ports (high when idle)
-      io.a.complete := io.sdram.complete
-      io.b.complete := io.sdram.complete
+  // Default: Port A signals on SDRAM bus
+  io.sdram.request        := False
+  io.sdram.addr           := B"0" ## io.a.addr
+  io.sdram.dataIn         := io.a.dataIn
+  io.sdram.readEnable     := io.a.readEnable
+  io.sdram.writeEnable    := io.a.writeEnable
+  io.sdram.byteAccess     := io.a.byteAccess
+  io.sdram.wordAccess     := io.a.wordAccess
+  io.sdram.longwordAccess := io.a.longwordAccess
 
-      // Grant next request: Atari priority
-      when(aPending) {
-        activeIsB := False
-        aPending  := False
-        state     := SEND
-      }.elsewhen(bPending) {
-        activeIsB := True
-        bPending  := False
-        state     := SEND
-      }
-    }
+  io.a.complete := False
+  io.b.complete := False
 
-    is(SEND) {
-      // Pulse REQUEST for exactly one cycle (from registered state — no comb loop)
-      io.sdram.request := True
-      state := WAIT
-    }
-
-    is(WAIT) {
-      // Wait for SDRAM controller to complete
-      when(io.sdram.complete) {
-        // Notify the requester
-        when(!activeIsB) {
-          io.a.complete := True
-        }.otherwise {
-          io.b.complete := True
-        }
-        state := IDLE
-      }
-    }
-  }
-
-  // Mux address/data/control to SDRAM controller based on active port
-  when(!activeIsB) {
-    io.sdram.addr           := B"0" ## io.a.addr
-    io.sdram.dataIn         := io.a.dataIn
-    io.sdram.readEnable     := io.a.readEnable
-    io.sdram.writeEnable    := io.a.writeEnable
-    io.sdram.byteAccess     := io.a.byteAccess
-    io.sdram.wordAccess     := io.a.wordAccess
-    io.sdram.longwordAccess := io.a.longwordAccess
-  }.otherwise {
+  when(bActive) {
+    // ------------------------------------------------------------------
+    // B owns the SDRAM channel — route B's signals, block A
+    // ------------------------------------------------------------------
     io.sdram.addr           := B"0" ## io.b.addr
     io.sdram.dataIn         := io.b.dataIn
     io.sdram.readEnable     := io.b.readEnable
@@ -152,5 +116,42 @@ class SdramArbiter extends Component {
     io.sdram.byteAccess     := io.b.byteAccess
     io.sdram.wordAccess     := io.b.wordAccess
     io.sdram.longwordAccess := io.b.longwordAccess
+
+    // Block A — capture its request for later
+    when(io.a.request) { aPending := True }
+
+    // Wait for B's transaction to complete
+    when(io.sdram.complete) {
+      io.b.complete := True
+      bActive := False
+    }
+  }.otherwise {
+    // ------------------------------------------------------------------
+    // A has the channel — combinational passthrough
+    // ------------------------------------------------------------------
+
+    // Forward A's request directly (or replay aPending)
+    io.sdram.request := io.a.request | aPending
+    when(aPending && !io.a.request) { aPending := False }
+
+    // A gets COMPLETE directly from SDRAM
+    io.a.complete := io.sdram.complete
+
+    // Serve B only when: pending, A not requesting, no aPending, SDRAM idle
+    when(bPending && !io.a.request && !aPending && io.sdram.complete) {
+      // Switch to B — override SDRAM signals for this cycle
+      io.sdram.request        := True
+      io.sdram.addr           := B"0" ## io.b.addr
+      io.sdram.dataIn         := io.b.dataIn
+      io.sdram.readEnable     := io.b.readEnable
+      io.sdram.writeEnable    := io.b.writeEnable
+      io.sdram.byteAccess     := io.b.byteAccess
+      io.sdram.wordAccess     := io.b.wordAccess
+      io.sdram.longwordAccess := io.b.longwordAccess
+      bPending := False
+      bActive  := True
+      // A doesn't get complete this cycle (channel switching to B)
+      io.a.complete := False
+    }
   }
 }

@@ -70,7 +70,7 @@ class AtariCtrl extends Component with HasBusIo {
   val osdEnableReg   = RegInit(True)                       // OSD on at boot
   val coldResetReg   = RegInit(False)                      // pulse
   val cartSelectReg  = Reg(Bits(6 bits)) init 0            // no cartridge
-  val configReg      = Reg(Bits(8 bits)) init B"00100001"  // PAL, 64K RAM, atari800mode
+  val configReg      = Reg(Bits(8 bits)) init B"00000011"  // PAL, ramSelect=001 (64K RAM), XL/XE mode
   val throttleReg    = Reg(Bits(6 bits)) init B"011111"    // 31
 
   val paddle0Reg = Reg(SInt(8 bits)) init 0

@@ -1,6 +1,7 @@
 package atari800
 
 import spinal.core._
+import spinal.core.sim._
 
 class Antic(cycle_length: Int = 16) extends Component {
   val io = new Bundle {
@@ -41,6 +42,7 @@ class Antic(cycle_length: Int = 16) extends Component {
     val dma_clock_out      = out Bits(4 bits)
     val hcount_out         = out Bits(8 bits)
     val vcount_out         = out Bits(9 bits)
+    val dbgDmactl          = out Bits(7 bits)
   }
 
   // Address decoder
@@ -106,6 +108,7 @@ class Antic(cycle_length: Int = 16) extends Component {
   val wsyncDelayedWrite = Bool()
 
   val nmiReg  = Reg(Bool()) init False
+  nmiReg.simPublic()
   val nmiNext = Bool()
 
   val nmistReg  = Reg(Bits(3 bits)) init B"000"
@@ -113,12 +116,14 @@ class Antic(cycle_length: Int = 16) extends Component {
   val nmistReset = Bool()
 
   val nmienRawReg     = Reg(Bits(2 bits)) init B"00"
+  nmienRawReg.simPublic()
   val nmienRawNext    = Bits(2 bits)
   val nmienDelayedReg = Bits(2 bits)
 
   val dliNmiReg  = Reg(Bool()) init False
   val dliNmiNext = Bool()
   val vbiNmiReg  = Reg(Bool()) init False
+  vbiNmiReg.simPublic()
   val vbiNmiNext = Bool()
 
   val playfieldDmaStartRaw  = Bool()
@@ -132,6 +137,7 @@ class Antic(cycle_length: Int = 16) extends Component {
   val playfieldDmaEnd     = Bool()
 
   val playfieldDisplayActiveReg  = Reg(Bool()) init False
+  playfieldDisplayActiveReg.simPublic()
   val playfieldDisplayActiveNext = Bool()
 
   val dmactlRawReg     = Reg(Bits(7 bits)) init B(0, 7 bits)
@@ -145,19 +151,25 @@ class Antic(cycle_length: Int = 16) extends Component {
   val chactlNext = Bits(3 bits)
 
   val allowRealDmaReg  = Reg(Bool()) init False
+  allowRealDmaReg.simPublic()
   val allowRealDmaNext = Bool()
 
   val dmaFetchReg  = Reg(Bool()) init False
+  dmaFetchReg.simPublic()
   val dmaFetchNext = Bool()
   val dmaAddressReg  = Reg(Bits(16 bits)) init B(0, 16 bits)
+  dmaAddressReg.simPublic()
   val dmaAddressNext = Bits(16 bits)
 
   val dmaCacheReg  = Reg(Bits(8 bits)) init B(0, 8 bits)
+  dmaCacheReg.simPublic()
   val dmaCacheNext = Bits(8 bits)
   val dmaCacheReadyReg  = Reg(Bool()) init False
+  dmaCacheReadyReg.simPublic()
   val dmaCacheReadyNext = Bool()
 
   val dmaFetchDestinationReg  = Reg(Bits(3 bits)) init DMA_FETCH_NULL
+  dmaFetchDestinationReg.simPublic()
   val dmaFetchDestinationNext = Bits(3 bits)
   val dmaFetchRequest = Bool()
 
@@ -165,6 +177,7 @@ class Antic(cycle_length: Int = 16) extends Component {
   val displayListAddressLowTempNext = Bits(8 bits)
 
   val characterReg  = Reg(Bits(8 bits)) init B(0, 8 bits)
+  characterReg.simPublic()
   val characterNext = Bits(8 bits)
   val displayedCharacterReg  = Reg(Bits(8 bits)) init B(0, 8 bits)
   val displayedCharacterNext = Bits(8 bits)
@@ -173,6 +186,7 @@ class Antic(cycle_length: Int = 16) extends Component {
   val instructionNext = Bits(8 bits)
 
   val firstLineOfInstructionReg  = Reg(Bool()) init False
+  firstLineOfInstructionReg.simPublic()
   val firstLineOfInstructionNext = Bool()
   val lastLineOfInstructionLive  = Bool()
   val lastLineOfInstructionReg   = Reg(Bool()) init False
@@ -189,6 +203,7 @@ class Antic(cycle_length: Int = 16) extends Component {
   val fastDmaS     = Bool()
 
   val instructionTypeReg  = Reg(Bits(3 bits)) init MODE_BLANK
+  instructionTypeReg.simPublic()
   val instructionTypeNext = Bits(3 bits)
 
   val twoPartInstructionReg  = Reg(Bool()) init False
@@ -218,8 +233,10 @@ class Antic(cycle_length: Int = 16) extends Component {
   val descendersNext = Bool()
 
   val displayShiftReg  = Reg(Bits(8 bits)) init B(0, 8 bits)
+  displayShiftReg.simPublic()
   val displayShiftNext = Bits(8 bits)
   val delayDisplayShiftReg  = Reg(Bits(25 bits)) init B(0, 25 bits)
+  delayDisplayShiftReg.simPublic()
   val delayDisplayShiftNext = Bits(25 bits)
 
   val dataLive = Bits(2 bits)
@@ -234,10 +251,13 @@ class Antic(cycle_length: Int = 16) extends Component {
 
   // hcount is 10 bits in antic.vhdl (vs 8 in antic_delay)
   val hcountReg  = Reg(Bits(10 bits)) init B(0, 10 bits)
+  hcountReg.simPublic()
   val hcountNext = Bits(10 bits)
   val cycleLatter = Bool()
+  cycleLatter.simPublic()
 
   val vcountReg  = Reg(Bits(9 bits)) init B(0, 9 bits)
+  vcountReg.simPublic()
   val vcountNext = Bits(9 bits)
 
   val vblankReg = Reg(Bool()) init False
@@ -335,6 +355,7 @@ class Antic(cycle_length: Int = 16) extends Component {
   val colourClock4x = Bool()
   val colourClock2x = Bool()
   val colourClock1x = Bool()
+  colourClock1x.simPublic()
   val colourClockHalfX = Bool()
   val colourClockSelected = Bool()
   val colourClockSelectedHighres = Bool()
@@ -958,4 +979,5 @@ class Antic(cycle_length: Int = 16) extends Component {
   io.turbo_out          := dmactlRawReg(6)
   io.vblank_out         := vblankReg
   io.next_cycle_type    := B"000" // TODO
+  io.dbgDmactl          := dmactlRawReg
 }
