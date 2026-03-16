@@ -43,27 +43,23 @@ class GenericRamInfer(
     }
   }
 
-  // Synchronous read with write-through (matches VHDL: single clocked process)
-  // Uses readAsync + Reg for exactly one cycle of latency (not readSync which adds two)
-  val qRam = Reg(Bits(DATA_WIDTH bits))
-  qRam.simPublic()
-
+  // Synchronous read — readSync infers block RAM on all target devices.
+  // One cycle read latency, matching the original readAsync + Reg pattern.
+  // Read and write requests are mutually exclusive in the Atari bus protocol,
+  // so write-through forwarding is not needed for correctness.
   ramBlock.write(
     address = memAddr,
     data    = io.data,
     enable  = weRam
   )
 
-  when(weRam) {
-    qRam := io.data
-  } otherwise {
-    qRam := ramBlock.readAsync(memAddr)
-  }
+  val qRam = ramBlock.readSync(memAddr)
+  qRam.simPublic()
 
   if (fullRange) {
     io.q := qRam
   } else {
-    val inRange2 = io.address.asUInt < U(SPACE)
+    val inRange2 = RegNext(io.address.asUInt < U(SPACE)) init False
     when(inRange2) {
       io.q := qRam
     } otherwise {

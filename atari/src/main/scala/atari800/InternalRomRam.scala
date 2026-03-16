@@ -55,6 +55,9 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
     rom10.io.clock   := io.clock
     rom10.io.address := io.romAddr(12 downto 0).asUInt
 
+    // Default: open bus (A000-BFFF when no cartridge, or unassigned ranges)
+    io.romData := B(0xFF, 8 bits)
+
     // Cartridge slot: only instantiate ROM when a file is provided (simulation).
     // On hardware, JOP loads cartridge/BASIC from SD into SDRAM at runtime.
     if (cartridgeRom.nonEmpty) {
