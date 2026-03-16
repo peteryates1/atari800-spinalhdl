@@ -137,14 +137,15 @@ class Atari800CoreAc608 extends Component {
     // Atari 800 Core (native SpinalHDL)
     // =================================================================
     val atariCore = new Atari800CoreSimpleSdram(
-      cycle_length = 32,
-      video_bits   = 8,
-      palette      = 0,
-      internal_rom = 1,
-      internal_ram = 0,
-      low_memory   = 0,
-      stereo       = 1,
-      covox        = 1
+      cycle_length   = 32,
+      video_bits     = 8,
+      palette        = 0,
+      internal_rom   = 1,
+      internal_ram   = 0,
+      low_memory     = 0,
+      stereo         = 1,
+      covox          = 1,
+      basic_in_sdram = true   // BASIC loaded from SD; not burned into FPGA fabric
     )
 
     // Video

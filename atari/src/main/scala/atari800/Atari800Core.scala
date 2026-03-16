@@ -154,6 +154,7 @@ class Atari800Core(
     val CART_EMULATION_SELECT   = in  Bits(6 bits)
     val PAL                     = in  Bool()
     val ROM_IN_RAM              = in  Bool()
+    val BASIC_FROM_SDRAM        = in  Bool()   // True = BASIC is in SDRAM, not internal ROM
     val THROTTLE_COUNT_6502     = in  Bits(6 bits)
     val HALT                    = in  Bool()
     val TURBO_VBLANK_ONLY       = in  Bool()
@@ -562,6 +563,7 @@ class Atari800Core(
   mmu1.io.dmaWriteData           := io.DMA_WRITE_DATA
   mmu1.io.cartSelect             := io.CART_EMULATION_SELECT
   mmu1.io.romInRam               := io.ROM_IN_RAM
+  mmu1.io.basicFromSdram         := io.BASIC_FROM_SDRAM
   mmu1.io.freezerEnable          := io.freezer_enable
   mmu1.io.freezerActivate        := freezer_activate_combined
 

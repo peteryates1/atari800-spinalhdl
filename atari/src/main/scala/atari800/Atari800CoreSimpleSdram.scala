@@ -11,7 +11,8 @@ class Atari800CoreSimpleSdram(
   low_memory    : Int = 0,
   stereo        : Int = 1,
   covox         : Int = 1,
-  cartridge_rom : String = ""
+  cartridge_rom   : String  = "",
+  basic_in_sdram  : Boolean = false   // true = BASIC not in internal ROM; route A000-BFFF to SDRAM
 ) extends Component {
   val io = new Bundle {
     // Video
@@ -232,7 +233,7 @@ class Atari800CoreSimpleSdram(
   POT_IN(7)         := pot7.io.potHigh
 
   // Internal ROM/RAM
-  val internalromram1 = new InternalRomRam(internalRom = internal_rom, internalRam = internal_ram, cartridgeRom = cartridge_rom)
+  val internalromram1 = new InternalRomRam(internalRom = internal_rom, internalRam = internal_ram, cartridgeRom = cartridge_rom, withBasic = !basic_in_sdram)
   internalromram1.io.clock                := ClockDomain.current.readClockWire
   internalromram1.io.resetN               := ClockDomain.current.readResetWire
   internalromram1.io.romAddr              := ROM_ADDR
@@ -251,6 +252,7 @@ class Atari800CoreSimpleSdram(
   RAM_DO(15 downto 8)                     := B(0, 8 bits)
 
   ROM_IN_RAM := Bool(internal_rom == 0)
+  val BASIC_FROM_SDRAM = Bool(basic_in_sdram)
 
   // Atari 800 core
   val atari800xl = new Atari800Core(
@@ -360,6 +362,7 @@ class Atari800CoreSimpleSdram(
   atari800xl.io.CART_EMULATION_SELECT   := io.emulated_cartridge_select
   atari800xl.io.PAL                     := io.PAL
   atari800xl.io.ROM_IN_RAM              := ROM_IN_RAM
+  atari800xl.io.BASIC_FROM_SDRAM        := BASIC_FROM_SDRAM
   atari800xl.io.THROTTLE_COUNT_6502     := io.THROTTLE_COUNT_6502
   atari800xl.io.HALT                    := io.HALT
   atari800xl.io.TURBO_VBLANK_ONLY       := io.TURBO_VBLANK_ONLY

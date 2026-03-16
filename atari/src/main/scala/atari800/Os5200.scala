@@ -10,8 +10,7 @@ class Os5200 extends Component {
   }
 
   val rom = Mem(Bits(8 bits), initialContent = romData)
-  val rdata = rom.readAsync(io.address)
-  io.q := RegNext(rdata)
+  io.q := rom.readSync(io.address)
 
   def romData: Seq[Bits] = Seq(
     B(0x00, 8 bits), B(0x00, 8 bits), B(0x00, 8 bits), B(0x00, 8 bits), B(0x00, 8 bits), B(0x00, 8 bits), B(0x00, 8 bits), B(0x00, 8 bits), B(0x00, 8 bits), B(0x18, 8 bits), B(0x18, 8 bits), B(0x18, 8 bits), B(0x18, 8 bits), B(0x00, 8 bits), B(0x18, 8 bits), B(0x00, 8 bits),

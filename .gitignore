@@ -26,3 +26,10 @@ sim_workspace/
 .bsp/
 .metals/
 .vscode/
+Star Raiders.rom
+ecp5/build/
+vivado/synth_util.rpt
+vivado/synth_timing.rpt
+vivado/*.jou
+vivado/*.log
+vivado/vivado_pid*.str

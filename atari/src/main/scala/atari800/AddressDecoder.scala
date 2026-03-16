@@ -51,6 +51,7 @@ class AddressDecoder(
     val portb               = in  Bits(8 bits)
     val resetN              = in  Bool()
     val romInRam            = in  Bool()
+    val basicFromSdram      = in  Bool()   // True = BASIC not in InternalRomRam; route A000-BFFF to SDRAM
     val atari800mode        = in  Bool()
     val cartSelect          = in  Bits(6 bits)
     val ramSelect           = in  Bits(3 bits)
@@ -714,7 +715,8 @@ class AddressDecoder(
             when((~io.atari800mode & ~io.portb(1)) | (io.atari800mode & ~io.cartRd5)) {
               sdramChipSelect := False
               ramChipSelect := False
-              when(io.romInRam) {
+              val basicViaRam = io.romInRam || io.basicFromSdram
+              when(basicViaRam) {
                 memoryDataInt(7 downto 0) := io.sdramData(7 downto 0)
               } otherwise {
                 memoryDataInt(7 downto 0) := io.romData
@@ -722,7 +724,7 @@ class AddressDecoder(
               when(writeEnableNext) {
                 requestComplete := True
               } otherwise {
-                when(io.romInRam) {
+                when(basicViaRam) {
                   requestComplete := io.sdramRequestComplete
                   sdramChipSelect := startRequest
                 } otherwise {

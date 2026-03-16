@@ -10,8 +10,7 @@ class Os8 extends Component {
   }
 
   val rom = Mem(Bits(8 bits), initialContent = romData)
-  val rdata = rom.readAsync(io.address)
-  io.q := RegNext(rdata)
+  io.q := rom.readSync(io.address)
 
     def romData: Seq[Bits] =
     romData0 ++

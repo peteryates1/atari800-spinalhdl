@@ -6,7 +6,7 @@ import java.nio.file.{Files, Paths}
 // Internal ROM/RAM wrapper
 // Conditionally instantiates OS ROM, BASIC ROM, and internal RAM based on generics
 // cartridgeRom: path to 8K ROM file for $A000-$BFFF slot (empty = use built-in BASIC)
-class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRom: String = "") extends Component {
+class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRom: String = "", withBasic: Boolean = true) extends Component {
   val io = new Bundle {
     val clock   = in  Bool()
     val resetN  = in  Bool()
@@ -63,7 +63,7 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
       val cartData = bytes.map(b => B((b.toInt & 0xFF), 8 bits)).toSeq
       val cartRom = Mem(Bits(8 bits), initialContent = cartData)
       val cartAddr = io.romAddr(12 downto 0).asUInt
-      val cartQ = RegNext(cartRom.readAsync(cartAddr))
+      val cartQ = cartRom.readSync(cartAddr)
 
       when(io.romAddr(15)) {
         io.romData := cartQ
@@ -92,35 +92,40 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
     io.romRequestComplete := romRequestReg
     romRequestNext := io.romRequest & ~io.romWrEnable
   } else if (internalRom == 1) {
-    // 16K OS + 8K BASIC (writable for DMA loading)
+    // 16K OS (writable for DMA loading) + optionally 8K BASIC
     val rom16a = new Os16
     rom16a.io.clock   := io.clock
     rom16a.io.address := io.romAddr(13 downto 0).asUInt
 
-    val basic1 = new Basic
-    basic1.io.clock   := io.clock
-    basic1.io.address := io.romAddr(12 downto 0).asUInt
-
     val romweTemp = io.romWrEnable & io.romRequest
-    val osRomweTemp = Bool()
-    val basicRomweTemp = Bool()
 
-    // Default: OS ROM selected
-    osRomweTemp := romweTemp
-    basicRomweTemp := False
     io.romData := rom16a.io.q
 
-    when(io.romAddr(15)) {
-      // BASIC ROM selected
-      io.romData := basic1.io.q
-      osRomweTemp := False
-      basicRomweTemp := romweTemp
-    }
+    if (withBasic) {
+      val basic1 = new Basic
+      basic1.io.clock   := io.clock
+      basic1.io.address := io.romAddr(12 downto 0).asUInt
 
-    rom16a.io.we   := osRomweTemp
-    rom16a.io.data := io.romDataIn
-    basic1.io.we   := basicRomweTemp
-    basic1.io.data := io.romDataIn
+      val osRomweTemp = Bool()
+      val basicRomweTemp = Bool()
+      osRomweTemp := romweTemp
+      basicRomweTemp := False
+
+      when(io.romAddr(15)) {
+        io.romData := basic1.io.q
+        osRomweTemp := False
+        basicRomweTemp := romweTemp
+      }
+
+      rom16a.io.we   := osRomweTemp
+      rom16a.io.data := io.romDataIn
+      basic1.io.we   := basicRomweTemp
+      basic1.io.data := io.romDataIn
+    } else {
+      // No BASIC in internal ROM: AddressDecoder routes A000-BFFF to SDRAM via basicFromSdram
+      rom16a.io.we   := romweTemp & ~io.romAddr(15)
+      rom16a.io.data := io.romDataIn
+    }
 
     romRequestNext := io.romRequest & ~io.romWrEnable
     io.romRequestComplete := romweTemp | romRequestReg
