@@ -42,17 +42,21 @@ atari/                   Atari 800 core
     Pokey.scala               POKEY (sound, keyboard, serial I/O, timers)
     Pia.scala                 PIA (parallel I/O, port B memory control)
     AddressDecoder.scala      Memory map, SDRAM/ROM/RAM routing
-    InternalRomRam.scala      Embedded ROM (OS, BASIC) + internal RAM
+    InternalRomRam.scala      Embedded OS ROM + internal RAM (BASIC from SDRAM in HW)
     Scandoubler.scala         15kHz→31kHz VGA scandoubler
     GtiaPalette.scala         Full PAL/NTSC colour palette (256 entries)
     Atari800CoreSim.scala     Simulation top-level wrapper
     Atari800CoreSimTb.scala   Simulation testbench with frame capture
     Atari800JopTop.scala      FPGA top-level (Atari + JOP + SDRAM arbiter)
     Os8.scala, Os2.scala      Atari 800 OS ROMs (8K + 2K math pack)
-    Basic.scala               Atari BASIC 8K ROM
+    Os16.scala, Os16Loop.scala  XL 16K OS variants
+    Basic.scala               Atari BASIC 8K ROM (simulation only; HW loads from SD)
+    JopCoreForAtari.scala     JOP configuration + AtariCtrl I/O device
 jop-spinalhdl/           JOP soft-core (git submodule)
-quartus/                 Intel Quartus project files
-generated/               SpinalHDL output (.sv + .bin)
+quartus/                 Intel Quartus project (10CL025)
+ecp5/                    ECP5 yosys/nextpnr build (Colorlight i5)
+vivado/                  Vivado synthesis check (Colorlight i9+)
+generated/               SpinalHDL output (.sv + .bin) — gitignored
 unused_scala/            Archived/inactive modules (18 files)
 Makefile                 Build orchestration
 ```
@@ -63,7 +67,9 @@ Makefile                 Build orchestration
 
 - JDK 11+
 - SBT 1.9+
-- Intel Quartus Prime 18.1+ (Lite Edition) — for FPGA build only
+- Intel Quartus Prime 18.1+ (Lite Edition) — for Cyclone 10 LP build
+- yosys + nextpnr-ecp5 + ecppack — for ECP5 build (distro packages sufficient)
+- Vivado 2025.2 — for Artix-7 build
 
 ### Clone with submodule
 
@@ -94,11 +100,28 @@ Convert to PNG with ImageMagick: `convert frame.ppm frame.png`
 sbt "atari/runMain atari800.Atari800JopTopSv"
 ```
 
-### Full Quartus build
+### Full Quartus build (Cyclone 10 LP)
 
 ```sh
 make all      # generate + map + fit + sta + asm
 make quartus  # assumes generated/ already populated
+```
+
+### ECP5 synthesis (Colorlight i5 — LFE5U-25F)
+
+```sh
+cd ecp5
+make synth    # yosys synthesis + utilisation report
+make pnr      # nextpnr place-and-route + timing
+make bitstream
+```
+
+### Vivado synthesis (Colorlight i9+ — XC7A50T)
+
+```sh
+cd vivado
+/path/to/vivado -mode batch -source synth_check.tcl
+# Reports: synth_util.rpt, synth_timing.rpt
 ```
 
 ## Simulation
@@ -140,16 +163,35 @@ VHDL index `(3 downto 1)` was copied directly instead of adjusting to
 `(2 downto 0)`, causing the foreground colour to equal the background in
 mode 2 (ANTIC's 40-column text mode). Fix: `Gtia.scala` lines 611-612.
 
-## Resource Utilisation (10CL025YU256C8G)
+## Resource Utilisation
+
+BASIC ROM is not burned into FPGA fabric — JOP loads it from SD into SDRAM at
+boot. OS ROM (16K) is in block RAM. All targets meet timing at 56.67 MHz.
+
+### Cyclone 10 LP — 10CL025YU256C8G (custom board / AC608)
 
 | Resource | Used | Available | % |
 |---|---|---|---|
-| Logic Elements | 19,183 | 24,624 | 78% |
-| Memory bits | 419,406 | 608,256 | 69% |
+| Logic Elements | 15,304 | 24,624 | 62% |
+| Memory bits | 309,198 | 608,256 | 51% |
 | DSP 9-bit | 10 | 132 | 8% |
 | PLLs | 0 (stub) | 4 | 0% |
 
-Timing: all paths meet 56.67 MHz with positive slack.
+### ECP5 — LFE5U-25F (Colorlight i5)
+
+| Resource | Used | Available | % |
+|---|---|---|---|
+| LUT4 | 17,221 | 24,000 | 72% |
+| DP16KD BRAM | 19 | 56 | 34% |
+| TRELLIS_FF | 7,619 | — | — |
+
+### Artix-7 — XC7A50T (Colorlight i9+)
+
+| Resource | Used | Available | % |
+|---|---|---|---|
+| Slice LUTs | 7,649 | 32,600 | 23% |
+| BRAM Tiles | ~20 | 75 | ~27% |
+| DSP48E1 | 5 | 120 | 4% |
 
 ## License
 
