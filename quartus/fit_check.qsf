@@ -10,7 +10,8 @@ set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
 set_global_assignment -name SYSTEMVERILOG_FILE fit_check_top.sv
 set_global_assignment -name SYSTEMVERILOG_FILE PllAtari800.sv
 set_global_assignment -name SYSTEMVERILOG_FILE Atari800JopTop.sv
-set_global_assignment -name SYSTEMVERILOG_FILE JopCoreForAtari.sv
 
 # Timing constraints
 set_global_assignment -name SDC_FILE fit_check.sdc
+
+set_global_assignment -name LAST_QUARTUS_VERSION "18.1.1 Lite Edition"
