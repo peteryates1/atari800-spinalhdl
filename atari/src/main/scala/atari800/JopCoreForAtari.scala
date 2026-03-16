@@ -14,17 +14,40 @@ import jop.pipeline.JumpTableInitData
  */
 object JopCoreForAtari {
 
-  def config: JopCoreConfig = JopCoreConfig(
-    blockBits = 6,            // 64 blocks × 64 bytes each
+  // Cache sizes: "large" for 10CL025 (fills available BRAM),
+  //              "default" for ECP5 i5 (fits in 24K LUTs)
+  def config: JopCoreConfig = configSmall
+
+  def configLarge: JopCoreConfig = configBase(
+    blockBits       = 6,   // 64 blocks
+    ocacheWayBits   = 6,   // 64 entries
+    ocacheIndexBits = 4,   // 16 fields
+    acacheWayBits   = 5,   // 32 entries
+    acacheFieldBits = 3    // 8 elements
+  )
+
+  def configSmall: JopCoreConfig = configBase(
+    blockBits       = 4,   // 16 blocks (default)
+    ocacheWayBits   = 4,   // 16 entries (default)
+    ocacheIndexBits = 4,   // 16 fields
+    acacheWayBits   = 4,   // 16 entries (default)
+    acacheFieldBits = 2    // 4 elements (default)
+  )
+
+  private def configBase(
+    blockBits: Int, ocacheWayBits: Int, ocacheIndexBits: Int,
+    acacheWayBits: Int, acacheFieldBits: Int
+  ): JopCoreConfig = JopCoreConfig(
+    blockBits = blockBits,
     memConfig = JopMemoryConfig(
       addressWidth = 24,
       burstLen     = 0,       // single-word SDRAM access (via SdramArbiter)
       useOcache         = true,
-      ocacheWayBits     = 6,    // 64 entries (objects)
-      ocacheIndexBits   = 4,    // 16 fields per entry
+      ocacheWayBits     = ocacheWayBits,
+      ocacheIndexBits   = ocacheIndexBits,
       useAcache         = true,
-      acacheWayBits     = 5,    // 32 entries (arrays)
-      acacheFieldBits   = 3     // 8 elements per line
+      acacheWayBits     = acacheWayBits,
+      acacheFieldBits   = acacheFieldBits
     ),
     useDspMul = true,
     supersetJumpTable = JumpTableInitData.serialDsp,
@@ -36,14 +59,15 @@ object JopCoreForAtari {
       extensionDevices = Seq(
         IoDeviceDescriptor(
           name = "atariCtrl",
-          addrBits = 4,         // 16 registers
+          addrBits = 4,         // 16 registers (12 used)
           interruptCount = 0,
           coreZeroOnly = true,
           registerNames = Seq(
             (0, "STATUS_CTRL"), (1, "CART_SELECT"), (2, "CONFIG"),
-            (3, "PADDLE0"), (4, "PADDLE1"), (5, "PADDLE2"), (6, "PADDLE3"),
-            (7, "JOY1"), (8, "JOY2"), (9, "JOY3"), (10, "JOY4"),
-            (11, "KEYBOARD"), (12, "THROTTLE")
+            (3, "PADDLE_01"), (4, "PADDLE_23"), (5, "PADDLE_45"), (6, "PADDLE_67"),
+            (7, "JOY_12"), (8, "JOY_34"),
+            (9, "KB_THROTTLE"),
+            (10, "CART_SLOT_ADDR"), (11, "CART_SLOT_DATA")
           ),
           factory = _ => new AtariCtrl
         )

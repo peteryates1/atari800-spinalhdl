@@ -81,6 +81,10 @@ class SdramArbiter extends Component {
   val bPending = RegInit(False)   // B wants to request (queued)
   val aPending = RegInit(False)   // A was blocked by B, needs retry
 
+  // Register SDRAM complete to break combinatorial loop
+  // (SDRAM controller's COMPLETE is combinatorial from REQUEST)
+  val sdramCompleteReg = RegNext(io.sdram.complete) init False
+
   // Capture B requests (edge detect to avoid re-capture)
   val bReqPrev = RegNext(io.b.request) init False
   when(io.b.request && !bReqPrev) { bPending := True }
@@ -121,7 +125,7 @@ class SdramArbiter extends Component {
     when(io.a.request) { aPending := True }
 
     // Wait for B's transaction to complete
-    when(io.sdram.complete) {
+    when(sdramCompleteReg) {
       io.b.complete := True
       bActive := False
     }
@@ -135,10 +139,10 @@ class SdramArbiter extends Component {
     when(aPending && !io.a.request) { aPending := False }
 
     // A gets COMPLETE directly from SDRAM
-    io.a.complete := io.sdram.complete
+    io.a.complete := sdramCompleteReg
 
     // Serve B only when: pending, A not requesting, no aPending, SDRAM idle
-    when(bPending && !io.a.request && !aPending && io.sdram.complete) {
+    when(bPending && !io.a.request && !aPending && sdramCompleteReg) {
       // Switch to B — override SDRAM signals for this cycle
       io.sdram.request        := True
       io.sdram.addr           := B"0" ## io.b.addr

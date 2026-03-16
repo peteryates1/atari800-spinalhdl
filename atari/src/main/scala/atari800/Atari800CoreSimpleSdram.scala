@@ -39,6 +39,10 @@ class Atari800CoreSimpleSdram(
     val PADDLE1 = in  SInt(8 bits)
     val PADDLE2 = in  SInt(8 bits)
     val PADDLE3 = in  SInt(8 bits)
+    val PADDLE4 = in  SInt(8 bits)
+    val PADDLE5 = in  SInt(8 bits)
+    val PADDLE6 = in  SInt(8 bits)
+    val PADDLE7 = in  SInt(8 bits)
 
     // Keyboard
     val KEYBOARD_RESPONSE = in  Bits(2 bits)
@@ -195,7 +199,37 @@ class Atari800CoreSimpleSdram(
   pot3.io.forceHigh := False
   POT_IN(3)         := pot3.io.potHigh
 
-  POT_IN(7 downto 4) := B"0000"
+  val pot4 = new PotFromSigned(cycleLength = cycle_length, reverse = 1)
+  pot4.io.enabled   := True
+  pot4.io.potReset  := POT_RESET
+  pot4.io.pos       := io.PADDLE4
+  pot4.io.forceLow  := False
+  pot4.io.forceHigh := False
+  POT_IN(4)         := pot4.io.potHigh
+
+  val pot5 = new PotFromSigned(cycleLength = cycle_length, reverse = 1)
+  pot5.io.enabled   := True
+  pot5.io.potReset  := POT_RESET
+  pot5.io.pos       := io.PADDLE5
+  pot5.io.forceLow  := False
+  pot5.io.forceHigh := False
+  POT_IN(5)         := pot5.io.potHigh
+
+  val pot6 = new PotFromSigned(cycleLength = cycle_length, reverse = 1)
+  pot6.io.enabled   := True
+  pot6.io.potReset  := POT_RESET
+  pot6.io.pos       := io.PADDLE6
+  pot6.io.forceLow  := False
+  pot6.io.forceHigh := False
+  POT_IN(6)         := pot6.io.potHigh
+
+  val pot7 = new PotFromSigned(cycleLength = cycle_length, reverse = 1)
+  pot7.io.enabled   := True
+  pot7.io.potReset  := POT_RESET
+  pot7.io.pos       := io.PADDLE7
+  pot7.io.forceLow  := False
+  pot7.io.forceHigh := False
+  POT_IN(7)         := pot7.io.potHigh
 
   // Internal ROM/RAM
   val internalromram1 = new InternalRomRam(internalRom = internal_rom, internalRam = internal_ram, cartridgeRom = cartridge_rom)

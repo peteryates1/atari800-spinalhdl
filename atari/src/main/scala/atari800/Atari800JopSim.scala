@@ -126,6 +126,11 @@ class Atari800JopSim extends Component {
 
   atariPin[Bool]("pllLocked") := True  // sim: always locked
 
+  // No physical cartridge slot in sim
+  atariPin[Bits]("cartSlotData") := B(0xFF, 8 bits)
+  atariPin[Bool]("cartSlotRd4")  := False  // no cartridge
+  atariPin[Bool]("cartSlotRd5")  := False
+
   // =================================================================
   // Atari 800 Core
   // =================================================================
@@ -159,6 +164,10 @@ class Atari800JopSim extends Component {
   atariCore.io.PADDLE1 := atariPin[SInt]("paddle1")
   atariCore.io.PADDLE2 := atariPin[SInt]("paddle2")
   atariCore.io.PADDLE3 := atariPin[SInt]("paddle3")
+  atariCore.io.PADDLE4 := atariPin[SInt]("paddle4")
+  atariCore.io.PADDLE5 := atariPin[SInt]("paddle5")
+  atariCore.io.PADDLE6 := atariPin[SInt]("paddle6")
+  atariCore.io.PADDLE7 := atariPin[SInt]("paddle7")
 
   // Keyboard
   atariCore.io.KEYBOARD_RESPONSE := atariPin[Bits]("keyboardResponse")

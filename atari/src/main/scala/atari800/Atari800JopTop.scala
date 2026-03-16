@@ -201,6 +201,10 @@ class Atari800JopTop extends Component {
     atariCore.io.PADDLE1 := atariPin[SInt]("paddle1")
     atariCore.io.PADDLE2 := atariPin[SInt]("paddle2")
     atariCore.io.PADDLE3 := atariPin[SInt]("paddle3")
+    atariCore.io.PADDLE4 := atariPin[SInt]("paddle4")
+    atariCore.io.PADDLE5 := atariPin[SInt]("paddle5")
+    atariCore.io.PADDLE6 := atariPin[SInt]("paddle6")
+    atariCore.io.PADDLE7 := atariPin[SInt]("paddle7")
 
     // Keyboard (from USB via JOP -> AtariCtrl)
     atariCore.io.KEYBOARD_RESPONSE := atariPin[Bits]("keyboardResponse")
@@ -398,16 +402,19 @@ class Atari800JopTop extends Component {
     io.audioR := audioDacR.io.pwmOut
 
     // =====================================================================
-    // Cartridge slot
-    // TODO: Atari800CoreSimpleSdram doesn't expose cart bus pins.
-    //       Need to add CART_ADDR, CART_S4_N, CART_S5_N, CART_CCTL_N,
-    //       CART_RD4, CART_RD5 to the SimpleSdram wrapper, then wire here.
+    // Physical cartridge slot — driven by JOP via AtariCtrl registers
+    // JOP reads cart ROM for backup to SD, then loads into SDRAM for
+    // emulated cartridge playback via the normal emulated cart path.
     // =====================================================================
-    io.cart.addr   := B(0, 13 bits)
-    io.cart.s4_n   := True
-    io.cart.s5_n   := True
-    io.cart.cctl_n := True
+    io.cart.addr   := atariPin[Bits]("cartSlotAddr")
+    io.cart.s4_n   := atariPin[Bool]("cartSlotS4N")
+    io.cart.s5_n   := atariPin[Bool]("cartSlotS5N")
+    io.cart.cctl_n := atariPin[Bool]("cartSlotCctlN")
     io.cart.phi2   := clkSys
+    // Cart slot inputs back to JOP
+    atariPin[Bits]("cartSlotData") := io.cart.data
+    atariPin[Bool]("cartSlotRd4")  := io.cart.rd4
+    atariPin[Bool]("cartSlotRd5")  := io.cart.rd5
 
     // =====================================================================
     // LEDs

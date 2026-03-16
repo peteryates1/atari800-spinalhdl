@@ -5,7 +5,8 @@ import jop.io.HasBusIo
 
 // JOP I/O peripheral for controlling the Atari 800 core.
 // Replaces PicoBus functionality: config registers, paddle injection,
-// keyboard matrix, joystick overrides, OSD control, cold reset.
+// keyboard matrix, joystick overrides, OSD control, cold reset,
+// physical cartridge slot access.
 //
 // Uses the same simple register interface as VgaText (addr/rd/wr/data).
 // JopCore's I/O decoder routes accesses to this peripheral.
@@ -16,16 +17,16 @@ import jop.io.HasBusIo
 //   0x1  R/W: cartSelect[5:0]
 //   0x2  R/W: config — bit0=PAL, bit[3:1]=ramSelect, bit4=turboVblankOnly,
 //                       bit5=atari800mode, bit6=hiresEna
-//   0x3  R/W: paddle0 (signed 8-bit)
-//   0x4  R/W: paddle1
-//   0x5  R/W: paddle2
-//   0x6  R/W: paddle3
-//   0x7  R/W: joy1_n[4:0] (active low: fire, right, left, down, up)
-//   0x8  R/W: joy2_n[4:0]
-//   0x9  R/W: joy3_n[4:0]
-//   0xA  R/W: joy4_n[4:0]
-//   0xB  R/W: keyboard response[1:0]
-//   0xC  R/W: throttle count[5:0]
+//   0x3  R/W: paddle0[7:0] | paddle1[15:8]   (port 1, signed 8-bit each)
+//   0x4  R/W: paddle2[7:0] | paddle3[15:8]   (port 2)
+//   0x5  R/W: paddle4[7:0] | paddle5[15:8]   (port 3)
+//   0x6  R/W: paddle6[7:0] | paddle7[15:8]   (port 4)
+//   0x7  R/W: joy1_n[4:0] | joy2_n[12:8]     (active low: fire,right,left,down,up)
+//   0x8  R/W: joy3_n[4:0] | joy4_n[12:8]
+//   0x9  R/W: keyboard response[1:0], throttle[13:8]
+//   0xA  W: cart slot addr[12:0], bit13=s5_n, bit14=s4_n, bit15=cctl_n
+//        R: same (readback)
+//   0xB  R: cart slot data[7:0], bit8=rd4, bit9=rd5
 class AtariCtrl extends Component with HasBusIo {
   val bus = new Bundle {
     val addr   = in  UInt(4 bits)
@@ -52,6 +53,10 @@ class AtariCtrl extends Component with HasBusIo {
     val paddle1 = out SInt(8 bits)
     val paddle2 = out SInt(8 bits)
     val paddle3 = out SInt(8 bits)
+    val paddle4 = out SInt(8 bits)
+    val paddle5 = out SInt(8 bits)
+    val paddle6 = out SInt(8 bits)
+    val paddle7 = out SInt(8 bits)
 
     // Joystick outputs (active low, directly to Atari core)
     val joy1_n = out Bits(5 bits)
@@ -62,6 +67,15 @@ class AtariCtrl extends Component with HasBusIo {
     // Keyboard
     val keyboardResponse = out Bits(2 bits)
 
+    // Physical cartridge slot
+    val cartSlotAddr  = out Bits(13 bits)
+    val cartSlotS4N   = out Bool()
+    val cartSlotS5N   = out Bool()
+    val cartSlotCctlN = out Bool()
+    val cartSlotData  = in  Bits(8 bits)
+    val cartSlotRd4   = in  Bool()
+    val cartSlotRd5   = in  Bool()
+
     // Status inputs
     val pllLocked = in Bool()
   }
@@ -71,19 +85,22 @@ class AtariCtrl extends Component with HasBusIo {
   val coldResetReg   = RegInit(False)                      // pulse
   val cartSelectReg  = Reg(Bits(6 bits)) init 0            // no cartridge
   val configReg      = Reg(Bits(8 bits)) init B"00000011"  // PAL, ramSelect=001 (64K RAM), XL/XE mode
-  val throttleReg    = Reg(Bits(6 bits)) init B"011111"    // 31
 
-  val paddle0Reg = Reg(SInt(8 bits)) init 0
-  val paddle1Reg = Reg(SInt(8 bits)) init 0
-  val paddle2Reg = Reg(SInt(8 bits)) init 0
-  val paddle3Reg = Reg(SInt(8 bits)) init 0
+  // Paddle pairs packed: [15:8]=odd, [7:0]=even
+  val paddlePair0Reg = Reg(Bits(16 bits)) init 0  // paddle0, paddle1
+  val paddlePair1Reg = Reg(Bits(16 bits)) init 0  // paddle2, paddle3
+  val paddlePair2Reg = Reg(Bits(16 bits)) init 0  // paddle4, paddle5
+  val paddlePair3Reg = Reg(Bits(16 bits)) init 0  // paddle6, paddle7
 
-  val joy1Reg = Reg(Bits(5 bits)) init B"11111"  // all released
-  val joy2Reg = Reg(Bits(5 bits)) init B"11111"
-  val joy3Reg = Reg(Bits(5 bits)) init B"11111"
-  val joy4Reg = Reg(Bits(5 bits)) init B"11111"
+  // Joystick pairs packed: [12:8]=joy_odd, [4:0]=joy_even
+  val joyPair0Reg = Reg(Bits(16 bits)) init B(0x1F1F, 16 bits)  // joy1, joy2
+  val joyPair1Reg = Reg(Bits(16 bits)) init B(0x1F1F, 16 bits)  // joy3, joy4
 
-  val kbResponseReg = Reg(Bits(2 bits)) init B"11"         // no key pressed
+  // Keyboard + throttle packed: [13:8]=throttle, [1:0]=keyboard
+  val kbThrottleReg = Reg(Bits(16 bits)) init B(0x1F03, 16 bits) // throttle=31, kb=11
+
+  // Cart slot: addr[12:0], s5_n, s4_n, cctl_n packed into 16 bits
+  val cartSlotReg = Reg(Bits(16 bits)) init B(0xE000, 16 bits) // all selects high (deasserted)
 
   // Cold reset is a pulse — clear after one cycle
   coldResetReg := False
@@ -95,18 +112,16 @@ class AtariCtrl extends Component with HasBusIo {
         osdEnableReg := bus.wrData(0)
         when(bus.wrData(7)) { coldResetReg := True }
       }
-      is(0x1) { cartSelectReg := bus.wrData(5 downto 0) }
-      is(0x2) { configReg     := bus.wrData(7 downto 0) }
-      is(0x3) { paddle0Reg    := bus.wrData(7 downto 0).asSInt }
-      is(0x4) { paddle1Reg    := bus.wrData(7 downto 0).asSInt }
-      is(0x5) { paddle2Reg    := bus.wrData(7 downto 0).asSInt }
-      is(0x6) { paddle3Reg    := bus.wrData(7 downto 0).asSInt }
-      is(0x7) { joy1Reg       := bus.wrData(4 downto 0) }
-      is(0x8) { joy2Reg       := bus.wrData(4 downto 0) }
-      is(0x9) { joy3Reg       := bus.wrData(4 downto 0) }
-      is(0xA) { joy4Reg       := bus.wrData(4 downto 0) }
-      is(0xB) { kbResponseReg := bus.wrData(1 downto 0) }
-      is(0xC) { throttleReg   := bus.wrData(5 downto 0) }
+      is(0x1) { cartSelectReg  := bus.wrData(5 downto 0) }
+      is(0x2) { configReg      := bus.wrData(7 downto 0) }
+      is(0x3) { paddlePair0Reg := bus.wrData(15 downto 0) }
+      is(0x4) { paddlePair1Reg := bus.wrData(15 downto 0) }
+      is(0x5) { paddlePair2Reg := bus.wrData(15 downto 0) }
+      is(0x6) { paddlePair3Reg := bus.wrData(15 downto 0) }
+      is(0x7) { joyPair0Reg    := bus.wrData(15 downto 0) }
+      is(0x8) { joyPair1Reg    := bus.wrData(15 downto 0) }
+      is(0x9) { kbThrottleReg  := bus.wrData(15 downto 0) }
+      is(0xA) { cartSlotReg    := bus.wrData(15 downto 0) }
     }
   }
 
@@ -116,16 +131,15 @@ class AtariCtrl extends Component with HasBusIo {
     is(0x0) { bus.rdData := B(0, 30 bits) ## io.pllLocked ## osdEnableReg }
     is(0x1) { bus.rdData := B(0, 26 bits) ## cartSelectReg }
     is(0x2) { bus.rdData := B(0, 24 bits) ## configReg }
-    is(0x3) { bus.rdData := B(0, 24 bits) ## paddle0Reg.asBits }
-    is(0x4) { bus.rdData := B(0, 24 bits) ## paddle1Reg.asBits }
-    is(0x5) { bus.rdData := B(0, 24 bits) ## paddle2Reg.asBits }
-    is(0x6) { bus.rdData := B(0, 24 bits) ## paddle3Reg.asBits }
-    is(0x7) { bus.rdData := B(0, 27 bits) ## joy1Reg }
-    is(0x8) { bus.rdData := B(0, 27 bits) ## joy2Reg }
-    is(0x9) { bus.rdData := B(0, 27 bits) ## joy3Reg }
-    is(0xA) { bus.rdData := B(0, 27 bits) ## joy4Reg }
-    is(0xB) { bus.rdData := B(0, 30 bits) ## kbResponseReg }
-    is(0xC) { bus.rdData := B(0, 26 bits) ## throttleReg }
+    is(0x3) { bus.rdData := B(0, 16 bits) ## paddlePair0Reg }
+    is(0x4) { bus.rdData := B(0, 16 bits) ## paddlePair1Reg }
+    is(0x5) { bus.rdData := B(0, 16 bits) ## paddlePair2Reg }
+    is(0x6) { bus.rdData := B(0, 16 bits) ## paddlePair3Reg }
+    is(0x7) { bus.rdData := B(0, 16 bits) ## joyPair0Reg }
+    is(0x8) { bus.rdData := B(0, 16 bits) ## joyPair1Reg }
+    is(0x9) { bus.rdData := B(0, 16 bits) ## kbThrottleReg }
+    is(0xA) { bus.rdData := B(0, 16 bits) ## cartSlotReg }
+    is(0xB) { bus.rdData := B(0, 22 bits) ## io.cartSlotRd5 ## io.cartSlotRd4 ## io.cartSlotData }
   }
 
   // Output assignments
@@ -137,19 +151,31 @@ class AtariCtrl extends Component with HasBusIo {
   io.turboVblankOnly := configReg(4)
   io.atari800mode    := configReg(5)
   io.hiresEna        := configReg(6)
-  io.throttleCount   := throttleReg
+  io.throttleCount   := kbThrottleReg(13 downto 8)
 
-  io.paddle0 := paddle0Reg
-  io.paddle1 := paddle1Reg
-  io.paddle2 := paddle2Reg
-  io.paddle3 := paddle3Reg
+  // Unpack paddle pairs
+  io.paddle0 := paddlePair0Reg( 7 downto 0).asSInt
+  io.paddle1 := paddlePair0Reg(15 downto 8).asSInt
+  io.paddle2 := paddlePair1Reg( 7 downto 0).asSInt
+  io.paddle3 := paddlePair1Reg(15 downto 8).asSInt
+  io.paddle4 := paddlePair2Reg( 7 downto 0).asSInt
+  io.paddle5 := paddlePair2Reg(15 downto 8).asSInt
+  io.paddle6 := paddlePair3Reg( 7 downto 0).asSInt
+  io.paddle7 := paddlePair3Reg(15 downto 8).asSInt
 
-  io.joy1_n := joy1Reg
-  io.joy2_n := joy2Reg
-  io.joy3_n := joy3Reg
-  io.joy4_n := joy4Reg
+  // Unpack joystick pairs
+  io.joy1_n := joyPair0Reg( 4 downto 0)
+  io.joy2_n := joyPair0Reg(12 downto 8)
+  io.joy3_n := joyPair1Reg( 4 downto 0)
+  io.joy4_n := joyPair1Reg(12 downto 8)
 
-  io.keyboardResponse := kbResponseReg
+  io.keyboardResponse := kbThrottleReg(1 downto 0)
+
+  // Cart slot outputs from packed register
+  io.cartSlotAddr  := cartSlotReg(12 downto 0)
+  io.cartSlotS5N   := cartSlotReg(13)
+  io.cartSlotS4N   := cartSlotReg(14)
+  io.cartSlotCctlN := cartSlotReg(15)
 
   // HasBusIo implementation
   override def busAddr: UInt   = bus.addr

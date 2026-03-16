@@ -107,6 +107,10 @@ class Atari800CoreSim(cartridge_rom: String = "") extends Component {
   atariCore.io.PADDLE1 := S(0, 8 bits)
   atariCore.io.PADDLE2 := S(0, 8 bits)
   atariCore.io.PADDLE3 := S(0, 8 bits)
+  atariCore.io.PADDLE4 := S(0, 8 bits)
+  atariCore.io.PADDLE5 := S(0, 8 bits)
+  atariCore.io.PADDLE6 := S(0, 8 bits)
+  atariCore.io.PADDLE7 := S(0, 8 bits)
 
   // Keyboard (no keys pressed)
   atariCore.io.KEYBOARD_RESPONSE := B"11"

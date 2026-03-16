@@ -55,24 +55,22 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
     rom10.io.clock   := io.clock
     rom10.io.address := io.romAddr(12 downto 0).asUInt
 
-    // Cartridge slot: load from file or fall back to built-in BASIC
-    val cartData: Seq[Bits] = if (cartridgeRom.nonEmpty) {
+    // Cartridge slot: only instantiate ROM when a file is provided (simulation).
+    // On hardware, JOP loads cartridge/BASIC from SD into SDRAM at runtime.
+    if (cartridgeRom.nonEmpty) {
       val bytes = Files.readAllBytes(Paths.get(cartridgeRom))
       println(s"[InternalRomRam] Loading cartridge ROM: $cartridgeRom (${bytes.length} bytes)")
-      bytes.map(b => B((b.toInt & 0xFF), 8 bits)).toSeq
-    } else {
-      val basic1 = new Basic
-      // Extract BASIC ROM data at elaboration time
-      basic1.romData
-    }
-    val cartRom = Mem(Bits(8 bits), initialContent = cartData)
-    val cartAddr = io.romAddr(12 downto 0).asUInt
-    val cartQ = RegNext(cartRom.readAsync(cartAddr))
+      val cartData = bytes.map(b => B((b.toInt & 0xFF), 8 bits)).toSeq
+      val cartRom = Mem(Bits(8 bits), initialContent = cartData)
+      val cartAddr = io.romAddr(12 downto 0).asUInt
+      val cartQ = RegNext(cartRom.readAsync(cartAddr))
 
-    when(io.romAddr(15)) {
-      // Cartridge ROM at $A000-$BFFF (romAddr bit 15 set by AddressDecoder)
-      io.romData := cartQ
-    } otherwise {
+      when(io.romAddr(15)) {
+        io.romData := cartQ
+      }
+    }
+
+    when(~io.romAddr(15)) {
       switch(io.romAddr(13 downto 11)) {
         is(B"011") { io.romData := rom2.io.q }
         is(B"100") { io.romData := rom10.io.q }
