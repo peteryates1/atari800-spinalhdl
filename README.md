@@ -178,9 +178,11 @@ boot. OS ROM (16K) is in block RAM. All targets meet timing at 56.67 MHz.
 
 ### Cyclone 10 LP — 10CL025YU256C8G (custom board / AC608)
 
+Synthesised with Quartus Prime 25.1 Lite Edition.
+
 | Resource | Used | Available | % |
 |---|---|---|---|
-| Logic Elements | 15,304 | 24,624 | 62% |
+| Logic Elements | 15,411 | 24,624 | 63% |
 | Memory bits | 309,198 | 608,256 | 51% |
 | DSP 9-bit | 10 | 132 | 8% |
 | PLLs | 0 (stub) | 4 | 0% |
