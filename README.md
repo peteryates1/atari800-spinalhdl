@@ -9,17 +9,19 @@ with 32MB SDR SDRAM (W9825G6KH).
 
 ## Status
 
-The Atari 800 core boots and runs correctly in simulation:
+The Atari 800 core boots and runs correctly in simulation and on real hardware:
 
 - **Memo pad** (no cartridge) — displays "ATARI COMPUTER - MEMO PAD"
 - **Atari BASIC** (built-in 8K ROM) — boots to READY prompt
-- **Star Raiders** (8K cartridge ROM loaded from file) — boots to title screen
+- **Star Raiders** (8K cartridge ROM) — boots to title screen
 
 All ANTIC display modes, GTIA colour rendering (including highres mode 2),
 DMA pipeline, NMI/IRQ handling, and the 6502 CPU are verified working.
 Frame capture produces correct PAL-palette colour output.
 
-**Not yet tested on hardware** — FPGA synthesis and board bring-up are pending.
+**Hardware verified** — memo pad and Star Raiders confirmed running on
+QMTECH EP4CGX150 + DB_FPGA daughter board (VGA output, 56.67 MHz).
+See `boards/ep4cgx150/`.
 
 ## Origins
 
@@ -48,12 +50,14 @@ atari/                   Atari 800 core
     Atari800CoreSim.scala     Simulation top-level wrapper
     Atari800CoreSimTb.scala   Simulation testbench with frame capture
     Atari800JopTop.scala      FPGA top-level (Atari + JOP + SDRAM arbiter)
+    Atari800Ep4cgx150Top.scala  Bare-metal bring-up top (EP4CGX150, no JOP)
     Os8.scala, Os2.scala      Atari 800 OS ROMs (8K + 2K math pack)
     Os16.scala, Os16Loop.scala  XL 16K OS variants
     Basic.scala               Atari BASIC 8K ROM (simulation only; HW loads from SD)
     JopCoreForAtari.scala     JOP configuration + AtariCtrl I/O device
 jop-spinalhdl/           JOP soft-core (git submodule)
 boards/
+  ep4cgx150/             QMTECH EP4CGX150 + DB_FPGA (Cyclone IV GX, hardware verified)
   AC608/                 Cyclone 10 LP custom board (Quartus 25.1)
   i5-7v0/                Colorlight i5 v7.0 (ECP5 LFE5U-25F, yosys/nextpnr)
   i9-7v2/                Colorlight i9 v7.2 (ECP5 LFE5U-45F, yosys/nextpnr)
@@ -101,6 +105,19 @@ Convert to PNG with ImageMagick: `convert frame.ppm frame.png`
 ```sh
 sbt "atari/runMain atari800.Atari800JopTopSv"
 ```
+
+### EP4CGX150 bring-up build (QMTECH EP4CGX150 + DB_FPGA)
+
+```sh
+cd boards/ep4cgx150
+make generate   # SpinalHDL → Atari800Ep4cgx150Top.sv + ROM .bin files
+make build      # quartus_map + fit + asm + sta
+make program    # JTAG via USB Blaster
+```
+
+Place `Star Raiders.rom` (8192 bytes) in the project root to boot to Star
+Raiders instead of memo pad. Set `cartridge_rom` and `basic_in_sdram=false`
+in `Atari800Ep4cgx150Top.scala`.
 
 ### Full Quartus build (Cyclone 10 LP)
 
@@ -176,7 +193,17 @@ mode 2 (ANTIC's 40-column text mode). Fix: `Gtia.scala` lines 611-612.
 ## Resource Utilisation
 
 BASIC ROM is not burned into FPGA fabric — JOP loads it from SD into SDRAM at
-boot. OS ROM (16K) is in block RAM. All targets meet timing at 56.67 MHz.
+boot. OS ROM is in block RAM. All targets meet timing at 56.67 MHz.
+
+### Cyclone IV GX — EP4CGX150DF27I7 (QMTECH EP4CGX150 + DB_FPGA, **hardware verified**)
+
+Bare-metal bring-up top (no JOP). Atari 800 OS + 16K internal RAM + Star Raiders ROM.
+
+| Resource | Used | Available | % |
+|---|---|---|---|
+| Logic Elements | 3,754 | 149,760 | 2% |
+| Memory bits | 313,678 | 6,635,520 | 5% |
+| PLLs | 1 | 8 | 13% |
 
 ### Cyclone 10 LP — 10CL025YU256C8G (custom board / AC608)
 
