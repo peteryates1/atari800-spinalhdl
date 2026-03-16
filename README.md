@@ -54,8 +54,9 @@ atari/                   Atari 800 core
     JopCoreForAtari.scala     JOP configuration + AtariCtrl I/O device
 jop-spinalhdl/           JOP soft-core (git submodule)
 quartus/                 Intel Quartus project (10CL025)
-ecp5/                    ECP5 yosys/nextpnr build (Colorlight i5)
-vivado/                  Vivado synthesis check (Colorlight i9+)
+ecp5/                    ECP5 yosys/nextpnr build (Colorlight i5, LFE5U-25F)
+i9/                      ECP5 yosys/nextpnr build (Colorlight i9 module, LFE5U-45F)
+vivado/                  Vivado synthesis check (Colorlight i9+, XC7A50T)
 generated/               SpinalHDL output (.sv + .bin) — gitignored
 unused_scala/            Archived/inactive modules (18 files)
 Makefile                 Build orchestration
@@ -128,7 +129,7 @@ make pnr      # requires colorlight_i9.lpf pin assignments
 
 ```sh
 cd vivado
-/path/to/vivado -mode batch -source synth_check.tcl
+/opt/xilinx/2025.2/Vivado/bin/vivado -mode batch -source synth_check.tcl
 # Reports: synth_util.rpt, synth_timing.rpt
 ```
 
