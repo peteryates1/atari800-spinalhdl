@@ -33,3 +33,4 @@ vivado/synth_timing.rpt
 vivado/*.jou
 vivado/*.log
 vivado/vivado_pid*.str
+i9/build/

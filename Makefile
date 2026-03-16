@@ -1,4 +1,4 @@
-QUARTUS     = /opt/altera/18.1/quartus/bin
+QUARTUS     = /opt/altera/25.1/quartus/bin
 QUARTUS_DIR = quartus
 GEN_DIR     = generated
 

@@ -67,7 +67,7 @@ Makefile                 Build orchestration
 
 - JDK 11+
 - SBT 1.9+
-- Intel Quartus Prime 18.1+ (Lite Edition) — for Cyclone 10 LP build
+- Intel Quartus Prime 25.1+ (Lite Edition) — for Cyclone 10 LP build
 - yosys + nextpnr-ecp5 + ecppack — for ECP5 build (distro packages sufficient)
 - Vivado 2025.2 — for Artix-7 build
 
@@ -114,6 +114,14 @@ cd ecp5
 make synth    # yosys synthesis + utilisation report
 make pnr      # nextpnr place-and-route + timing
 make bitstream
+```
+
+### ECP5 synthesis (Colorlight i9 module — LFE5U-45F)
+
+```sh
+cd i9
+make synth    # synthesis (device-agnostic; 39% LUT utilisation)
+make pnr      # requires colorlight_i9.lpf pin assignments
 ```
 
 ### Vivado synthesis (Colorlight i9+ — XC7A50T)
@@ -184,6 +192,19 @@ boot. OS ROM (16K) is in block RAM. All targets meet timing at 56.67 MHz.
 | LUT4 | 17,221 | 24,000 | 72% |
 | DP16KD BRAM | 19 | 56 | 34% |
 | TRELLIS_FF | 7,619 | — | — |
+
+### ECP5 — LFE5U-45F (Colorlight i9 module)
+
+Same synthesis result as i5 (synth_ecp5 is device-agnostic); more headroom:
+
+| Resource | Used | Available | % |
+|---|---|---|---|
+| LUT4 | 17,221 | 44,000 | 39% |
+| DP16KD BRAM | 19 | 108 | 18% |
+| TRELLIS_FF | 7,619 | — | — |
+
+Note: i9 has 32-bit wide SDRAM (M12L64322A). SdramStatemachine configured for
+16-bit; full 32-bit width support is pending.
 
 ### Artix-7 — XC7A50T (Colorlight i9+)
 
