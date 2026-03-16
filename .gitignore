@@ -7,16 +7,28 @@ project/project/
 generated/
 
 # Quartus build artifacts
-quartus/db/
-quartus/incremental_db/
-quartus/output_files/
-quartus/*.sv.bak
+boards/AC608/db/
+boards/AC608/incremental_db/
+boards/AC608/output_files/
+boards/AC608/*.sv.bak
+boards/AC608/fit_check_assignment_defaults.qdf
 
 # Quartus-copied generated files (from make quartus-prep)
-quartus/Atari800JopTop.sv
-quartus/Atari800JopTop.sv_*.bin
-quartus/JopCoreForAtari.sv
-quartus/JopCoreForAtari.sv_*.bin
+boards/AC608/Atari800JopTop.sv
+boards/AC608/Atari800JopTop.sv_*.bin
+boards/AC608/JopCoreForAtari.sv
+boards/AC608/JopCoreForAtari.sv_*.bin
+
+# ECP5 build artifacts
+boards/i5-7v0/build/
+boards/i9-7v2/build/
+
+# Vivado build artifacts
+boards/i9plus-6v1/synth_util.rpt
+boards/i9plus-6v1/synth_timing.rpt
+boards/i9plus-6v1/*.jou
+boards/i9plus-6v1/*.log
+boards/i9plus-6v1/vivado_pid*.str
 
 # Simulation
 sim_workspace/
@@ -27,10 +39,3 @@ sim_workspace/
 .metals/
 .vscode/
 Star Raiders.rom
-ecp5/build/
-vivado/synth_util.rpt
-vivado/synth_timing.rpt
-vivado/*.jou
-vivado/*.log
-vivado/vivado_pid*.str
-i9/build/

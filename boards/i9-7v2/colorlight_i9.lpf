@@ -1,0 +1,9 @@
+# Colorlight i9 module pin constraints (LFE5U-45F-6BG381C)
+# Reference: https://github.com/wuxx/Colorlight-FPGA-Projects
+#
+# TODO: fill in complete pin assignments for board bring-up
+# Synthesis (make synth) does not require this file.
+
+LOCATE COMP "clk50" SITE "P3";
+IOBUF PORT "clk50" IO_TYPE=LVCMOS33;
+FREQUENCY PORT "clk50" 25.0 MHZ;

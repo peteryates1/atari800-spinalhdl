@@ -53,10 +53,11 @@ atari/                   Atari 800 core
     Basic.scala               Atari BASIC 8K ROM (simulation only; HW loads from SD)
     JopCoreForAtari.scala     JOP configuration + AtariCtrl I/O device
 jop-spinalhdl/           JOP soft-core (git submodule)
-quartus/                 Intel Quartus project (10CL025)
-ecp5/                    ECP5 yosys/nextpnr build (Colorlight i5, LFE5U-25F)
-i9/                      ECP5 yosys/nextpnr build (Colorlight i9 module, LFE5U-45F)
-vivado/                  Vivado synthesis check (Colorlight i9+, XC7A50T)
+boards/
+  AC608/                 Cyclone 10 LP custom board (Quartus 25.1)
+  i5-7v0/                Colorlight i5 v7.0 (ECP5 LFE5U-25F, yosys/nextpnr)
+  i9-7v2/                Colorlight i9 v7.2 (ECP5 LFE5U-45F, yosys/nextpnr)
+  i9plus-6v1/            Colorlight i9+ v6.1 (XC7A50T, Vivado)
 generated/               SpinalHDL output (.sv + .bin) — gitignored
 unused_scala/            Archived/inactive modules (18 files)
 Makefile                 Build orchestration
@@ -111,7 +112,7 @@ make quartus  # assumes generated/ already populated
 ### ECP5 synthesis (Colorlight i5 — LFE5U-25F)
 
 ```sh
-cd ecp5
+cd boards/i5-7v0
 make synth    # yosys synthesis + utilisation report
 make pnr      # nextpnr place-and-route + timing
 make bitstream
@@ -120,7 +121,7 @@ make bitstream
 ### ECP5 synthesis (Colorlight i9 module — LFE5U-45F)
 
 ```sh
-cd i9
+cd boards/i9-7v2
 make synth    # synthesis (device-agnostic; 39% LUT utilisation)
 make pnr      # requires colorlight_i9.lpf pin assignments
 ```
@@ -128,7 +129,7 @@ make pnr      # requires colorlight_i9.lpf pin assignments
 ### Vivado synthesis (Colorlight i9+ — XC7A50T)
 
 ```sh
-cd vivado
+cd boards/i9plus-6v1
 /opt/xilinx/2025.2/Vivado/bin/vivado -mode batch -source synth_check.tcl
 # Reports: synth_util.rpt, synth_timing.rpt
 ```

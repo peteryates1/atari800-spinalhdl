@@ -1,0 +1,6 @@
+LOCATE COMP "clk50" SITE "P6";
+IOBUF PORT "clk50" IO_TYPE=LVCMOS33;
+FREQUENCY PORT "clk50" 25 MHZ;
+
+# Minimal constraints for utilisation check — real pin assignments TBD
+# Colorlight i5 v7.0 uses SODIMM connector, pins depend on carrier board

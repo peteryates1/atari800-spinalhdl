@@ -1,5 +1,5 @@
 QUARTUS     = /opt/altera/25.1/quartus/bin
-QUARTUS_DIR = quartus
+QUARTUS_DIR = boards/AC608
 GEN_DIR     = generated
 
 .PHONY: bootstrap generate quartus-prep \
