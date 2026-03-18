@@ -411,7 +411,7 @@ class Atari800JopTop extends Component {
     io.cart.s4_n   := atariPin[Bool]("cartSlotS4N")
     io.cart.s5_n   := atariPin[Bool]("cartSlotS5N")
     io.cart.cctl_n := atariPin[Bool]("cartSlotCctlN")
-    io.cart.phi2   := clkSys
+    io.cart.phi2   := False  // TODO: generate proper ~1.79 MHz PHI2 for cart slot
     // Cart slot inputs back to JOP
     atariPin[Bits]("cartSlotData") := io.cart.data
     atariPin[Bool]("cartSlotRd4")  := io.cart.rd4

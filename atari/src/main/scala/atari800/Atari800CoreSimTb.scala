@@ -54,7 +54,7 @@ object Atari800CoreSimTb extends App {
     .addSimulatorFlag("-Wno-WIDTHTRUNC")
     .addSimulatorFlag("--x-initial-edge")
     .addSimulatorFlag("--x-assign 0")
-    .compile(new Atari800CoreSim(cartridge_rom = "Star Raiders.rom"))
+    .compile(new Atari800CoreSim(cartridge_rom = "roms/Star Raiders.rom"))
 
   compiled.doSim("Atari800_boot_test", seed = 42) { dut =>
     val sdram = new SdramBehavioral()

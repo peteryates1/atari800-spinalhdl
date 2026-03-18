@@ -4,9 +4,6 @@ Atari 800 FPGA core written in SpinalHDL, integrated with the
 [JOP](https://github.com/peteryates1/jop-spinalhdl) Java soft-core processor
 for SD card, USB, OSD, and configuration management.
 
-**Target**: Intel Cyclone 10 LP (10CL025YU256C8G) on a custom AC608-based board
-with 32MB SDR SDRAM (W9825G6KH).
-
 ## Status
 
 The Atari 800 core boots and runs correctly in simulation and on real hardware:
@@ -44,17 +41,23 @@ atari/                   Atari 800 core
     Pokey.scala               POKEY (sound, keyboard, serial I/O, timers)
     Pia.scala                 PIA (parallel I/O, port B memory control)
     AddressDecoder.scala      Memory map, SDRAM/ROM/RAM routing
-    InternalRomRam.scala      Embedded OS ROM + internal RAM (BASIC from SDRAM in HW)
+    InternalRomRam.scala      OS ROM + internal RAM (loads .rom files from roms/)
+    FileRom.scala             Generic ROM from binary .rom file (loaded at elaboration)
     Scandoubler.scala         15kHz→31kHz VGA scandoubler
     GtiaPalette.scala         Full PAL/NTSC colour palette (256 entries)
     Atari800CoreSim.scala     Simulation top-level wrapper
     Atari800CoreSimTb.scala   Simulation testbench with frame capture
     Atari800JopTop.scala      FPGA top-level (Atari + JOP + SDRAM arbiter)
     Atari800Ep4cgx150Top.scala  Bare-metal bring-up top (EP4CGX150, no JOP)
-    Os8.scala, Os2.scala      Atari 800 OS ROMs (8K + 2K math pack)
-    Os16.scala, Os16Loop.scala  XL 16K OS variants
-    Basic.scala               Atari BASIC 8K ROM (simulation only; HW loads from SD)
     JopCoreForAtari.scala     JOP configuration + AtariCtrl I/O device
+roms/                    Binary ROM files (loaded at elaboration, not in FPGA fabric)
+  atarixl.rom              XL/XE 16K OS
+  ataribas.rom             Atari BASIC 8K
+  atariosb.rom             Atari 800 OS-B 8K
+  atarios2.rom             Atari 800 math pack 2K
+  atari5200.rom            Atari 5200 OS 2K
+  atarixl_loop.rom         XL OS 16K (loop variant)
+  Star Raiders.rom         8K cartridge ROM
 jop-spinalhdl/           JOP soft-core (git submodule)
 boards/
   ep4cgx150/             QMTECH EP4CGX150 + DB_FPGA (Cyclone IV GX, hardware verified)
@@ -63,7 +66,7 @@ boards/
   i9-7v2/                Colorlight i9 v7.2 (ECP5 LFE5U-45F, yosys/nextpnr)
   i9plus-6v1/            Colorlight i9+ v6.1 (XC7A50T, Vivado)
 generated/               SpinalHDL output (.sv + .bin) — gitignored
-unused_scala/            Archived/inactive modules (18 files)
+unused_scala/            Archived/inactive modules
 Makefile                 Build orchestration
 ```
 
@@ -85,16 +88,21 @@ git clone --recurse-submodules <url>
 git submodule update --init
 ```
 
+### ROM files
+
+Binary ROM files live in the `roms/` directory and are loaded at elaboration
+time by `FileRom.scala`. They are **not** embedded in Scala source. You must
+supply your own Atari OS and BASIC ROMs.
+
 ### Run simulation
 
 ```sh
-# Boot to BASIC (default — built-in BASIC ROM)
+# Boot with Star Raiders cartridge (default configuration)
 sbt "atari/runMain atari800.Atari800CoreSimTb"
 
-# Boot with a cartridge ROM (e.g. Star Raiders)
-# Edit Atari800CoreSimTb.scala: cartridge_rom = "Star Raiders.rom"
-# Place the .rom file in the project root directory
-sbt "atari/runMain atari800.Atari800CoreSimTb"
+# To change the cartridge, edit Atari800CoreSimTb.scala:
+#   cartridge_rom = "roms/YourGame.rom"
+# Place the .rom file in the roms/ directory
 ```
 
 Frame captures are written as PPM files to `sim_workspace/Atari800_boot_test/`.
@@ -112,12 +120,11 @@ sbt "atari/runMain atari800.Atari800JopTopSv"
 cd boards/ep4cgx150
 make generate   # SpinalHDL → Atari800Ep4cgx150Top.sv + ROM .bin files
 make build      # quartus_map + fit + asm + sta
-make program    # JTAG via USB Blaster
+make program    # JTAG via USB-Blaster
 ```
 
-Place `Star Raiders.rom` (8192 bytes) in the project root to boot to Star
-Raiders instead of memo pad. Set `cartridge_rom` and `basic_in_sdram=false`
-in `Atari800Ep4cgx150Top.scala`.
+Cartridge ROM is set via `cartridge_rom` in `Atari800Ep4cgx150Top.scala`
+(default: `roms/Star Raiders.rom`). Place `.rom` files in the `roms/` directory.
 
 ### Full Quartus build (Cyclone 10 LP)
 
@@ -165,9 +172,9 @@ The testbench (`Atari800CoreSimTb`) provides:
 
 Configuration in `Atari800CoreSim.scala`:
 - `cycle_length = 32` — simulation speed (32 main clocks per colour clock)
-- `internal_rom = 3` — Atari 800 OS (Os8 + Os2)
+- `internal_rom = 3` — Atari 800 OS (atariosb.rom + atarios2.rom)
 - `internal_ram = 16384` — 16K internal RAM (48K total with SDRAM model)
-- `cartridge_rom` — path to 8K ROM file (empty = built-in BASIC)
+- `cartridge_rom` — path to 8K/16K ROM file (empty = no cartridge)
 
 ## Architecture
 
@@ -177,7 +184,7 @@ Configuration in `Atari800CoreSim.scala`:
   UART debug, and external I/O bus to control the Atari core
 - **SDRAM arbiter**: Atari (priority) + JOP share W9825G6KH via SdramArbiter
 - **Video**: Scandoubler (15kHz→31kHz) with JOP OSD overlay, VGA + HDMI output
-- **Audio**: Stereo POKEY + Covox through sigma-delta PWM DAC
+- **Audio**: POKEY + Covox through sigma-delta PWM DAC
 
 ## Bugs Fixed
 
@@ -192,8 +199,8 @@ mode 2 (ANTIC's 40-column text mode). Fix: `Gtia.scala` lines 611-612.
 
 ## Resource Utilisation
 
-BASIC ROM is not burned into FPGA fabric — JOP loads it from SD into SDRAM at
-boot. OS ROM is in block RAM. All targets meet timing at 56.67 MHz.
+OS and cartridge ROMs are loaded from binary `.rom` files at elaboration time
+into block RAM. All targets meet timing at 56.67 MHz.
 
 ### Cyclone IV GX — EP4CGX150DF27I7 (QMTECH EP4CGX150 + DB_FPGA, **hardware verified**)
 
@@ -201,7 +208,7 @@ Bare-metal bring-up top (no JOP). Atari 800 OS + 16K internal RAM + Star Raiders
 
 | Resource | Used | Available | % |
 |---|---|---|---|
-| Logic Elements | 3,754 | 149,760 | 2% |
+| Logic Elements | 3,604 | 149,760 | 2% |
 | Memory bits | 313,678 | 6,635,520 | 5% |
 | PLLs | 1 | 8 | 13% |
 

@@ -92,7 +92,7 @@ class Atari800Ep4cgx150Top extends Component {
       internal_rom   = 3,       // Atari 800 OS (Os8 + Os2)
       internal_ram   = 16384,   // 16K in BRAM
       basic_in_sdram = false,   // Cartridge ROM in internal BRAM — route $A000-BFFF to internal ROM
-      cartridge_rom  = "Star Raiders.rom"
+      cartridge_rom  = "roms/Star Raiders.rom"
     )
 
     // Config — Star Raiders cartridge

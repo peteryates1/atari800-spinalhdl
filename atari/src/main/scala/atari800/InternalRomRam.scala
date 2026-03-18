@@ -4,9 +4,11 @@ import spinal.core._
 import java.nio.file.{Files, Paths}
 
 // Internal ROM/RAM wrapper
-// Conditionally instantiates OS ROM, BASIC ROM, and internal RAM based on generics
-// cartridgeRom: path to 8K ROM file for $A000-$BFFF slot (empty = use built-in BASIC)
-class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRom: String = "", withBasic: Boolean = true) extends Component {
+// Loads OS and BASIC ROMs from .rom binary files at elaboration time.
+// romDir: directory containing .rom files (default "roms")
+// cartridgeRom: path to 8K/16K ROM file for cartridge slot (empty = none)
+class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRom: String = "",
+                     withBasic: Boolean = true, romDir: String = "roms") extends Component {
   val io = new Bundle {
     val clock   = in  Bool()
     val resetN  = in  Bool()
@@ -37,29 +39,34 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
   // =========================================================================
   // ROM section
   // =========================================================================
-  if (internalRom == 4) {  // if/else if chain: only one ROM block generates hardware
-    // 5200 OS: f000-ffff (4K, using 2K ROM)
-    val rom4 = new Os5200
+  if (internalRom == 4) {
+    // 5200 OS: f000-ffff (2K ROM)
+    val rom4 = new FileRom(s"$romDir/atari5200.rom", 2048)
     rom4.io.clock   := io.clock
     rom4.io.address := io.romAddr(10 downto 0).asUInt
+    rom4.io.we      := False
+    rom4.io.data    := io.romDataIn
     io.romData := rom4.io.q
     romRequestNext := io.romRequest & ~io.romWrEnable
     io.romRequestComplete := romRequestReg
   } else if (internalRom == 3) {
     // d800-dfff (2K) + e000-ffff (8K) + a000-bfff (8K cartridge slot)
-    val rom2 = new Os2
+    val rom2 = new FileRom(s"$romDir/atarios2.rom", 2048)
     rom2.io.clock   := io.clock
     rom2.io.address := io.romAddr(10 downto 0).asUInt
+    rom2.io.we      := False
+    rom2.io.data    := io.romDataIn
 
-    val rom10 = new Os8
+    val rom10 = new FileRom(s"$romDir/atariosb.rom", 8192)
     rom10.io.clock   := io.clock
     rom10.io.address := io.romAddr(12 downto 0).asUInt
+    rom10.io.we      := False
+    rom10.io.data    := io.romDataIn
 
     // Default: open bus (A000-BFFF when no cartridge, or unassigned ranges)
     io.romData := B(0xFF, 8 bits)
 
     // Cartridge slot: only instantiate ROM when a file is provided (simulation).
-    // On hardware, JOP loads cartridge/BASIC from SD into SDRAM at runtime.
     if (cartridgeRom.nonEmpty) {
       val bytes = Files.readAllBytes(Paths.get(cartridgeRom))
       println(s"[InternalRomRam] Loading cartridge ROM: $cartridgeRom (${bytes.length} bytes)")
@@ -88,15 +95,17 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
     romRequestNext := io.romRequest & ~io.romWrEnable
   } else if (internalRom == 2) {
     // 16K OS loop variant
-    val rom16a = new Os16Loop
+    val rom16a = new FileRom(s"$romDir/atarixl_loop.rom", 16384, writable = true)
     rom16a.io.clock   := io.clock
     rom16a.io.address := io.romAddr(13 downto 0).asUInt
+    rom16a.io.we      := False
+    rom16a.io.data    := io.romDataIn
     io.romData := rom16a.io.q
     io.romRequestComplete := romRequestReg
     romRequestNext := io.romRequest & ~io.romWrEnable
   } else if (internalRom == 1) {
     // 16K OS (writable for DMA loading) + optionally 8K BASIC
-    val rom16a = new Os16
+    val rom16a = new FileRom(s"$romDir/atarixl.rom", 16384, writable = true)
     rom16a.io.clock   := io.clock
     rom16a.io.address := io.romAddr(13 downto 0).asUInt
 
@@ -105,7 +114,7 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
     io.romData := rom16a.io.q
 
     if (withBasic) {
-      val basic1 = new Basic
+      val basic1 = new FileRom(s"$romDir/ataribas.rom", 8192, writable = true)
       basic1.io.clock   := io.clock
       basic1.io.address := io.romAddr(12 downto 0).asUInt
 

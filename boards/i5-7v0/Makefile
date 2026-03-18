@@ -14,7 +14,7 @@ SPEED = 6
 # Source files (freshly generated SystemVerilog)
 SV_DIR = ../../generated
 SV_SRCS = $(SV_DIR)/Atari800JopTop.sv
-SV_TOP = ../AC608/fit_check_top.sv
+SV_TOP = fit_check_top_ecp5.sv
 PLL_SV = pll_ecp5.sv
 LPF = colorlight_i5.lpf
 

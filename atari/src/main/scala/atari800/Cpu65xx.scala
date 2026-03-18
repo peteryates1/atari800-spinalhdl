@@ -740,8 +740,8 @@ class Cpu65xx(
   when(opcInfo(opcInClear)) { aluInputTemp := U(0, 8 bits) }
 
   aluInputReg := aluInputTemp
-  aluInput := aluInputTemp
   if (pipelineAluMux) { aluInput := aluInputReg }
+  else { aluInput := aluInputTemp }
 
   // -----------------------------------------------------------------------
   // CMP Input
@@ -752,8 +752,8 @@ class Cpu65xx(
              (opcInfo(opcInCpy) ? Y | U"11111111")
 
   aluCmpInputReg := cmpTemp
-  aluCmpInput := cmpTemp
   if (pipelineAluMux) { aluCmpInput := aluCmpInputReg }
+  else { aluCmpInput := cmpTemp }
 
   // -----------------------------------------------------------------------
   // ALU
@@ -929,12 +929,6 @@ class Cpu65xx(
   aluVReg := varV
   aluNReg := varN
 
-  aluRmwOut      := rmwBits(7 downto 0)
-  aluRegisterOut := nineBitsFinal(7 downto 0)
-  aluC := varC
-  aluZ := varZ
-  aluV := varV
-  aluN := varN
   if (pipelineAluOut) {
     aluRmwOut      := aluRmwReg
     aluRegisterOut := aluNineReg
@@ -942,6 +936,13 @@ class Cpu65xx(
     aluZ := aluZReg
     aluV := aluVReg
     aluN := aluNReg
+  } else {
+    aluRmwOut      := rmwBits(7 downto 0)
+    aluRegisterOut := nineBitsFinal(7 downto 0)
+    aluC := varC
+    aluZ := varZ
+    aluV := varV
+    aluN := varN
   }
 
   // -----------------------------------------------------------------------
@@ -986,8 +987,8 @@ class Cpu65xx(
   // -----------------------------------------------------------------------
   when(io.enable && ~io.halt) {
     when(io.reset || (theCpuCycle === opcodeFetch)) {
-      opcInfo := nextOpcInfo
       if (pipelineOpcode) { opcInfo := nextOpcInfoReg }
+      else { opcInfo := nextOpcInfo }
     }
   }
 
