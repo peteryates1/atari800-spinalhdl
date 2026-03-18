@@ -3,20 +3,22 @@ package atari800
 import spinal.core._
 import spinal.core.sim._
 import java.io.{FileOutputStream, BufferedOutputStream}
+import jop.utils.JopFileLoader
 
 // Combined Atari 800 + JOP simulation testbench.
 //
 // Tests the full integrated design: Atari core + JOP soft-core sharing SDRAM
-// through the priority arbiter. JOP uses serial boot config and will spin on
-// UART wait (no .jop loaded). Atari runs normally from internal ROM.
+// through the priority arbiter.  JOP uses simulation boot (pre-loaded SDRAM,
+// no UART download wait).  AtariApp.jop is loaded at SDRAM byte offset 0x000000.
+// Memory map is defined in Atari800JopSim.boardConfig.
 //
 // Captures VGA frames as PPM images in sim_workspace/.
 //
 // Verifies:
+//   - JOP boots and executes AtariApp (UART output decoded to console)
 //   - Atari VGA output (hsync/vsync counting + visual frame capture)
 //   - SDRAM arbiter doesn't deadlock
 //   - Both cores coexist without bus conflicts
-//   - JOP UART line stays idle (no crash)
 object Atari800JopSimTb extends App {
 
   val compiled = SimConfig
@@ -38,7 +40,30 @@ object Atari800JopSimTb extends App {
   compiled.doSim("Atari800Jop_combined_test", seed = 42) { dut =>
     val sdram = new SdramBehavioral(32 * 1024 * 1024)  // 32MB
 
+    // ---------------------------------------------------------------
+    // Pre-load AtariApp.jop into JOP's SDRAM region (byte offset 0x000000)
+    // Memory map: JOP at 0x000000, Atari at boardConfig.atariSdramBase
+    // ---------------------------------------------------------------
+    val boardConfig = Atari800JopSim.boardConfig
+    val jopFilePath = "java/apps/AtariApp/AtariApp.jop"
+    val SDRAM_JOP_OFFSET = 0x000000  // JOP always at physical byte 0 (jvm.asm sim boot)
+    try {
+      val jopData = JopFileLoader.loadJopFile(jopFilePath)
+      println(s"Loaded $jopFilePath: ${jopData.words.length} words (heap=${jopData.words(0)}, mp=${jopData.words(1)})")
+      for ((word, i) <- jopData.words.zipWithIndex) {
+        val byteAddr = SDRAM_JOP_OFFSET + i * 4
+        sdram.write(byteAddr, word.toLong, write8 = false, write16 = false, write32 = true)
+      }
+      println(s"  JOP SDRAM region: bytes 0x${SDRAM_JOP_OFFSET.toHexString}..0x${(SDRAM_JOP_OFFSET + jopData.words.length * 4).toHexString}")
+      println(s"  Atari SDRAM region: bytes 0x${boardConfig.atariSdramBase.toHexString}+")
+    } catch {
+      case e: Exception =>
+        println(s"WARNING: Could not load $jopFilePath: ${e.getMessage}")
+        println("  JOP will boot with empty SDRAM (heap=0, mp=0 — likely crash)")
+    }
+
     val clockPeriodPs = 17640  // ~56.67 MHz
+    val baudCycles    = (56670000.0 / 115200).toInt  // ~492 cycles per UART bit
 
     // Fork main system clock
     dut.clockDomain.forkStimulus(period = clockPeriodPs)
@@ -50,6 +75,36 @@ object Atari800JopSimTb extends App {
         sleep(20000)  // 20ns half-period
         dut.io.vgaTextClk #= true
         sleep(20000)
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // JOP UART decoder fork — decode 8N1 at 115200 baud, print to console
+    // ---------------------------------------------------------------
+    fork {
+      val uartBuf = new StringBuilder
+      while (true) {
+        // Wait for start bit (falling edge on TX — idle=high)
+        waitUntil(!dut.io.jopUartTx.toBoolean)
+        // Half-bit delay to centre-sample start bit
+        dut.clockDomain.waitRisingEdge(baudCycles / 2)
+        if (!dut.io.jopUartTx.toBoolean) {
+          // Valid start bit — sample 8 data bits
+          var byte = 0
+          for (bit <- 0 until 8) {
+            dut.clockDomain.waitRisingEdge(baudCycles)
+            if (dut.io.jopUartTx.toBoolean) byte |= (1 << bit)
+          }
+          // Skip stop bit
+          dut.clockDomain.waitRisingEdge(baudCycles)
+          val ch = (byte & 0xFF).toChar
+          if (ch == '\n') {
+            print(s"JOP: ${uartBuf.toString}\n")
+            uartBuf.clear()
+          } else if (ch >= ' ' && ch <= '~') {
+            uartBuf.append(ch)
+          }
+        }
       }
     }
 
@@ -78,6 +133,11 @@ object Atari800JopSimTb extends App {
     var sdramRequests = 0
     var cycleCount    = 0
     var jopUartBits   = 0
+    var jopBmbCmdValid = 0  // count cycles where JOP bmb cmd.valid
+    var jopSdramReqs   = 0  // count JOP bridge request pulses
+    var jopBmbRspValid = 0  // count cycles where JOP bmb rsp.valid
+    var jopBcFillSeen  = false
+    var jopBcFillFirstAddr = 0; var jopBcFillFirstLen = 0; var jopBcFillFirstRaw = 0L
 
     var lastUartTx    = true
 
@@ -153,10 +213,10 @@ object Atari800JopSimTb extends App {
       println(s"  Frame $frameNum captured: ${width}x${height} -> $path")
     }
 
-    val totalCycles    = 10000000
-    val reportInterval = 1000000
+    val totalCycles    = 20000000   // ~353 ms — enough for JOP boot + several heartbeats
+    val reportInterval = 2000000
 
-    println(s"Starting combined Atari+JOP simulation: $totalCycles cycles")
+    println(s"Starting combined Atari+JOP simulation: $totalCycles cycles (~${totalCycles * clockPeriodPs / 1000000000L} ms)")
     println("=" * 70)
 
     for (_ <- 0 until totalCycles) {
@@ -421,6 +481,14 @@ object Atari800JopSimTb extends App {
           val data = sdram.read32(addr)
           dut.io.sdramDo #= data
           sdramReads += 1
+          // Log JOP SDRAM reads (JOP data is at 0x000000..0x100000, Atari at 0x800000+)
+          // Log JOP SDRAM reads: Atari at 0x800000+, JOP at lower addresses
+          // Also log the first 15 reads total to trace boot sequence
+          if (sdramReads <= 15 || addr < 0x800000) {
+            val jpc = dut.io.dbgJopPc.toInt
+            val src = if (addr >= 0x800000) "ATARI" else "JOP"
+            println(f"  $src SDRAM RD[$cycleCount%d]: addr=0x${addr}%06X wordAddr=${addr/4} data=0x${data}%08X jpc=0x${jpc}%03X")
+          }
         }
         if (writeEn) {
           val data = dut.io.sdramDi.toLong
@@ -522,6 +590,43 @@ object Atari800JopSimTb extends App {
       if (dmactl > maxDmactl) maxDmactl = dmactl
 
       // ---------------------------------------------------------------
+      // JOP BMB bridge monitoring
+      // ---------------------------------------------------------------
+      if (dut.io.dbgJopBmbCmdValid.toBoolean) jopBmbCmdValid += 1
+      if (dut.io.dbgJopSdramReq.toBoolean)   jopSdramReqs   += 1
+      if (dut.io.dbgJopBmbRspValid.toBoolean) jopBmbRspValid += 1
+      // Log first JOP BMB cmd.valid (indicates memory controller is trying)
+      if (dut.io.dbgJopBmbCmdValid.toBoolean && jopBmbCmdValid == 1)
+        println(f"  ** JOP first BMB cmd.valid at cyc=$cycleCount%d")
+      if (dut.io.dbgJopSdramReq.toBoolean && jopSdramReqs == 1)
+        println(f"  ** JOP first SDRAM request pulse at cyc=$cycleCount%d")
+      // Log JOP state every 100k cycles for diagnosis (first 1M) and every 1M after
+      val logJopState = (cycleCount % 100000 == 0 && cycleCount <= 1000000) ||
+                        (cycleCount % 1000000 == 0 && cycleCount > 1000000)
+      if (logJopState) {
+        val jpc      = dut.io.dbgJopPc.toInt
+        val memSt    = dut.io.dbgJopMemState.toInt
+        val memBusy  = dut.io.dbgJopMemBusy.toBoolean
+        val ioRd     = dut.io.dbgJopIoRdCount.toInt
+        val ioWr     = dut.io.dbgJopIoWrCount.toInt
+        val exc      = dut.io.dbgJopExc.toBoolean
+        val bcAddr   = dut.io.dbgJopBcFillAddr.toInt
+        val bcLen    = dut.io.dbgJopBcFillLen.toInt
+        val bcCapt   = dut.io.dbgJopBcRdCapture.toLong & 0xFFFFFFFFL
+        println(f"  JOP@$cycleCount%d: pc=0x${jpc}%03X memSt=$memSt%d busy=$memBusy%b ioRd=$ioRd%d ioWr=$ioWr%d exc=$exc%b bmbCmd=$jopBmbCmdValid%d bcFill=0x${bcAddr}%06X len=$bcLen%d raw=0x${bcCapt}%08X")
+      }
+      // Track bcFill — log once when it first happens
+      val bcLen = dut.io.dbgJopBcFillLen.toInt
+      if (bcLen > 0 && !jopBcFillSeen) {
+        jopBcFillSeen = true
+        val bcAddr = dut.io.dbgJopBcFillAddr.toInt
+        val bcCapt = dut.io.dbgJopBcRdCapture.toLong & 0xFFFFFFFFL
+        val jpc    = dut.io.dbgJopPc.toInt
+        println(f"  ** JOP bcFill FIRST: addr=0x${bcAddr}%06X len=$bcLen%d raw=0x${bcCapt}%08X jpc=0x${jpc}%03X cyc=$cycleCount%d")
+        jopBcFillFirstAddr = bcAddr; jopBcFillFirstLen = bcLen; jopBcFillFirstRaw = bcCapt
+      }
+
+      // ---------------------------------------------------------------
       // JOP UART monitoring
       // ---------------------------------------------------------------
       val uartTx = dut.io.jopUartTx.toBoolean
@@ -559,6 +664,7 @@ object Atari800JopSimTb extends App {
     println(s"  SDRAM: $sdramRequests requests, $sdramReads reads, $sdramWrites writes")
     println(s"  Atari raw: $atariRawReqs requests, $atariRawReads reads, $atariRawWrites writes")
     println(s"  JOP UART: $jopUartBits line transitions")
+    println(s"  JOP BMB: cmd.valid=$jopBmbCmdValid cycles, sdramReq=$jopSdramReqs pulses, rsp.valid=$jopBmbRspValid cycles")
     println(s"  COLBK max: $maxColbk (${if (maxColbk > 0) "CPU wrote colour regs" else "never written"})")
     println(s"  Colour clock: $colourClockCount pulses, visibleLive: $visibleLiveCount cycles")
     println(s"  GTIA writes: $gtiaWrites, ANTIC writes: $anticWrites, DMACTL max: $maxDmactl")
@@ -576,7 +682,27 @@ object Atari800JopSimTb extends App {
     else println(s"  WARN: No VGA vsync (may need more cycles)")
 
     if (sdramRequests > 0) println(s"  PASS: SDRAM arbiter active ($sdramRequests requests)")
-    else println(s"  WARN: No SDRAM requests (arbiter idle — expected with internal ROM + serial boot JOP)")
+    else println(s"  WARN: No SDRAM requests")
+
+    if (jopUartBits > 10) println(s"  PASS: JOP UART active ($jopUartBits bit transitions)")
+    else println(s"  WARN: JOP UART silent (expected > 10 transitions if AtariApp booted)")
+
+    // Final JOP state snapshot
+    val finalJpc    = dut.io.dbgJopPc.toInt
+    val finalMemSt  = dut.io.dbgJopMemState.toInt
+    val finalMemBsy = dut.io.dbgJopMemBusy.toBoolean
+    val finalIoRd   = dut.io.dbgJopIoRdCount.toInt
+    val finalIoWr   = dut.io.dbgJopIoWrCount.toInt
+    val finalExc    = dut.io.dbgJopExc.toBoolean
+    val finalBcAddr = dut.io.dbgJopBcFillAddr.toInt
+    val finalBcLen  = dut.io.dbgJopBcFillLen.toInt
+    val finalBcCapt = dut.io.dbgJopBcRdCapture.toLong & 0xFFFFFFFFL
+    println(f"  JOP final state: pc=0x${finalJpc}%03X memSt=$finalMemSt%d busy=$finalMemBsy%b ioRd=$finalIoRd%d ioWr=$finalIoWr%d exc=$finalExc%b")
+    println(f"  JOP bcFill final: addr=0x${finalBcAddr}%06X len=$finalBcLen%d raw=0x${finalBcCapt}%08X")
+    if (jopBcFillSeen)
+      println(f"  JOP bcFill first: addr=0x${jopBcFillFirstAddr}%06X len=$jopBcFillFirstLen%d raw=0x${jopBcFillFirstRaw}%08X")
+    else
+      println(s"  JOP bcFill: never observed")
 
     println(s"  Waveform: sim_workspace/Atari800JopSim/Atari800Jop_combined_test.vcd")
   }

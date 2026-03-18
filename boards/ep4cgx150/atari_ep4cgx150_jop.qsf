@@ -1,0 +1,120 @@
+# Quartus project settings for Atari 800 + JOP on QMTECH EP4CGX150 + DB_FPGA
+# Target: EP4CGX150DF27I7 (Cyclone IV GX, 149,760 LEs)
+
+set_global_assignment -name DEVICE EP4CGX150DF27I7
+set_global_assignment -name TOP_LEVEL_ENTITY ep4cgx150_jop_top
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
+
+# Source files
+set_global_assignment -name SYSTEMVERILOG_FILE ep4cgx150_jop_top.sv
+set_global_assignment -name SYSTEMVERILOG_FILE Atari800Ep4cgx150JopTop.sv
+set_global_assignment -name SYSTEMVERILOG_FILE atari_pll_jop.sv
+
+# Timing constraints
+set_global_assignment -name SDC_FILE atari_ep4cgx150_jop.sdc
+
+# Compiler settings
+set_global_assignment -name FAMILY "Cyclone IV GX"
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+
+# ---------------------------------------------------------------------------
+# Clock
+# ---------------------------------------------------------------------------
+set_location_assignment PIN_B14   -to clk_in
+
+# ---------------------------------------------------------------------------
+# SDRAM (W9825G6JH6 on core board)
+# ---------------------------------------------------------------------------
+set_location_assignment PIN_E22   -to sdram_clk
+set_location_assignment PIN_H26   -to sdram_cs_n
+set_location_assignment PIN_G25   -to sdram_we_n
+set_location_assignment PIN_H25   -to sdram_ras_n
+set_location_assignment PIN_G26   -to sdram_cas_n
+set_location_assignment PIN_J25   -to "sdram_ba[0]"
+set_location_assignment PIN_J26   -to "sdram_ba[1]"
+set_location_assignment PIN_L25   -to "sdram_addr[0]"
+set_location_assignment PIN_L26   -to "sdram_addr[1]"
+set_location_assignment PIN_M25   -to "sdram_addr[2]"
+set_location_assignment PIN_M26   -to "sdram_addr[3]"
+set_location_assignment PIN_N22   -to "sdram_addr[4]"
+set_location_assignment PIN_N23   -to "sdram_addr[5]"
+set_location_assignment PIN_N24   -to "sdram_addr[6]"
+set_location_assignment PIN_M22   -to "sdram_addr[7]"
+set_location_assignment PIN_M24   -to "sdram_addr[8]"
+set_location_assignment PIN_L23   -to "sdram_addr[9]"
+set_location_assignment PIN_K26   -to "sdram_addr[10]"
+set_location_assignment PIN_L24   -to "sdram_addr[11]"
+set_location_assignment PIN_K23   -to "sdram_addr[12]"
+set_location_assignment PIN_F26   -to sdram_dqml
+set_location_assignment PIN_H24   -to sdram_dqmh
+set_location_assignment PIN_B25   -to "sdram_dq[0]"
+set_location_assignment PIN_B26   -to "sdram_dq[1]"
+set_location_assignment PIN_C25   -to "sdram_dq[2]"
+set_location_assignment PIN_C26   -to "sdram_dq[3]"
+set_location_assignment PIN_D25   -to "sdram_dq[4]"
+set_location_assignment PIN_D26   -to "sdram_dq[5]"
+set_location_assignment PIN_E25   -to "sdram_dq[6]"
+set_location_assignment PIN_E26   -to "sdram_dq[7]"
+set_location_assignment PIN_H23   -to "sdram_dq[8]"
+set_location_assignment PIN_G24   -to "sdram_dq[9]"
+set_location_assignment PIN_G22   -to "sdram_dq[10]"
+set_location_assignment PIN_F24   -to "sdram_dq[11]"
+set_location_assignment PIN_F23   -to "sdram_dq[12]"
+set_location_assignment PIN_E24   -to "sdram_dq[13]"
+set_location_assignment PIN_D24   -to "sdram_dq[14]"
+set_location_assignment PIN_C24   -to "sdram_dq[15]"
+
+# ---------------------------------------------------------------------------
+# VGA — DB_FPGA daughter board (J2 connector, 5R + 6G + 5B)
+# ---------------------------------------------------------------------------
+set_location_assignment PIN_A6    -to vga_hs
+set_location_assignment PIN_A7    -to vga_vs
+set_location_assignment PIN_E1    -to "vga_r[0]"
+set_location_assignment PIN_C1    -to "vga_r[1]"
+set_location_assignment PIN_E2    -to "vga_r[2]"
+set_location_assignment PIN_B1    -to "vga_r[3]"
+set_location_assignment PIN_D1    -to "vga_r[4]"
+set_location_assignment PIN_B2    -to "vga_g[0]"
+set_location_assignment PIN_A2    -to "vga_g[1]"
+set_location_assignment PIN_C4    -to "vga_g[2]"
+set_location_assignment PIN_A3    -to "vga_g[3]"
+set_location_assignment PIN_A4    -to "vga_g[4]"
+set_location_assignment PIN_C5    -to "vga_g[5]"
+set_location_assignment PIN_B4    -to "vga_b[0]"
+set_location_assignment PIN_B5    -to "vga_b[1]"
+set_location_assignment PIN_A5    -to "vga_b[2]"
+set_location_assignment PIN_B7    -to "vga_b[3]"
+set_location_assignment PIN_B6    -to "vga_b[4]"
+
+# ---------------------------------------------------------------------------
+# UART — DB_FPGA CP2102N (JOP serial boot + debug)
+# ---------------------------------------------------------------------------
+set_location_assignment PIN_AD20  -to uart_tx
+set_location_assignment PIN_AE21  -to uart_rx
+
+# ---------------------------------------------------------------------------
+# CH376T SPI — PMOD J11 (USB keyboard + SD card host)
+# J11: pin1=AF25, pin2=AD21, pin3=AF23, pin4=AF22, pin7=AF24
+# ---------------------------------------------------------------------------
+set_location_assignment PIN_AF25  -to ch376_sclk
+set_location_assignment PIN_AD21  -to ch376_mosi
+set_location_assignment PIN_AF23  -to ch376_miso
+set_location_assignment PIN_AF22  -to ch376_cs_n
+set_location_assignment PIN_AF24  -to ch376_int
+
+# ---------------------------------------------------------------------------
+# Joystick 1 — PMOD J10 (active low, DB-9)
+# J10: pin1=AF21, pin2=AF19, pin3=AD19, pin4=AF18, pin7=AF20
+# ---------------------------------------------------------------------------
+set_location_assignment PIN_AF21  -to joy1_up
+set_location_assignment PIN_AF19  -to joy1_down
+set_location_assignment PIN_AD19  -to joy1_left
+set_location_assignment PIN_AF18  -to joy1_right
+set_location_assignment PIN_AF20  -to joy1_fire
+
+# ---------------------------------------------------------------------------
+# LEDs (core board, active high)
+# ---------------------------------------------------------------------------
+set_location_assignment PIN_A25   -to "led[0]"
+set_location_assignment PIN_A24   -to "led[1]"

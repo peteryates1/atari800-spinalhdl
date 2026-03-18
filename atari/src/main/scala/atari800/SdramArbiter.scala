@@ -60,6 +60,9 @@ class SdramArbiter extends Component {
       val longwordAccess   = in  Bool()
     }
 
+    // Debug
+    val bActive = out Bool()
+
     // To SdramStatemachine
     val sdram = new Bundle {
       val request         = out Bool()
@@ -141,8 +144,11 @@ class SdramArbiter extends Component {
     // A gets COMPLETE directly from SDRAM
     io.a.complete := sdramCompleteReg
 
-    // Serve B only when: pending, A not requesting, no aPending, SDRAM idle
-    when(bPending && !io.a.request && !aPending && sdramCompleteReg) {
+    // Serve B when: pending, A not requesting, no aPending
+    // (sdramCompleteReg guard removed: behavioral model only pulses complete
+    //  on active requests, so after Atari goes quiet sdramCompleteReg is always
+    //  False — JOP would never be served)
+    when(bPending && !io.a.request && !aPending) {
       // Switch to B — override SDRAM signals for this cycle
       io.sdram.request        := True
       io.sdram.addr           := B"0" ## io.b.addr
@@ -158,4 +164,6 @@ class SdramArbiter extends Component {
       io.a.complete := False
     }
   }
+
+  io.bActive := bActive
 }

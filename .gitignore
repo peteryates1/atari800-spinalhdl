@@ -38,4 +38,11 @@ sim_workspace/
 .bsp/
 .metals/
 .vscode/
-Star Raiders.rom
+*.rom
+
+# Java
+java/apps/*/build
+java/apps/*/*.jop
+java/apps/*/*.jop.txt
+java/apps/*/*.jop.link.txt
+

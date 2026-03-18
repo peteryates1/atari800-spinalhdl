@@ -1,0 +1,9 @@
+Wire -> PMOD PIN -> SDCARD SIGNAL
+NC     -> 1 -> NC
+GREEN  -> 2 -> SCS
+ORANGE -> 3 -> SDI
+WHITE  -> 4 -> RSTI
+NC     -> 7 -> NC
+BLUE   -> 8 -> SDO
+YELLOW -> 9 -> INT#
+BROWN  -> 10 -> SCK

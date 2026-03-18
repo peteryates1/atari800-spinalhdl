@@ -7,7 +7,7 @@
 #   make bitstream  - full build including bitstream
 #   make clean
 
-DEVICE = LFE5U-25F
+DEVICE = 25k
 PACKAGE = CABGA381
 SPEED = 6
 
@@ -51,6 +51,8 @@ pnr: $(PNR)
 $(PNR): $(JSON) $(LPF)
 	nextpnr-ecp5 --$(DEVICE) --package $(PACKAGE) --speed $(SPEED) \
 		--json $(JSON) --lpf $(LPF) --textcfg $(PNR) \
+		--freq 56.818 \
+		--lpf-allow-unconstrained \
 		--report $(BUILD)/report.json \
 		2>&1 | tee $(LOG_PNR)
 	@echo "=== Place and route complete ==="

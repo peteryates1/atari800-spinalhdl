@@ -6,6 +6,18 @@ import spinal.lib.bus.bmb._
 import jop.system._
 import jop.io._
 
+object Atari800JopSim {
+  // Board-specific config for simulation.
+  // Matches ep4cgx150 hardware: 32 MB SDRAM, small JOP caches (simulation uses same sizing).
+  // JOP:   physical bytes 0x000000 .. 0x7FFFFF  (lower 8 MB, loaded from .jop)
+  // Atari: physical bytes 0x800000 .. 0xFFFFFF  (upper 8 MB)
+  val boardConfig = AtariBoardConfig(
+    sdramBytes     = 32L * 1024 * 1024,
+    atariSdramBase = 0x800000L,
+    jopConfig      = JopCoreForAtari.configForSim
+  )
+}
+
 // Combined Atari 800 + JOP simulation wrapper.
 //
 // Structurally identical to Atari800JopTop but simulation-friendly:
@@ -15,10 +27,11 @@ import jop.io._
 //   - No Analog inout signals
 //   - VGA text clock driven externally from testbench
 //
-// JOP uses serial boot config (JopCoreForAtari) — spins on UART wait.
+// JOP uses simulation boot config (pre-loaded SDRAM, no UART download wait).
 // Atari runs normally with behavioral SDRAM model in testbench.
 // Arbiter mediates all SDRAM access.
-class Atari800JopSim extends Component {
+// Memory map defined in Atari800JopSim.boardConfig.
+class Atari800JopSim(boardConfig: AtariBoardConfig = Atari800JopSim.boardConfig) extends Component {
   val io = new Bundle {
     // VGA output (scandoubled + overlay mux, 8-bit for sim)
     val vga_r     = out Bits(8 bits)
@@ -77,6 +90,24 @@ class Atari800JopSim extends Component {
     val dbgAtariSdramWriteEn  = out Bool()
     val dbgAtariSdramAddr     = out Bits(23 bits)
 
+    // Debug: JOP BMB/SDRAM bridge activity
+    val dbgJopBmbCmdValid     = out Bool()
+    val dbgJopBmbCmdReady     = out Bool()
+    val dbgJopBmbRspValid     = out Bool()
+    val dbgJopSdramReq        = out Bool()  // bmbBridge.io.request
+    val dbgJopArbBActive      = out Bool()  // arbiter bActive (JOP owns SDRAM bus)
+
+    // Debug: JOP pipeline state
+    val dbgJopPc              = out UInt(10 bits)   // fetch stage PC (microcode address)
+    val dbgJopMemBusy         = out Bool()           // memory controller busy
+    val dbgJopMemState        = out UInt(5 bits)     // memory controller state machine
+    val dbgJopIoRdCount       = out UInt(16 bits)    // I/O read counter
+    val dbgJopIoWrCount       = out UInt(16 bits)    // I/O write counter
+    val dbgJopExc             = out Bool()           // exception fired
+    val dbgJopBcFillAddr      = out UInt(24 bits)    // JBC fill start address (word)
+    val dbgJopBcRdCapture     = out Bits(32 bits)    // raw packed method struct word at bcRd
+    val dbgJopBcFillLen       = out UInt(10 bits)    // JBC fill length (words)
+
     // Debug: Atari raw video (pre-scandoubler)
     val dbgVideoB     = out Bits(8 bits)
     val dbgVideoBlank = out Bool()
@@ -106,8 +137,7 @@ class Atari800JopSim extends Component {
   // =================================================================
   // JOP Soft-Core (direct instantiation, same config as real board)
   // =================================================================
-  val jopConfig = JopCoreForAtari.config
-  val jopCore = JopCore(config = jopConfig, vgaCd = Some(vgaTextDomain))
+  val jopCore = JopCore(config = boardConfig.jopConfig, romInit = Some(JopCoreForAtari.simRomInit), ramInit = Some(JopCoreForAtari.simRamInit), vgaCd = Some(vgaTextDomain))
 
   // Single core — tie off multicore signals
   jopCore.io.syncIn.halted := False
@@ -204,7 +234,7 @@ class Atari800JopSim extends Component {
   // =================================================================
   // BmbToSdramReq — JOP BMB -> SDRAM request protocol
   // =================================================================
-  val bmbBridge = BmbToSdramReq(jopConfig.memConfig.bmbParameter)
+  val bmbBridge = BmbToSdramReq(boardConfig.jopConfig.memConfig.bmbParameter)
   bmbBridge.io.bmb <> jopCore.io.bmb
 
   // =================================================================
@@ -212,18 +242,25 @@ class Atari800JopSim extends Component {
   // =================================================================
   val arbiter = new SdramArbiter
 
-  // Port A: Atari core (high priority)
+  // SDRAM memory map (from boardConfig):
+  //   0x000000 .. atariSdramBase-1  JOP code + heap (loaded from .jop at byte 0)
+  //   atariSdramBase .. end         Atari RAM + ROM images
+  //
+  // Atari's 23-bit SDRAM_ADDR is prefixed with boardConfig.atariAddrPrefix to
+  // form the 24-bit arbiter port-A address.
+
+  // Port A: Atari core (high priority) — offset to boardConfig.atariSdramBase
   arbiter.io.a.request        := atariCore.io.SDRAM_REQUEST
   arbiter.io.a.readEnable     := atariCore.io.SDRAM_READ_ENABLE
   arbiter.io.a.writeEnable    := atariCore.io.SDRAM_WRITE_ENABLE
-  arbiter.io.a.addr           := B"0" ## atariCore.io.SDRAM_ADDR  // 23->24
+  arbiter.io.a.addr           := B(boardConfig.atariAddrPrefix, 1 bit) ## atariCore.io.SDRAM_ADDR
   arbiter.io.a.dataIn         := atariCore.io.SDRAM_DI
   arbiter.io.a.byteAccess     := atariCore.io.SDRAM_8BIT_WRITE_ENABLE
   arbiter.io.a.wordAccess     := atariCore.io.SDRAM_16BIT_WRITE_ENABLE
   arbiter.io.a.longwordAccess := atariCore.io.SDRAM_32BIT_WRITE_ENABLE
   arbiter.io.a.refresh        := atariCore.io.SDRAM_REFRESH
 
-  // Port B: JOP (via BmbToSdramReq bridge)
+  // Port B: JOP (via BmbToSdramReq bridge) — lower 8MB (bit 23 = 0, direct)
   arbiter.io.b.request        := bmbBridge.io.request
   arbiter.io.b.readEnable     := bmbBridge.io.readEnable
   arbiter.io.b.writeEnable    := bmbBridge.io.writeEnable
@@ -319,6 +356,22 @@ class Atari800JopSim extends Component {
   io.led(3) := jopCore.devicePin[Bool]("uart", "txd")
 
   // =================================================================
+  // Debug: JOP BMB/SDRAM bridge activity
+  io.dbgJopBmbCmdValid := bmbBridge.io.bmb.cmd.valid
+  io.dbgJopBmbCmdReady := bmbBridge.io.bmb.cmd.ready
+  io.dbgJopBmbRspValid := bmbBridge.io.bmb.rsp.valid
+  io.dbgJopSdramReq    := bmbBridge.io.request
+  io.dbgJopArbBActive  := arbiter.io.bActive
+  io.dbgJopPc          := jopCore.io.pc.resized
+  io.dbgJopMemBusy     := jopCore.io.memBusy
+  io.dbgJopMemState    := jopCore.io.debugMemState
+  io.dbgJopIoRdCount   := jopCore.io.debugIoRdCount
+  io.dbgJopIoWrCount   := jopCore.io.debugIoWrCount
+  io.dbgJopExc         := jopCore.io.debugExc
+  io.dbgJopBcFillAddr  := jopCore.io.debugBcFillAddr
+  io.dbgJopBcRdCapture := jopCore.io.debugBcRdCapture
+  io.dbgJopBcFillLen   := jopCore.io.debugBcFillLen
+
   // Debug: Atari raw SDRAM + arbiter state
   // =================================================================
   io.dbgAtariSdramReq      := atariCore.io.SDRAM_REQUEST
