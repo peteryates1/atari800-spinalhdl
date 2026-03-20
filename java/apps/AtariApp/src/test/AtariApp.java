@@ -19,15 +19,25 @@ import com.jopdesign.hw.SysDevice;
 public class AtariApp {
 
     // CONFIG register (reg 2) bit layout:
-    //   bits[1:0] = ramSelect (00=64K, 01=128K, 10=48K, 11=reserved)
-    //   bit 2     = 0=PAL, 1=NTSC
-    //   bit 5     = 0=XL/XE mode, 1=Atari 800 mode
-    static final int CFG_RAM_64K   = 0x00;
-    static final int CFG_PAL       = 0x00;
-    static final int CFG_XLXE_MODE = 0x00;
+    //   bit 0       = PAL (1=PAL, 0=NTSC)
+    //   bits [3:1]  = ramSelect (001=64K, 011=48K)
+    //   bit 4       = turboVblankOnly
+    //   bit 5       = atari800mode (1=Atari 800, 0=XL/XE)
+    //   bit 6       = hiresEna
+    static final int CFG_PAL        = 0x01;
+    static final int CFG_RAM_48K    = 0x06;  // ramSelect=011 in bits [3:1]
+    static final int CFG_A800_MODE  = 0x20;  // bit 5
+
+    // CONSOL_THROTTLE register (reg 9) bit layout:
+    //   bits [13:8] = throttleCount (cycle_length - 1 = 31)
+    //   bit 4       = consolStart
+    //   bit 3       = consolSelect
+    //   bit 2       = consolOption
+    static final int THROTTLE_31 = 31 << 8;  // 0x1F00
 
     // STATUS_CTRL register (reg 0) bits
-    static final int CTRL_COLD_RESET = 0x01;
+    static final int CTRL_OSD_ENABLE = 0x01;
+    static final int CTRL_COLD_RESET = 0x80;
 
     // Timing intervals in microseconds
     static final int HEARTBEAT_US = 1000000; // 1 second
@@ -38,21 +48,22 @@ public class AtariApp {
         SysDevice sys       = SysDevice.getInstance();
         AtariCtrl  atari    = AtariCtrl.getInstance();
 
+        System.out.println("AtariApp: JOP controller starting");
+
         // ----------------------------------------------------------------
-        // Configure AtariCtrl
+        // Configure AtariCtrl for BRAM-only Atari 800
         // ----------------------------------------------------------------
 
-        // Set CONFIG: PAL, 64KB RAM, XL/XE mode
-        atari.config = CFG_RAM_64K | CFG_PAL | CFG_XLXE_MODE;
+        // Set CONFIG: PAL, 48KB RAM, Atari 800 mode
+        atari.config = CFG_PAL | CFG_RAM_48K | CFG_A800_MODE;
 
-        // Clear STATUS_CTRL (no OSD, no reset)
-        atari.statusCtrl = 0;
+        // Set throttle (cycle_length - 1 = 31), no console keys pressed
+        atari.consolThrottle = THROTTLE_31;
 
-        // Issue a cold reset to start the Atari core with the new config
+        // Disable OSD, pulse cold reset to start Atari with new config
         atari.statusCtrl = CTRL_COLD_RESET;
 
-        System.out.println("AtariApp: JOP controller starting");
-        System.out.println("AtariApp: Atari configured - PAL, 64KB, XL/XE mode");
+        System.out.println("AtariApp: Atari configured - PAL, 48K, Atari 800 mode");
 
         // ----------------------------------------------------------------
         // Main loop — heartbeat + watchdog

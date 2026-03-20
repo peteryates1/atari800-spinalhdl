@@ -1,4 +1,4 @@
-Wire -> PMOD PIN -> SDCARD SIGNAL
+Wire -> PMOD PIN -> SDCARD SIGNAL  J11 next to USB Mini
 NC     -> 1 -> NC
 GREEN  -> 2 -> SCS
 ORANGE -> 3 -> SDI
@@ -7,3 +7,384 @@ NC     -> 7 -> NC
 BLUE   -> 8 -> SDO
 YELLOW -> 9 -> INT#
 BROWN  -> 10 -> SCK
+
+
+let's connect CH376T to JOP
+    -> pass keyboard to atari
+    -> f1 start, f2 select, f3 option, ctrl+shift+alt+f12 reset
+
+
+ultimately jop will run atari supervisor:
+
+jop - supervisor application
+    -> boot
+    -> pick cartridge (rom) file -> shows current selection
+    -> pick disk image (also creates new empty image)
+        -> drive 1 -> shows current selection
+        -> ...
+        -> drive n -> shows current selection
+    -> config hardware
+        -> add disk drive
+
+
+
+Let's get the system working on the qmtech - the worry about finding a small cheap module to port to.
+What else do we need to do - now we have no sdram?
+Here's what we have and what's missing on the QMTECH EP4CGX150 + DB_FPGA V4:
+
+  Working now:
+  - VGA output (Star Raiders on screen)
+  - 48K BRAM, Atari 800 OS, cartridge ROM — all self-contained
+
+  Tied off / not connected:
+
+  ┌───────────────┬────────────────────────────────────────┬────────────────────────┬──────────────────────────────────────┐
+  │   Interface   │              Core signals              │  DB_FPGA V4 hardware   │                Status                │
+  ├───────────────┼────────────────────────────────────────┼────────────────────────┼──────────────────────────────────────┤
+  │ Keyboard      │ KEYBOARD_SCAN out, KEYBOARD_RESPONSE   │ No PS/2 on V4          │ Need PS/2 on PMOD/JP1, or UART proxy │
+  │               │ in                                     │                        │                                      │
+  ├───────────────┼────────────────────────────────────────┼────────────────────────┼──────────────────────────────────────┤
+  │ Joystick      │ JOY1_n (5 bits:                        │ No DB9 connector       │ Wire to PMOD/JP1 pins                │
+  │               │ up/down/left/right/fire)               │                        │                                      │
+  ├───────────────┼────────────────────────────────────────┼────────────────────────┼──────────────────────────────────────┤
+  │ Console keys  │ CONSOL_OPTION/SELECT/START             │ No buttons on V4?      │ Wire to GPIO or map to keyboard      │
+  ├───────────────┼────────────────────────────────────────┼────────────────────────┼──────────────────────────────────────┤
+  │ Audio         │ AUDIO_L/R (16 bits)                    │ No audio jack on V4    │ PWM/sigma-delta to PMOD pin          │
+  ├───────────────┼────────────────────────────────────────┼────────────────────────┼──────────────────────────────────────┤
+  │ SIO           │ SIO_TXD/RXD/COMMAND/CLOCKOUT           │ UART (CP2102N)         │ Could bridge SIO↔UART for disk       │
+  │               │                                        │ available              │ emulation                            │
+  ├───────────────┼────────────────────────────────────────┼────────────────────────┼──────────────────────────────────────┤
+  │ Cartridge     │ Fixed at elaboration time              │ —                      │ Need DMA port or re-synthesize       │
+  │ swap          │                                        │                        │                                      │
+  └───────────────┴────────────────────────────────────────┴────────────────────────┴──────────────────────────────────────┘
+
+  The "no SDRAM" implications specifically:
+  - Cartridge ROM is baked in at synthesis time — can't load different games without re-synthesizing
+  - No 130XE extended banking (48K max) — fine for Atari 800 mode
+  - No runtime BASIC ROM loading — but we don't want BASIC in HW builds anyway
+
+  For a playable system, minimum viable next steps would be:
+  1. Joystick — simplest win. Wire 5 GPIO pins (PMOD) to a DB9 connector. Pure pin assignment, no logic needed.
+  2. PS/2 keyboard — needs a PS/2 decoder module (serial protocol → Atari key matrix). Wire PS/2 CLK+DATA to two PMOD pins.
+  3. Audio — sigma-delta DAC (simple 1-bit output) to a PMOD pin + RC filter + speaker/amp.
+  4. Console keys — 3 buttons on GPIO, or map to PS/2 keyboard (F2/F3/F4 → Option/Select/Start is the MiSTer convention).
+
+  What would you like to tackle first?
+
+
+
+Wire -> PMOD PIN -> SDCARD SIGNAL  J11 next to USB Mini
+NC     -> 1 -> NC
+GREEN  -> 2 -> SCS
+ORANGE -> 3 -> SDI
+WHITE  -> 4 -> RSTI
+NC     -> 7 -> NC
+BLUE   -> 8 -> SDO
+YELLOW -> 9 -> INT#
+BROWN  -> 10 -> SCK
+
+Good — CH376T on PMOD J11 for USB keyboard + SD card, SIO emulation internal. Let me map your wiring to FPGA pins.            
+                                                                                                                    
+  CH376T on PMOD J11 → EP4CGX150 pins:                                                                                          
+                                                                                                                                
+  ┌────────┬─────────┬───────────────────┬───────────────┐                                                                      
+  │  Wire  │ J11 Pin │   CH376T Signal   │ EP4CGX150 Pin │                                                                      
+  ├────────┼─────────┼───────────────────┼───────────────┤                                                                      
+  │ GREEN  │    2    │ SCS (chip select) │     AC21      │                                                                      
+  ├────────┼─────────┼───────────────────┼───────────────┤                                                                      
+  │ ORANGE │    3    │ SDI (MOSI)        │     AE23      │                                                                      
+  ├────────┼─────────┼───────────────────┼───────────────┤  
+  │ WHITE  │    4    │ RSTI (reset)      │     AE22      │                                                                      
+  ├────────┼─────────┼───────────────────┼───────────────┤                                                                      
+  │ BLUE   │    8    │ SDO (MISO)        │     AD21      │                                                                      
+  ├────────┼─────────┼───────────────────┼───────────────┤                                                                      
+  │ YELLOW │    9    │ INT#              │     AF23      │                                                                      
+  ├────────┼─────────┼───────────────────┼───────────────┤                                                                    
+  │ BROWN  │   10    │ SCK               │     AF22      │                                                                      
+  └────────┴─────────┴───────────────────┴───────────────┘  
+                                                                                                                                
+  Power from J11 pins 5/6 (GND) and 11/12 (GND/3.3V).       
+                                                     
+  Work needed to get the system playable:                                                                                     
+                                                                                                                                
+  1. CH376T SPI master — simple SPI interface in the FPGA with the pin assignments above                                      
+  2. CH376T command protocol — USB keyboard reads + SD card block reads                                                         
+  3. Keyboard translation — CH376T USB HID keycodes → Atari POKEY matrix (KEYBOARD_SCAN/RESPONSE)                             
+  4. Internal SIO emulation — intercept POKEY SIO bus, serve ATR/XEX disk sector reads from SD via CH376T                       
+  5. Console keys — DB_FPGA V4 has SW2-SW5 (active low, pins AF12/AD10/AF9/AF8) — map to Start/Select/Option/Reset            
+  6. Audio — sigma-delta 1-bit DAC to a spare pin (PMOD J10 has 8 free pins)                                                    
+  7. Joystick — keyboard-mapped arrows+space, or wire DB9 to PMOD J10                                                           
+                                                                                                                                
+  Now the big question is: is the CH376T going to be driven by JOP (as originally planned), or do we need a standalone HDL      
+  controller for initial testing without JOP?                                                                                   
+                                                                                                                                
+
+Got it. DB9 joystick on PMOD J10:                                                                                           
+                                                                                                                                
+  ┌─────────┬────────┬─────────┬───────────┐                                                                                    
+  │ DB9 Pin │ Signal │ J10 Pin │ EP4CGX150 │                                                                                    
+  ├─────────┼────────┼─────────┼───────────┤                                                                                    
+  │    1    │ Up     │    1    │   AF20    │                                                                                    
+  ├─────────┼────────┼─────────┼───────────┤                                                                                    
+  │    2    │ Down   │    2    │   AE19    │                                                                                    
+  ├─────────┼────────┼─────────┼───────────┤                                                                                    
+  │    3    │ Left   │    3    │   AC19    │                                                                                    
+  ├─────────┼────────┼─────────┼───────────┤                                                                                    
+  │    4    │ Right  │    4    │   AE18    │                
+  ├─────────┼────────┼─────────┼───────────┤
+  │    6    │ Fire   │    7    │   AF21    │
+  ├─────────┼────────┼─────────┼───────────┤                                                                                    
+  │    8    │ GND    │    5    │    GND    │
+  └─────────┴────────┴─────────┴───────────┘                                                                                    
+                                                            
+
+peter@peter-mini:/media/peter/3237-3163$ ls -R
+.:
+ cartridge   disks  'Hello from JOP.txt'   INDEX.HTM   os   TEST.TXT
+
+./cartridge:
+ BASIC.rom      Galaxian.rom        'Star Raiders.rom'
+ Defender.rom  'Pole Position.rom'
+
+./disks:
+'Dos 2.5.atr'  'Jumpman (1983)(Epyx)(US)[!].atr'
+
+./os:
+atarios2.rom  atariosb.rom
+
+
+
+
+
+
+
+
+ Here is Claude's plan:                                                                                                         
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ Plan: Add JOP Back for CH376T Keyboard + BRAM-Only Atari                                                                       
+                                                        
+ Context
+
+ The BRAM-only Atari core is working on EP4CGX150 (Star Raiders on screen, 48K BRAM, no SDRAM). Now we need to add JOP back as
+ a minimal supervisor to drive the CH376T module (USB keyboard + SD card) connected to PMOD J11. The Atari stays BRAM-only; JOP
+  gets exclusive SDRAM access (no arbiter needed).
+
+ Goal: JOP reads USB keyboard via CH376T SPI, passes keystrokes to Atari via AtariCtrl registers. F1/F2/F3 map to
+ Start/Select/Option. Eventually: load cartridges from SD card.
+
+ CH376T physical wiring (user's actual connections on PMOD J11):
+
+ ┌────────┬─────────┬───────────────────┬───────────────┐
+ │  Wire  │ J11 Pin │   CH376T Signal   │ EP4CGX150 Pin │
+ ├────────┼─────────┼───────────────────┼───────────────┤
+ │ GREEN  │    2    │ SCS (chip select) │     AC21      │
+ ├────────┼─────────┼───────────────────┼───────────────┤
+ │ ORANGE │    3    │ SDI (MOSI)        │     AE23      │
+ ├────────┼─────────┼───────────────────┼───────────────┤
+ │ WHITE  │    4    │ RSTI (reset)      │     AE22      │
+ ├────────┼─────────┼───────────────────┼───────────────┤
+ │ BLUE   │    8    │ SDO (MISO)        │     AD21      │
+ ├────────┼─────────┼───────────────────┼───────────────┤
+ │ YELLOW │    9    │ INT#              │     AF23      │
+ ├────────┼─────────┼───────────────────┼───────────────┤
+ │ BROWN  │   10    │ SCK               │     AF22      │
+ └────────┴─────────┴───────────────────┴───────────────┘
+
+ Joystick 1 on PMOD J10 (future, user will rig switches for now):
+
+ ┌─────┬────────┬─────────┬───────────┐
+ │ DB9 │ Signal │ J10 Pin │ EP4CGX150 │
+ ├─────┼────────┼─────────┼───────────┤
+ │  1  │ Up     │    1    │   AF20    │
+ ├─────┼────────┼─────────┼───────────┤
+ │  2  │ Down   │    2    │   AE19    │
+ ├─────┼────────┼─────────┼───────────┤
+ │  3  │ Left   │    3    │   AC19    │
+ ├─────┼────────┼─────────┼───────────┤
+ │  4  │ Right  │    4    │   AE18    │
+ ├─────┼────────┼─────────┼───────────┤
+ │  6  │ Fire   │    7    │   AF21    │
+ └─────┴────────┴─────────┴───────────┘
+
+ How POKEY keyboard scanning works (from schematic + VHDL + SpinalHDL)
+
+ POKEY has an internal 6-bit counter (bincnt, 0-63) cycling at ~15 kHz.
+ - KEYBOARD_SCAN = ~bincnt (inverted) goes to external matrix
+ - KEYBOARD_RESPONSE[0] (KR1) = main key return, active low (0 = key pressed)
+ - KEYBOARD_RESPONSE[1] (KR2) = modifier return, active low
+
+ POKEY checks modifiers via KR2 using keyboard_scan[5:4] (top 2 bits):
+ - scan[5:4]="11" → Control (bincnt 0x00-0x0F range)
+ - scan[5:4]="10" → Shift (bincnt 0x10-0x1F range)
+ - scan[5:4]="00" → Break (bincnt 0x30-0x3F range)
+
+ VHDL reference (ps2_to_atari800.vhdl): maintains 512-bit PS2 key bitmap →
+ 64-bit Atari bitmap → atari_keyboard(~keyboard_scan) → response(0). Modifiers
+ checked on keyboard_scan(5:4) only. Console keys (Start/Select/Option) are
+ separate outputs from PS2 F-key mappings.
+
+ Our simplification: JOP does USB HID → Atari scan code translation in software.
+ Hardware only needs: one active key + modifier flags → matrix response.
+ POKEY only detects one key at a time anyway (single-key scanner with debounce).
+
+ Step 1: Update AtariCtrl — keyboard injection + console keys
+
+ File: atari/src/main/scala/atari800/AtariCtrl.scala
+
+ Keyboard injection (replaces single keyboardResponse register)
+
+ Add keyboardScan input (6 bits, from Atari POKEY via top-level).
+
+ New register 0xC — keyboard state (JOP writes when key state changes):
+ - [5:0] = Atari scan code (0-63, the bincnt value for this key)
+ - [8]   = key pressed (1 = down, 0 = up)
+ - [9]   = shift held
+ - [10]  = control held
+ - [11]  = break pressed
+ - Default: 0x000 (no key, no modifiers)
+
+ Hardware response logic (combinational, matching VHDL pattern):
+ val keyResponse = B"11"  // default: nothing pressed
+
+ // KR1: main key — compare ~keyboardScan with stored scanCode
+ when(keyReg.pressed && (~io.keyboardScan).asUInt === keyReg.scanCode) {
+   keyResponse(0) := False
+ }
+ // KR2: modifiers — check keyboard_scan[5:4] (matches VHDL lines 261-271)
+ when(keyReg.breakKey && io.keyboardScan(5 downto 4) === B"00") {
+   keyResponse(1) := False
+ }
+ when(keyReg.shift && io.keyboardScan(5 downto 4) === B"10") {
+   keyResponse(1) := False
+ }
+ when(keyReg.control && io.keyboardScan(5 downto 4) === B"11") {
+   keyResponse(1) := False
+ }
+
+ JOP-side translation is a simple lookup table: USB HID scancode → Atari 6-bit scan code.
+ Shift/control/break come from the USB HID modifier byte. One register write per key event.
+
+ Console keys
+
+ Add outputs: consolOption, consolSelect, consolStart (active high).
+ Pack into reg 0x9 bits [4:2]:
+ - Reg 0x9: [13:8]=throttleCount, [4]=start, [3]=select, [2]=option, [1:0]=unused
+ - Default: B(0x1F00, 16 bits) — throttle=31, console not pressed
+ - Remove old keyboardResponse from this register (now hardware-generated)
+
+ Step 2: Update Atari800Ep4cgx150JopTop — BRAM-only + JOP-exclusive SDRAM
+
+ File: atari/src/main/scala/atari800/Atari800Ep4cgx150JopTop.scala
+
+ Atari core: BRAM-only
+
+ internal_ram   = 49152     // 48K in BRAM
+ basic_in_sdram = false
+ cartridge_rom  = "roms/Star Raiders.rom"
+ internal_rom   = 3         // Atari 800 OS
+ - Tie off Atari SDRAM: SDRAM_REQUEST_COMPLETE := False, SDRAM_DO := B(0)
+
+ SDRAM: JOP-exclusive (no arbiter)
+
+ Remove SdramArbiter. Connect directly:
+ JOP BMB → BmbToSdramReq → SdramStatemachine → SDRAM pins
+ - REFRESH := True — controller manages its own refresh timing via internal counters
+ - Address: B"0" ## bmbBridge.io.addr (zero-extend 24→25 bits)
+ - RESET_N := resetN (pllLocked & ~coldReset)
+ - JOP address space: 0x000000-0xFFFFFF (full 16 MB, no Atari partition needed)
+
+ CH376T pins — updated to match user's wiring
+
+ - SCK: AF22 (J11:10), MOSI: AE23 (J11:3), MISO: AD21 (J11:8)
+ - CS: AC21 (J11:2), INT#: AF23 (J11:9), RSTI: AE22 (J11:4)
+ - Add ch376Rst output pin, tie to pllLocked (active-low reset, high = not in reset)
+
+ Joystick pins — updated mapping + debounce
+
+ - Up: AF20 (J10:1), Down: AE19 (J10:2), Left: AC19 (J10:3), Right: AE18 (J10:4), Fire: AF21 (J10:7)
+ - Add Debounce component: synchronize (BufferCC) then require ~20ms stable before updating output
+ - AND hardware pins with JOP software override (existing pattern)
+
+ Keyboard + console connections
+
+ - Connect atariCore.io.KEYBOARD_SCAN → AtariCtrl keyboardScan input
+ - Connect AtariCtrl keyboardResponse → atariCore.io.KEYBOARD_RESPONSE
+ - Connect AtariCtrl consolOption/Select/Start → atariCore.io.CONSOL_OPTION/SELECT/START
+
+ Step 3: Debounce component
+
+ File: atari/src/main/scala/atari800/Debounce.scala (new, small utility)
+
+ Per-signal debounce: 2-FF synchronizer (BufferCC) + per-bit counter. When input stable for ~20ms (2^20 cycles at 56.67 MHz ≈
+ 18.4ms), output updates. Default state: all-ones (pull-up, nothing pressed).
+
+ class Debounce(width: Int, stableBits: Int = 20) extends Component {
+   val io = new Bundle {
+     val raw = in  Bits(width bits)
+     val debounced = out Bits(width bits)
+   }
+   // per-bit: BufferCC sync, then counter-based stable detection
+ }
+
+ Step 4: Update board files
+
+ Verilog wrapper: boards/ep4cgx150/ep4cgx150_jop_top.sv
+
+ - Update CH376T ports: rename ch376_sclk/mosi/miso/cs_n/int to match new Scala names
+ - Add ch376_rst output port
+ - Update joystick port names if changed
+
+ QSF: boards/ep4cgx150/atari_ep4cgx150_jop.qsf
+
+ - CH376T pins (all changed):
+   - ch376_sck → PIN_AF22, ch376_mosi → PIN_AE23, ch376_miso → PIN_AD21
+   - ch376_cs → PIN_AC21, ch376_int → PIN_AF23, ch376_rst → PIN_AE22
+ - Joystick pins (updated to J10 pins 1-4,7):
+   - joy1_up → PIN_AF20, joy1_down → PIN_AE19, joy1_left → PIN_AC19
+   - joy1_right → PIN_AE18, joy1_fire → PIN_AF21
+
+ SDC: boards/ep4cgx150/atari_ep4cgx150_jop.sdc
+
+ - No changes needed (same PLL, same SDRAM timing)
+
+ PLL: boards/ep4cgx150/atari_pll_jop.sv
+
+ - No changes needed (same 3-output PLL)
+
+ Step 5: Generate and build
+
+ # Generate SystemVerilog
+ sbt "atari/runMain atari800.Atari800Ep4cgx150JopSv"
+
+ # Copy to board dir and build
+ cp generated/Atari800Ep4cgx150JopTop.sv boards/ep4cgx150/
+ cd boards/ep4cgx150
+ quartus_sh --flow compile atari_ep4cgx150_jop
+
+ Verification
+
+ 1. Compilation: sbt compile — no errors
+ 2. Generation: sbt "atari/runMain atari800.Atari800Ep4cgx150JopSv" — clean SV output
+ 3. Synthesis: Quartus build passes timing at 56.67 MHz
+ 4. Hardware test sequence:
+   - Connect UART, boot JOP via serial
+   - JOP initializes AtariCtrl (PAL, 48K, throttle=31, atari800mode, etc.)
+   - Atari boots with Star Raiders from BRAM
+   - Connect CH376T to J11 — JOP reads keyboard
+   - Verify: keyboard → CH376T → JOP → serial echo (debug step)
+   - Then: keyboard → JOP → AtariCtrl reg 0xC (scancode+modifiers) → POKEY scanner
+   - F1/F2/F3 → Start/Select/Option via AtariCtrl reg 0x9 console bits
+   - Ctrl+Shift+Alt+F12 → cold reset via AtariCtrl reg 0x0 bit 7
+
+ Safe to connect CH376T
+
+ The CH376T breakout is safe to connect to J11 after the FPGA is programmed with this design (pins configured as correct I/O
+ directions). Before programming, all pins are tristated with weak pull-ups, which is safe for the CH376T (RSTI pulled high =
+ not in reset, SCS pulled high = not selected).
+
+ Future (not this change)
+
+ - SIO disk emulation: internal SIO bus → JOP reads ATR sectors from SD card via CH376T
+ - Cartridge loading from SD card: JOP reads ROM file → DMA to Atari BRAM (needs dual-port)
+ - Audio: sigma-delta 1-bit DAC on PMOD J10 spare pin
+ - Physical joystick DB9 wiring to J10

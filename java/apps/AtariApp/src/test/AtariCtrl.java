@@ -42,10 +42,12 @@ public class AtariCtrl extends HardwareObject {
     public volatile int joy12;
     /** reg 8: JOY_34 — joystick directions for ports 3 and 4 */
     public volatile int joy34;
-    /** reg 9: KB_THROTTLE — keyboard scan throttle */
-    public volatile int kbThrottle;
+    /** reg 9: CONSOL_THROTTLE — [13:8]=throttle, [4]=start, [3]=select, [2]=option */
+    public volatile int consolThrottle;
     /** reg 10: CART_SLOT_ADDR — cartridge slot address */
     public volatile int cartSlotAddr;
     /** reg 11: CART_SLOT_DATA — cartridge slot data */
     public volatile int cartSlotData;
+    /** reg 12: KEYBOARD — [5:0]=scanCode, [8]=pressed, [9]=shift, [10]=ctrl, [11]=break */
+    public volatile int keyboard;
 }
