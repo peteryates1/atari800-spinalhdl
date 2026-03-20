@@ -290,6 +290,7 @@ class Atari800JopTop extends Component {
     arbiter.io.b.longwordAccess := bmbBridge.io.longwordAccess
     bmbBridge.io.complete       := arbiter.io.b.complete
     bmbBridge.io.dataOut        := arbiter.io.b.dataOut
+    bmbBridge.io.sdramReady     := sdramCtrl.io.reset_client_n  // stall JOP until SDRAM init done
 
     // =====================================================================
     // SDRAM Controller
@@ -327,6 +328,7 @@ class Atari800JopTop extends Component {
     io.sdram.ras_n := sdramCtrl.io.SDRAM_RAS_N
     io.sdram.cas_n := sdramCtrl.io.SDRAM_CAS_N
     io.sdram.we_n  := sdramCtrl.io.SDRAM_WE_N
+    io.sdram.cke   := sdramCtrl.io.SDRAM_CKE
     io.sdram.dqml  := sdramCtrl.io.SDRAM_ldqm
     io.sdram.dqmh  := sdramCtrl.io.SDRAM_udqm
     sdramCtrl.io.SDRAM_DQ_IN := io.sdramDq

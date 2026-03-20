@@ -258,6 +258,7 @@ class Atari800CoreAc608 extends Component {
     io.sdram.ras_n := sdramCtrl.io.SDRAM_RAS_N
     io.sdram.cas_n := sdramCtrl.io.SDRAM_CAS_N
     io.sdram.we_n  := sdramCtrl.io.SDRAM_WE_N
+    io.sdram.cke   := sdramCtrl.io.SDRAM_CKE
     io.sdram.dqml  := sdramCtrl.io.SDRAM_ldqm
     io.sdram.dqmh  := sdramCtrl.io.SDRAM_udqm
     // SDRAM DQ tristate at top level

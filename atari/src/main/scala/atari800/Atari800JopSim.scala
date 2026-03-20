@@ -271,6 +271,7 @@ class Atari800JopSim(boardConfig: AtariBoardConfig = Atari800JopSim.boardConfig)
   arbiter.io.b.longwordAccess := bmbBridge.io.longwordAccess
   bmbBridge.io.complete       := arbiter.io.b.complete
   bmbBridge.io.dataOut        := arbiter.io.b.dataOut
+  bmbBridge.io.sdramReady     := True  // behavioral SDRAM is always ready
 
   atariCore.io.SDRAM_REQUEST_COMPLETE := arbiter.io.a.complete
   atariCore.io.SDRAM_DO               := arbiter.io.a.dataOut

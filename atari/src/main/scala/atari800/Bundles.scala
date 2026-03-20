@@ -13,11 +13,12 @@ case class SdramCtrlPins() extends Bundle with IMasterSlave {
   val cas_n = Bool()
   val we_n  = Bool()
   val clk   = Bool()
+  val cke   = Bool()
   val dqml  = Bool()
   val dqmh  = Bool()
 
   override def asMaster(): Unit = {
-    out(addr, ba, cs_n, ras_n, cas_n, we_n, clk, dqml, dqmh)
+    out(addr, ba, cs_n, ras_n, cas_n, we_n, clk, cke, dqml, dqmh)
   }
 }
 

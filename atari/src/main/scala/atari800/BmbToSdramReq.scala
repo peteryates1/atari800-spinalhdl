@@ -28,6 +28,10 @@ case class BmbToSdramReq(bmbParameter: BmbParameter) extends Component {
     val byteAccess     = out Bool()
     val wordAccess     = out Bool()
     val longwordAccess = out Bool()
+
+    // SDRAM ready: gate BMB acceptance until SDRAM init completes.
+    // Connect to SdramStatemachine.io.reset_client_n.
+    val sdramReady     = in  Bool()
   }
 
   val IDLE     = B"00"
@@ -64,7 +68,7 @@ case class BmbToSdramReq(bmbParameter: BmbParameter) extends Component {
 
   switch(state) {
     is(IDLE) {
-      when(io.bmb.cmd.valid) {
+      when(io.bmb.cmd.valid && io.sdramReady) {
         // Latch command
         isWrite     := io.bmb.cmd.isWrite
         currentAddr := io.bmb.cmd.address
