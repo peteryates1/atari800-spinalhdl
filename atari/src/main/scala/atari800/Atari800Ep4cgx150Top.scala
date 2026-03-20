@@ -22,20 +22,16 @@ class AtariPll extends BlackBox {
 }
 
 // Atari 800 bare-metal top for QMTECH EP4CGX150 + DB_FPGA daughter board.
-// No JOP — just Atari core + SDRAM + scandoubler for initial bring-up.
-// Boots to ATARI COMPUTER - MEMO PAD (Atari 800 OS, no cartridge, no BASIC).
+// BRAM-only Atari core — 48K internal RAM, no SDRAM access.
+// SDRAM is reserved for JOP supervisor (future).
 //
 // Clock: 50 MHz ALTPLL (×17/÷15) → 56.67 MHz → cycle_length=32 → 6502 at ~1.77 MHz
-// SDRAM: W9825G6JH6 32MB 16-bit — memo pad uses only 16K internal BRAM
+// RAM:   48K in BRAM (24 M9K of 414 available, ~6%)
 // VGA:   DB_FPGA daughter board, 5-6-5 resistor DAC, scandoubled ~31 kHz
 class Atari800Ep4cgx150Top extends Component {
   val io = new Bundle {
     // 50 MHz oscillator (PIN_B14)
     val clk_in  = in Bool()
-
-    // SDRAM (W9825G6JH6, 32 MB, 16-bit)
-    val sdram   = master(SdramCtrlPins())
-    val sdramDq = inout(Analog(Bits(16 bits)))
 
     // VGA — DB_FPGA daughter board 5-6-5 DAC
     val vga_hs  = out Bool()
@@ -56,10 +52,7 @@ class Atari800Ep4cgx150Top extends Component {
   pll.io.inclk0 := io.clk_in
 
   val clkSys    = pll.io.c0   // 56.67 MHz
-  val clkSdram  = pll.io.c1   // 56.67 MHz (-3 ns phase shift)
   val pllLocked = pll.io.locked
-
-  io.sdram.clk := clkSdram
 
   val sysDomain = ClockDomain(
     clock  = clkSys,
@@ -81,23 +74,23 @@ class Atari800Ep4cgx150Top extends Component {
 
     // =========================================================================
     // Atari 800 Core
-    // Atari 800 OS (Os8 + Os2), 16K internal BRAM, no BASIC.
+    // Atari 800 OS (Os8 + Os2), 48K internal BRAM, no BASIC.
     // 56.67 MHz / cycle_length=32 = 1.771 MHz 6502 (target 1.790 MHz, -1.1%)
-    // 16K internal BRAM: memo pad uses only 0000-3FFF; SDRAM not exercised.
+    // 48K BRAM: 0x0000-0xBFFF in GenericRamInfer (24 M9K). No SDRAM access.
     // =========================================================================
     val atari = new Atari800CoreSimpleSdram(
       cycle_length   = 32,
       video_bits     = 8,
       palette        = 0,
       internal_rom   = 3,       // Atari 800 OS (Os8 + Os2)
-      internal_ram   = 16384,   // 16K in BRAM
+      internal_ram   = 49152,   // 48K in BRAM
       basic_in_sdram = false,   // Cartridge ROM in internal BRAM — route $A000-BFFF to internal ROM
       cartridge_rom  = "roms/Star Raiders.rom"
     )
 
-    // Config — Star Raiders cartridge
+    // Config — Star Raiders cartridge, 48K BRAM-only mode
     atari.io.PAL                       := True
-    atari.io.RAM_SELECT                := B"000"
+    atari.io.RAM_SELECT                := B"011"  // 48K mode
     atari.io.HALT                      := False
     atari.io.TURBO_VBLANK_ONLY         := False
     atari.io.THROTTLE_COUNT_6502       := B(31, 6 bits)   // cycle_length - 1
@@ -133,42 +126,10 @@ class Atari800Ep4cgx150Top extends Component {
     atari.io.DMA_ADDR               := B(0, 24 bits)
     atari.io.DMA_WRITE_DATA         := B(0, 32 bits)
 
-    // =========================================================================
-    // SDRAM Controller
-    // =========================================================================
-    val sdramCtrl = new SdramStatemachine(
-      ADDRESS_WIDTH = 24,
-      AP_BIT        = 10,
-      COLUMN_WIDTH  = 9,
-      ROW_WIDTH     = 13
-    )
-    sdramCtrl.io.CLK_SYSTEM      := clkSys
-    sdramCtrl.io.CLK_SDRAM       := clkSdram
-    sdramCtrl.io.RESET_N         := pllLocked
-    sdramCtrl.io.READ_EN         := atari.io.SDRAM_READ_ENABLE
-    sdramCtrl.io.WRITE_EN        := atari.io.SDRAM_WRITE_ENABLE
-    sdramCtrl.io.REQUEST         := atari.io.SDRAM_REQUEST
-    sdramCtrl.io.BYTE_ACCESS     := atari.io.SDRAM_8BIT_WRITE_ENABLE
-    sdramCtrl.io.WORD_ACCESS     := atari.io.SDRAM_16BIT_WRITE_ENABLE
-    sdramCtrl.io.LONGWORD_ACCESS := atari.io.SDRAM_32BIT_WRITE_ENABLE
-    sdramCtrl.io.REFRESH         := atari.io.SDRAM_REFRESH
-    sdramCtrl.io.ADDRESS_IN      := B"00" ## atari.io.SDRAM_ADDR
-    sdramCtrl.io.DATA_IN         := atari.io.SDRAM_DI
-
-    atari.io.SDRAM_REQUEST_COMPLETE := sdramCtrl.io.COMPLETE
-    atari.io.SDRAM_DO               := sdramCtrl.io.DATA_OUT
-
-    io.sdram.addr  := sdramCtrl.io.SDRAM_ADDR
-    io.sdram.ba(0) := sdramCtrl.io.SDRAM_BA0
-    io.sdram.ba(1) := sdramCtrl.io.SDRAM_BA1
-    io.sdram.cs_n  := sdramCtrl.io.SDRAM_CS_N
-    io.sdram.ras_n := sdramCtrl.io.SDRAM_RAS_N
-    io.sdram.cas_n := sdramCtrl.io.SDRAM_CAS_N
-    io.sdram.we_n  := sdramCtrl.io.SDRAM_WE_N
-    io.sdram.dqml  := sdramCtrl.io.SDRAM_ldqm
-    io.sdram.dqmh  := sdramCtrl.io.SDRAM_udqm
-    sdramCtrl.io.SDRAM_DQ_IN := io.sdramDq
-    when(sdramCtrl.io.SDRAM_DQ_OE) { io.sdramDq := sdramCtrl.io.SDRAM_DQ_OUT }
+    // SDRAM not used — 48K BRAM covers all Atari memory.
+    // Tie off SDRAM interface so the core sees no completions.
+    atari.io.SDRAM_REQUEST_COMPLETE := False
+    atari.io.SDRAM_DO               := B(0, 32 bits)
 
     // =========================================================================
     // Scandoubler: 15 kHz → 31 kHz VGA
