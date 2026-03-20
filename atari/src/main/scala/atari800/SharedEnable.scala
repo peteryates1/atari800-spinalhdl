@@ -39,9 +39,11 @@ class SharedEnable(cycleLength: Int = 16) extends Component {
   speedShiftNext(cycleLength - 1 downto 1) := speedShiftTemp(cycleLength - 2 downto 0)
 
   val speedShift = Bool()
-  val speedShiftTerms = (0 to cycleLengthBits).map(i =>
-    speedShiftTemp(cycleLength / (1 << i) - 1) & io.throttleCount6502(i)
-  )
+  val speedShiftTerms = (0 to cycleLengthBits).flatMap { i =>
+    val idx = cycleLength / (1 << i) - 1
+    if (idx >= 0) Some(speedShiftTemp(idx) & io.throttleCount6502(i))
+    else None
+  }
   speedShift := speedShiftTerms.reduce(_ | _)
   speedShiftNext(0) := speedShift
 

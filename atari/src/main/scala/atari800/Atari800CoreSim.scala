@@ -73,14 +73,14 @@ class Atari800CoreSim(cartridge_rom: String = "") extends Component {
   }
 
   // =================================================================
-  // Atari 800 Core with internal ROM + 48K internal RAM (fast sim boot)
+  // Atari 800 Core with internal ROM + 48K internal RAM (BRAM-only)
   // =================================================================
   val atariCore = new Atari800CoreSimpleSdram(
     cycle_length  = 32,
     video_bits    = 8,
     palette       = 0,
     internal_rom  = 3,
-    internal_ram  = 16384,
+    internal_ram  = 49152,
     low_memory    = 0,
     stereo        = 1,
     covox         = 1,
@@ -146,7 +146,7 @@ class Atari800CoreSim(cartridge_rom: String = "") extends Component {
   atariCore.io.DMA_WRITE_DATA         := B(0, 32 bits)
 
   // Config
-  atariCore.io.RAM_SELECT                := B"001"  // 64K
+  atariCore.io.RAM_SELECT                := B"011"  // 48K (BRAM-only, no SDRAM)
   atariCore.io.PAL                       := True
   atariCore.io.HALT                      := False
   atariCore.io.TURBO_VBLANK_ONLY         := False
