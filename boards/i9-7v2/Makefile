@@ -13,7 +13,7 @@ SPEED = 6
 
 # Source files (freshly generated SystemVerilog)
 SV_DIR = ../../generated
-SV_SRCS = $(SV_DIR)/Atari800JopTop.sv
+SV_SRCS = $(SV_DIR)/Atari800Ecp5BramTop.sv
 SV_TOP = fit_check_top_ecp5.sv
 PLL_SV = pll_ecp5.sv
 LPF = colorlight_i9.lpf
@@ -51,7 +51,7 @@ pnr: $(PNR)
 $(PNR): $(JSON) $(LPF)
 	nextpnr-ecp5 --$(DEVICE) --package $(PACKAGE) --speed $(SPEED) \
 		--json $(JSON) --lpf $(LPF) --textcfg $(PNR) \
-		--freq 56.818 \
+		--freq 37.5 \
 		--lpf-allow-unconstrained \
 		--report $(BUILD)/report.json \
 		2>&1 | tee $(LOG_PNR)

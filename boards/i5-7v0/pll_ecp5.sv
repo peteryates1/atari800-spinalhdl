@@ -1,18 +1,18 @@
-// ECP5 PLL: 25 MHz -> 56.67 MHz (Atari system clock)
-// Replaces PllAtari800 (Altera) for Colorlight i5
-// CLKI=25MHz, CLKOP=56.67MHz: CLKI_DIV=11, CLKFB_DIV=25, CLKOP_DIV=11
+// ECP5 PLL: 25 MHz -> 37.5 MHz (Atari system clock, BRAM-only)
+// 37.5 MHz / cycle_length=21 = 1.786 MHz 6502 (PAL target 1.79 MHz, -0.2%)
+// Fvco = 25 * 24 / 1 = 600 MHz, Fout = 600 / 16 = 37.5 MHz
 module PllAtari800 (
     input  wire inclk0,
     output wire c0,
-    output wire c1,      // SDRAM clock (phase shifted)
-    output wire c2,      // VGA text clock (~25 MHz = CLKI passthrough)
+    output wire c1,      // SDRAM clock (phase shifted) — unused in BRAM-only
+    output wire c2,      // unused
     output wire locked
 );
 
     wire clkop, clkos, lock_w;
 
     (* FREQUENCY_PIN_CLKI="25" *)
-    (* FREQUENCY_PIN_CLKOP="56.818" *)
+    (* FREQUENCY_PIN_CLKOP="37.5" *)
     EHXPLLL #(
         .PLLRST_ENA       ("DISABLED"),
         .INTFB_WAKE       ("DISABLED"),
@@ -22,15 +22,15 @@ module PllAtari800 (
         .OUTDIVIDER_MUXB   ("DIVB"),
         .OUTDIVIDER_MUXC   ("DIVC"),
         .OUTDIVIDER_MUXD   ("DIVD"),
-        .CLKI_DIV          (11),
-        .CLKFB_DIV         (25),
+        .CLKI_DIV          (1),
+        .CLKFB_DIV         (24),
         .CLKOP_ENABLE      ("ENABLED"),
-        .CLKOP_DIV         (11),
-        .CLKOP_CPHASE      (5),
+        .CLKOP_DIV         (16),
+        .CLKOP_CPHASE      (7),
         .CLKOP_FPHASE      (0),
         .CLKOS_ENABLE      ("ENABLED"),
-        .CLKOS_DIV         (11),
-        .CLKOS_CPHASE      (8),     // ~130 degree phase shift for SDRAM
+        .CLKOS_DIV         (16),
+        .CLKOS_CPHASE      (11),    // ~90 degree phase shift for SDRAM (future)
         .CLKOS_FPHASE      (0),
         .FEEDBK_PATH       ("CLKOP"),
         .CLKOP_TRIM_POL    ("FALLING"),
@@ -60,7 +60,7 @@ module PllAtari800 (
 
     assign c0     = clkop;
     assign c1     = clkos;
-    assign c2     = inclk0;  // 25 MHz passthrough for VGA text
+    assign c2     = inclk0;
     assign locked = lock_w;
 
 endmodule
