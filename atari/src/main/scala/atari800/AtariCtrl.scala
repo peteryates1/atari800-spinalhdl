@@ -23,10 +23,11 @@ import jop.io.HasBusIo
 //   0x6  R/W: paddle6[7:0] | paddle7[15:8]   (port 4)
 //   0x7  R/W: joy1_n[4:0] | joy2_n[12:8]     (active low: fire,right,left,down,up)
 //   0x8  R/W: joy3_n[4:0] | joy4_n[12:8]
-//   0x9  R/W: keyboard response[1:0], throttle[13:8]
+//   0x9  R/W: console[4:2]={start,select,option}, throttle[13:8]
 //   0xA  W: cart slot addr[12:0], bit13=s5_n, bit14=s4_n, bit15=cctl_n
 //        R: same (readback)
 //   0xB  R: cart slot data[7:0], bit8=rd4, bit9=rd5
+//   0xC  R/W: keyboard — [5:0]=scanCode, [8]=pressed, [9]=shift, [10]=ctrl, [11]=break
 class AtariCtrl extends Component with HasBusIo {
   val bus = new Bundle {
     val addr   = in  UInt(4 bits)
@@ -64,8 +65,14 @@ class AtariCtrl extends Component with HasBusIo {
     val joy3_n = out Bits(5 bits)
     val joy4_n = out Bits(5 bits)
 
-    // Keyboard
+    // Keyboard — hardware-generated response from scan + key register
+    val keyboardScan     = in  Bits(6 bits)
     val keyboardResponse = out Bits(2 bits)
+
+    // Console keys (active high: 1 = pressed)
+    val consolOption = out Bool()
+    val consolSelect = out Bool()
+    val consolStart  = out Bool()
 
     // Physical cartridge slot
     val cartSlotAddr  = out Bits(13 bits)
@@ -96,8 +103,11 @@ class AtariCtrl extends Component with HasBusIo {
   val joyPair0Reg = Reg(Bits(16 bits)) init B(0x1F1F, 16 bits)  // joy1, joy2
   val joyPair1Reg = Reg(Bits(16 bits)) init B(0x1F1F, 16 bits)  // joy3, joy4
 
-  // Keyboard + throttle packed: [13:8]=throttle, [1:0]=keyboard
-  val kbThrottleReg = Reg(Bits(16 bits)) init B(0x1F03, 16 bits) // throttle=31, kb=11
+  // Console + throttle packed: [13:8]=throttle, [4]=start, [3]=select, [2]=option
+  val consolThrottleReg = Reg(Bits(16 bits)) init B(0x1F00, 16 bits) // throttle=31, console not pressed
+
+  // Keyboard state: [5:0]=scanCode, [8]=pressed, [9]=shift, [10]=ctrl, [11]=break
+  val keyReg = Reg(Bits(16 bits)) init 0
 
   // Cart slot: addr[12:0], s5_n, s4_n, cctl_n packed into 16 bits
   val cartSlotReg = Reg(Bits(16 bits)) init B(0xE000, 16 bits) // all selects high (deasserted)
@@ -120,8 +130,9 @@ class AtariCtrl extends Component with HasBusIo {
       is(0x6) { paddlePair3Reg := bus.wrData(15 downto 0) }
       is(0x7) { joyPair0Reg    := bus.wrData(15 downto 0) }
       is(0x8) { joyPair1Reg    := bus.wrData(15 downto 0) }
-      is(0x9) { kbThrottleReg  := bus.wrData(15 downto 0) }
-      is(0xA) { cartSlotReg    := bus.wrData(15 downto 0) }
+      is(0x9) { consolThrottleReg := bus.wrData(15 downto 0) }
+      is(0xA) { cartSlotReg      := bus.wrData(15 downto 0) }
+      is(0xC) { keyReg           := bus.wrData(15 downto 0) }
     }
   }
 
@@ -137,9 +148,10 @@ class AtariCtrl extends Component with HasBusIo {
     is(0x6) { bus.rdData := B(0, 16 bits) ## paddlePair3Reg }
     is(0x7) { bus.rdData := B(0, 16 bits) ## joyPair0Reg }
     is(0x8) { bus.rdData := B(0, 16 bits) ## joyPair1Reg }
-    is(0x9) { bus.rdData := B(0, 16 bits) ## kbThrottleReg }
+    is(0x9) { bus.rdData := B(0, 16 bits) ## consolThrottleReg }
     is(0xA) { bus.rdData := B(0, 16 bits) ## cartSlotReg }
     is(0xB) { bus.rdData := B(0, 22 bits) ## io.cartSlotRd5 ## io.cartSlotRd4 ## io.cartSlotData }
+    is(0xC) { bus.rdData := B(0, 16 bits) ## keyReg }
   }
 
   // Output assignments
@@ -151,7 +163,12 @@ class AtariCtrl extends Component with HasBusIo {
   io.turboVblankOnly := configReg(4)
   io.atari800mode    := configReg(5)
   io.hiresEna        := configReg(6)
-  io.throttleCount   := kbThrottleReg(13 downto 8)
+  io.throttleCount   := consolThrottleReg(13 downto 8)
+
+  // Console keys from reg 0x9 (active high: 1 = pressed)
+  io.consolOption := consolThrottleReg(2)
+  io.consolSelect := consolThrottleReg(3)
+  io.consolStart  := consolThrottleReg(4)
 
   // Unpack paddle pairs
   io.paddle0 := paddlePair0Reg( 7 downto 0).asSInt
@@ -169,7 +186,24 @@ class AtariCtrl extends Component with HasBusIo {
   io.joy3_n := joyPair1Reg( 4 downto 0)
   io.joy4_n := joyPair1Reg(12 downto 8)
 
-  io.keyboardResponse := kbThrottleReg(1 downto 0)
+  // Hardware keyboard response — matches VHDL ps2_to_atari800 pattern.
+  // POKEY scans keyboard_scan[5:0] = ~bincnt at ~15 kHz.
+  // KR1 (bit 0): main key match (active low: 0 = key pressed at this scan position).
+  // KR2 (bit 1): modifier match on keyboard_scan[5:4] (active low).
+  val keyResponse = B"11"  // default: nothing pressed
+  when(keyReg(8) && (~io.keyboardScan).asUInt === keyReg(5 downto 0).asUInt) {
+    keyResponse(0) := False
+  }
+  when(keyReg(11) && io.keyboardScan(5 downto 4) === B"00") {
+    keyResponse(1) := False  // break
+  }
+  when(keyReg(9) && io.keyboardScan(5 downto 4) === B"10") {
+    keyResponse(1) := False  // shift
+  }
+  when(keyReg(10) && io.keyboardScan(5 downto 4) === B"11") {
+    keyResponse(1) := False  // control
+  }
+  io.keyboardResponse := keyResponse
 
   // Cart slot outputs from packed register
   io.cartSlotAddr  := cartSlotReg(12 downto 0)

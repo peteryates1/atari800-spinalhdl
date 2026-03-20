@@ -68,7 +68,8 @@ object JopCoreForAtari {
     blockBits = blockBits,
     memConfig = JopMemoryConfig(
       addressWidth = 24,
-      burstLen     = 0,       // single-word SDRAM access (via SdramArbiter)
+      mainMemSize  = 256 * 1024,  // 256 KB BRAM (AtariSupervisor.jop is ~45 KB)
+      burstLen     = 0,       // single-word access
       useOcache         = true,
       ocacheWayBits     = ocacheWayBits,
       ocacheIndexBits   = ocacheIndexBits,
@@ -77,28 +78,23 @@ object JopCoreForAtari {
       acacheFieldBits   = acacheFieldBits
     ),
     useDspMul = true,
-    supersetJumpTable = if (simBoot) JumpTableInitData.dsp else JumpTableInitData.serialDsp,
-    ioConfig = IoConfig(
-      hasSdSpi    = true,
-      hasVgaText  = true,
-      uartBaudRate = 115200,
-      sdSpiClkDivInit = 112,   // ~250 kHz init at 56.67 MHz
-      extensionDevices = Seq(
-        IoDeviceDescriptor(
-          name = "atariCtrl",
-          addrBits = 4,         // 16 registers (12 used)
-          interruptCount = 0,
-          coreZeroOnly = true,
-          registerNames = Seq(
-            (0, "STATUS_CTRL"), (1, "CART_SELECT"), (2, "CONFIG"),
-            (3, "PADDLE_01"), (4, "PADDLE_23"), (5, "PADDLE_45"), (6, "PADDLE_67"),
-            (7, "JOY_12"), (8, "JOY_34"),
-            (9, "KB_THROTTLE"),
-            (10, "CART_SLOT_ADDR"), (11, "CART_SLOT_DATA")
-          ),
-          factory = _ => new AtariCtrl
-        )
-      )
+    supersetJumpTable = if (simBoot) JumpTableInitData.simulation else JumpTableInitData.serial,
+    devices = Map(
+      "uart"      -> DeviceInstance(DeviceType.Uart, params = Map("baudRate" -> 500000)),
+      "sdSpi"     -> DeviceInstance(DeviceType.SdSpi, params = Map("clkDivInit" -> 112)),
+      "vgaText"   -> DeviceInstance(DeviceType.VgaText),
+      "atariCtrl" -> DeviceInstance(DeviceType.Custom(
+        key = "atariCtrl",
+        addrBits = 4,         // 16 registers (12 used)
+        registerNames = Seq(
+          (0, "STATUS_CTRL"), (1, "CART_SELECT"), (2, "CONFIG"),
+          (3, "PADDLE_01"), (4, "PADDLE_23"), (5, "PADDLE_45"), (6, "PADDLE_67"),
+          (7, "JOY_12"), (8, "JOY_34"),
+          (9, "KB_THROTTLE"),
+          (10, "CART_SLOT_ADDR"), (11, "CART_SLOT_DATA")
+        ),
+        factory = (_, _, _) => new AtariCtrl
+      ))
     ),
     clkFreq = HertzNumber(56670000)
   )
