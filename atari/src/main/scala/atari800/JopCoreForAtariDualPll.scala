@@ -9,15 +9,17 @@ import jop.utils.JopFileLoader
 import jop.memory.SdramDeviceInfo
 
 /**
- * JOP configuration for dual-PLL Atari+JOP build.
+ * JOP configuration for unified-clock Atari+JOP build.
  *
- * JOP runs at 80 MHz (dram_pll c1) with 2M baud UART.
+ * Both JOP and Atari run at 56.67 MHz from a single PLL.
  * 32 MB SDRAM (W9825G6JH6) via BmbSdramCtrl32 (Altera IP).
  * AlteraLpm memory style required for Cyclone IV.
  */
 object JopCoreForAtariDualPll {
 
   val memDevice = MemoryDevice.W9825G6JH6
+
+  val clkFreqHz = 56670000L
 
   def config: JopCoreConfig = JopCoreConfig(
     memConfig = JopMemoryConfig(
@@ -28,7 +30,7 @@ object JopCoreForAtariDualPll {
     useDspMul = true,
     supersetJumpTable = JumpTableInitData.serial,
     devices = Map(
-      "uart"      -> DeviceInstance(DeviceType.Uart, params = Map("baudRate" -> 2000000)),
+      "uart"      -> DeviceInstance(DeviceType.Uart, params = Map("baudRate" -> 500000)),
       "sdSpi"     -> DeviceInstance(DeviceType.SdSpi, params = Map("clkDivInit" -> 199)),
       "vgaText"   -> DeviceInstance(DeviceType.VgaText),
       "atariCtrl" -> DeviceInstance(DeviceType.Custom(
@@ -44,7 +46,7 @@ object JopCoreForAtariDualPll {
         factory = (_, _, _) => new AtariCtrl
       ))
     ),
-    clkFreq = HertzNumber(80000000),
+    clkFreq = HertzNumber(clkFreqHz),
     memoryStyle = Some(MemoryStyle.AlteraLpm("../../jop-spinalhdl/asm/generated/serial")),
     useSyncRam = Some(true)
   )

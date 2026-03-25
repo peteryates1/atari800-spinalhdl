@@ -1,6 +1,6 @@
-# Quartus project settings for Atari 800 + JOP dual-PLL on QMTECH EP4CGX150 + DB_FPGA
+# Quartus project settings for Atari 800 + JOP on QMTECH EP4CGX150 + DB_FPGA
 # Target: EP4CGX150DF27I7 (Cyclone IV GX, 149,760 LEs)
-# Dual PLL: dram_pll (80 MHz for JOP), atari_pll (56.67 MHz for Atari)
+# Single PLL: atari_pll (56.67 MHz for both JOP and Atari, 25 MHz VGA text)
 
 set_global_assignment -name DEVICE EP4CGX150DF27I7
 set_global_assignment -name TOP_LEVEL_ENTITY ep4cgx150_dualpll_top
@@ -9,7 +9,6 @@ set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
 # Source files
 set_global_assignment -name SYSTEMVERILOG_FILE ep4cgx150_dualpll_top.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../generated/Atari800Ep4cgx150DualPllTop.sv
-set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/qmtech-ep4cgx150-sdram/dram_pll.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE atari_pll.sv
 
 # Altera LPM ROM/RAM primitives (used by AlteraLpm memory style)

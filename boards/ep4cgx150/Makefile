@@ -10,7 +10,7 @@ SOF_DUALPLL = $(QP_DUALPLL).sof
 
 SERIAL_PORT ?= /dev/ttyUSB0
 BAUD_JOP    = 500000
-BAUD_DUALPLL = 2000000
+BAUD_DUALPLL = 500000
 APP_DIR     = ../../java/apps/AtariSupervisor
 JOP_APP     ?= $(APP_DIR)/AtariSupervisor.jop
 DOWNLOAD_PY = $(JOP_DIR)/fpga/scripts/download.py
