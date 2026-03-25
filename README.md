@@ -64,8 +64,10 @@ atari/                   Atari 800 core
     JopCoreForAtari.scala     JOP configuration + AtariCtrl I/O device
     JopCoreForAtariDualPll.scala  Dual-PLL JOP variant
     AtariCtrl.scala           JOP I/O device for Atari core control
+    GenerateConstJava.scala   Const.java generator (drives jop ConstGenerator from atari config)
     Debounce.scala            Per-bit debounce with configurable stable count
-jop-spinalhdl/           JOP soft-core (git submodule)
+java/apps/AtariSupervisor/   JOP application: Atari core supervisor (USB keyboard, serial relay)
+jop-spinalhdl/           JOP soft-core (git submodule, pure library — no Atari-specific code)
 boards/
   ep4cgx150/             QMTECH EP4CGX150 + DB_FPGA (Cyclone IV GX, hardware verified)
   AC608/                 Cyclone 10 LP custom board (Quartus 25.1)
@@ -149,13 +151,15 @@ make download-dualpll  # Serial boot AtariSupervisor.jop (2 Mbaud)
 make run-dualpll       # program + download + monitor in one step
 ```
 
-JOP software build chain (rebuild after Java source changes):
+JOP software build chain (rebuild after Java source changes).
+Const.java generation and app compilation are driven entirely from
+atari800-spinalhdl — jop-spinalhdl is a pure reusable submodule:
 
 ```sh
 cd boards/ep4cgx150
-make const-java   # Generate Const.java from hardware config
+make const-java   # Generate Const.java from Atari JOP config (via sbt)
 make asm          # Build microcode (serial boot variant)
-make jop-app      # Build AtariSupervisor.jop
+make jop-app      # Build AtariSupervisor.jop (from java/apps/AtariSupervisor/)
 ```
 
 Cartridge ROM is set via `cartridge_rom` in the top-level Scala file

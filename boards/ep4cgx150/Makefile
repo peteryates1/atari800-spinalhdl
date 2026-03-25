@@ -11,10 +11,10 @@ SOF_DUALPLL = $(QP_DUALPLL).sof
 SERIAL_PORT ?= /dev/ttyUSB0
 BAUD_JOP    = 500000
 BAUD_DUALPLL = 2000000
-JOP_APP     ?= $(JOP_DIR)/java/apps/AtariSupervisor/AtariSupervisor.jop
+APP_DIR     = ../../java/apps/AtariSupervisor
+JOP_APP     ?= $(APP_DIR)/AtariSupervisor.jop
 DOWNLOAD_PY = $(JOP_DIR)/fpga/scripts/download.py
 MONITOR_PY  = $(JOP_DIR)/fpga/scripts/monitor.py
-JOP_PRESET  = atariEp4cgx150
 
 .PHONY: generate build program \
         generate-jop build-jop program-jop download-jop monitor-jop run-jop \
@@ -40,9 +40,9 @@ program: $(SOF_FILE)
 # ---------------------------------------------------------------------------
 # JOP software build chain
 # ---------------------------------------------------------------------------
-# Generate Const.java from hardware config (I/O addresses, features)
+# Generate Const.java from Atari JOP config (driven from atari project)
 const-java:
-	cd $(JOP_DIR) && sbt "runMain jop.generate.ConstGeneratorMain $(JOP_PRESET) --write"
+	cd ../.. && sbt "atari/runMain atari800.GenerateConstJava --write"
 
 # Build microcode assembly (serial boot variant)
 asm:
@@ -50,7 +50,7 @@ asm:
 
 # Build AtariSupervisor.jop (requires const-java + asm first)
 jop-app:
-	$(MAKE) -C $(JOP_DIR)/java/apps/AtariSupervisor
+	$(MAKE) -C $(APP_DIR)
 
 # ---------------------------------------------------------------------------
 # Single-PLL JOP build (Atari + JOP BRAM-only + CH376T)
