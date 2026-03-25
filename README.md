@@ -17,8 +17,18 @@ DMA pipeline, NMI/IRQ handling, and the 6502 CPU are verified working.
 Frame capture produces correct PAL-palette colour output.
 
 **Hardware verified** — memo pad and Star Raiders confirmed running on
-QMTECH EP4CGX150 + DB_FPGA daughter board (VGA output, 56.67 MHz).
+QMTECH EP4CGX150 + DB_FPGA daughter board v4 (VGA output, 56.67 MHz).
 See `boards/ep4cgx150/`.
+
+### Dual-PLL build (EP4CGX150)
+
+JOP supervisor at 80 MHz + Atari core at 56.67 MHz using two independent PLLs
+with clock domain crossing. JOP handles USB keyboard (CH376S via SPI),
+serial keyboard relay, joystick input, console keys, and cold reset.
+
+- **PMOD J10**: Joystick 1 (active low, directly from DB-9 connector)
+- **PMOD J11**: CH376S SPI module (USB keyboard + SD card host)
+- **UART**: CP2102N on DB_FPGA v4 — JOP serial boot (2 Mbaud) + keyboard relay
 
 ## Origins
 
@@ -49,15 +59,12 @@ atari/                   Atari 800 core
     Atari800CoreSimTb.scala   Simulation testbench with frame capture
     Atari800JopTop.scala      FPGA top-level (Atari + JOP + SDRAM arbiter)
     Atari800Ep4cgx150Top.scala  Bare-metal bring-up top (EP4CGX150, no JOP)
+    Atari800Ep4cgx150JopTop.scala  Single-PLL JOP top (EP4CGX150)
+    Atari800Ep4cgx150DualPllTop.scala  Dual-PLL JOP top (80 MHz JOP + 56.67 MHz Atari)
     JopCoreForAtari.scala     JOP configuration + AtariCtrl I/O device
-roms/                    Binary ROM files (loaded at elaboration, not in FPGA fabric)
-  atarixl.rom              XL/XE 16K OS
-  ataribas.rom             Atari BASIC 8K
-  atariosb.rom             Atari 800 OS-B 8K
-  atarios2.rom             Atari 800 math pack 2K
-  atari5200.rom            Atari 5200 OS 2K
-  atarixl_loop.rom         XL OS 16K (loop variant)
-  Star Raiders.rom         8K cartridge ROM
+    JopCoreForAtariDualPll.scala  Dual-PLL JOP variant
+    AtariCtrl.scala           JOP I/O device for Atari core control
+    Debounce.scala            Per-bit debounce with configurable stable count
 jop-spinalhdl/           JOP soft-core (git submodule)
 boards/
   ep4cgx150/             QMTECH EP4CGX150 + DB_FPGA (Cyclone IV GX, hardware verified)
@@ -67,6 +74,10 @@ boards/
   i9plus-6v1/            Colorlight i9+ v6.1 (XC7A50T, Vivado)
 generated/               SpinalHDL output (.sv + .bin) — gitignored
 unused_scala/            Archived/inactive modules
+tools/
+  atari_keyboard.py      Serial keyboard/joystick relay (host-side Python)
+  ch376s_test.py         CH376S SPI test (Pico MicroPython)
+  ch376s_uart_test.py    CH376S UART test (Pico MicroPython)
 Makefile                 Build orchestration
 ```
 
@@ -114,16 +125,40 @@ Convert to PNG with ImageMagick: `convert frame.ppm frame.png`
 sbt "atari/runMain atari800.Atari800JopTopSv"
 ```
 
-### EP4CGX150 bring-up build (QMTECH EP4CGX150 + DB_FPGA)
+### EP4CGX150 builds (QMTECH EP4CGX150 + DB_FPGA)
 
 ```sh
 cd boards/ep4cgx150
-make generate   # SpinalHDL → Atari800Ep4cgx150Top.sv + ROM .bin files
-make build      # quartus_map + fit + asm + sta
+
+# Bare-metal (no JOP)
+make generate   # SpinalHDL → Atari800Ep4cgx150Top.sv
+make build      # Quartus compile
 make program    # JTAG via USB-Blaster
+
+# Single-PLL JOP (56.67 MHz shared clock)
+make generate-jop
+make build-jop
+make program-jop
+make download-jop   # Serial boot AtariSupervisor.jop (500 kbaud)
+
+# Dual-PLL JOP (80 MHz JOP + 56.67 MHz Atari, recommended)
+make generate-dualpll
+make build-dualpll
+make program-dualpll
+make download-dualpll  # Serial boot AtariSupervisor.jop (2 Mbaud)
+make run-dualpll       # program + download + monitor in one step
 ```
 
-Cartridge ROM is set via `cartridge_rom` in `Atari800Ep4cgx150Top.scala`
+JOP software build chain (rebuild after Java source changes):
+
+```sh
+cd boards/ep4cgx150
+make const-java   # Generate Const.java from hardware config
+make asm          # Build microcode (serial boot variant)
+make jop-app      # Build AtariSupervisor.jop
+```
+
+Cartridge ROM is set via `cartridge_rom` in the top-level Scala file
 (default: `roms/Star Raiders.rom`). Place `.rom` files in the `roms/` directory.
 
 ### Full Quartus build (Cyclone 10 LP)

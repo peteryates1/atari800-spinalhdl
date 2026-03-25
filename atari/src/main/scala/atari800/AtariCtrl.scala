@@ -69,6 +69,13 @@ class AtariCtrl extends Component with HasBusIo {
     val keyboardScan     = in  Bits(6 bits)
     val keyboardResponse = out Bits(2 bits)
 
+    // Key state outputs (slow-changing, safe for CDC to Atari domain)
+    val keyScanCode = out Bits(6 bits)
+    val keyPressed  = out Bool()
+    val keyShift    = out Bool()
+    val keyCtrl     = out Bool()
+    val keyBreak    = out Bool()
+
     // Console keys (active high: 1 = pressed)
     val consolOption = out Bool()
     val consolSelect = out Bool()
@@ -91,7 +98,7 @@ class AtariCtrl extends Component with HasBusIo {
   val osdEnableReg   = RegInit(True)                       // OSD on at boot
   val coldResetReg   = RegInit(False)                      // pulse
   val cartSelectReg  = Reg(Bits(6 bits)) init 0            // no cartridge
-  val configReg      = Reg(Bits(8 bits)) init B"00000011"  // PAL, ramSelect=001 (64K RAM), XL/XE mode
+  val configReg      = Reg(Bits(8 bits)) init B"01100111"  // PAL, ramSelect=011 (48K), atari800mode, hiresEna — matches AtariSupervisor
 
   // Paddle pairs packed: [15:8]=odd, [7:0]=even
   val paddlePair0Reg = Reg(Bits(16 bits)) init 0  // paddle0, paddle1
@@ -204,6 +211,13 @@ class AtariCtrl extends Component with HasBusIo {
     keyResponse(1) := False  // control
   }
   io.keyboardResponse := keyResponse
+
+  // Key state outputs for CDC (these change only on JOP writes, very slow)
+  io.keyScanCode := keyReg(5 downto 0)
+  io.keyPressed  := keyReg(8)
+  io.keyShift    := keyReg(9)
+  io.keyCtrl     := keyReg(10)
+  io.keyBreak    := keyReg(11)
 
   // Cart slot outputs from packed register
   io.cartSlotAddr  := cartSlotReg(12 downto 0)

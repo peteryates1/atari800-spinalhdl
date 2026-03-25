@@ -7,7 +7,7 @@ import spinal.lib._
 // When input is stable for 2^stableBits cycles, output updates.
 // At 56.67 MHz with stableBits=20: 2^20 / 56.67e6 = ~18.4 ms.
 // Default output: all-ones (pull-up, nothing pressed for active-low inputs).
-class Debounce(width: Int, stableBits: Int = 20) extends Component {
+class Debounce(width: Int, stableBits: Int = 16) extends Component {
   val io = new Bundle {
     val raw       = in  Bits(width bits)
     val debounced = out Bits(width bits)

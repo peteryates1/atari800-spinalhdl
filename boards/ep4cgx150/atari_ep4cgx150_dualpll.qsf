@@ -1,21 +1,27 @@
-# Quartus project settings for Atari 800 + JOP on QMTECH EP4CGX150 + DB_FPGA
+# Quartus project settings for Atari 800 + JOP dual-PLL on QMTECH EP4CGX150 + DB_FPGA
 # Target: EP4CGX150DF27I7 (Cyclone IV GX, 149,760 LEs)
-# BRAM-only: no SDRAM connections
+# Dual PLL: dram_pll (80 MHz for JOP), atari_pll (56.67 MHz for Atari)
 
 set_global_assignment -name DEVICE EP4CGX150DF27I7
-set_global_assignment -name TOP_LEVEL_ENTITY ep4cgx150_jop_top
+set_global_assignment -name TOP_LEVEL_ENTITY ep4cgx150_dualpll_top
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
 
 # Source files
-set_global_assignment -name SYSTEMVERILOG_FILE ep4cgx150_jop_top.sv
-set_global_assignment -name SYSTEMVERILOG_FILE ../../generated/Atari800Ep4cgx150JopTop.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ep4cgx150_dualpll_top.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../generated/Atari800Ep4cgx150DualPllTop.sv
+set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/qmtech-ep4cgx150-sdram/dram_pll.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE atari_pll.sv
 
-# Search path for SpinalHDL .bin init files
+# Altera LPM ROM/RAM primitives (used by AlteraLpm memory style)
+set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/ip/altera_lpm/arom.vhd
+set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/ip/altera_lpm/aram.vhd
+
+# Search paths: SpinalHDL .bin files + .mif files for AlteraLpm
 set_global_assignment -name SEARCH_PATH ../../generated
+set_global_assignment -name SEARCH_PATH ../../jop-spinalhdl/asm/generated/serial
 
 # Timing constraints
-set_global_assignment -name SDC_FILE atari_ep4cgx150_jop.sdc
+set_global_assignment -name SDC_FILE atari_ep4cgx150_dualpll.sdc
 
 # Compiler settings
 set_global_assignment -name FAMILY "Cyclone IV GX"
@@ -57,8 +63,9 @@ set_location_assignment PIN_AD20  -to uart_tx
 set_location_assignment PIN_AE21  -to uart_rx
 
 # ---------------------------------------------------------------------------
-# CH376T SPI — PMOD J11 (USB keyboard + SD card host)
-# Wiring: SCK=J11:10, MOSI=J11:3, MISO=J11:8, CS=J11:2, INT=J11:9, RST=J11:4
+# CH376S SPI — PMOD J11
+# Wiring: sck->j11.10(AF22), sdi->j11.3(AE23), sdo->j11.8(AD21),
+#          scs->j11.2(AC21), int#->j11.9(AF23), rsti->j11.4(AE22)
 # ---------------------------------------------------------------------------
 set_location_assignment PIN_AF22  -to ch376_sck
 set_location_assignment PIN_AE23  -to ch376_mosi
@@ -69,14 +76,19 @@ set_location_assignment PIN_AE22  -to ch376_rst
 
 # ---------------------------------------------------------------------------
 # Joystick 1 — PMOD J10 (active low, DB-9)
-# J10: pin1=AF20 (up), pin2=AE19 (down), pin3=AC19 (left),
-#      pin4=AE18 (right), pin7=AF21 (fire)
+# J10: pin1=AF20, pin2=AE19, pin3=AC19, pin4=AE18,
+#       pin7=AF21, pin8=AF19, pin9=AD19, pin10=AF18
 # ---------------------------------------------------------------------------
 set_location_assignment PIN_AF20  -to joy1_up
 set_location_assignment PIN_AE19  -to joy1_down
 set_location_assignment PIN_AC19  -to joy1_left
 set_location_assignment PIN_AE18  -to joy1_right
 set_location_assignment PIN_AF21  -to joy1_fire
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to joy1_up
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to joy1_down
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to joy1_left
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to joy1_right
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to joy1_fire
 
 # ---------------------------------------------------------------------------
 # LEDs (core board, active high)

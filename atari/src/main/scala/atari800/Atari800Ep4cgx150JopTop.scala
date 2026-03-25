@@ -117,7 +117,13 @@ class Atari800Ep4cgx150JopTop extends Component {
     // =====================================================================
     // JOP Soft-Core
     // =====================================================================
-    val jopCore   = JopCore(config = jopConfig, romInit = Some(JopCoreForAtari.hwRomInit), vgaCd = Some(vgaTextDomain))
+    val jopCore   = JopCore(
+      config  = jopConfig,
+      romInit = Some(JopCoreForAtari.hwRomInit),
+      ramInit = Some(JopCoreForAtari.simRamInit),
+      jbcInit = Some(Seq.fill(2048)(BigInt(0))),
+      vgaCd   = Some(vgaTextDomain)
+    )
 
     jopCore.io.syncIn.halted := False
     jopCore.io.syncIn.s_out  := False
@@ -173,7 +179,7 @@ class Atari800Ep4cgx150JopTop extends Component {
     // Joystick 1: debounce hardware pins, AND with JOP software override
     // =====================================================================
     val joy1Debounce = new Debounce(width = 5)
-    joy1Debounce.io.raw := io.joy1Up ## io.joy1Down ## io.joy1Left ## io.joy1Right ## io.joy1Fire
+    joy1Debounce.io.raw := io.joy1Fire ## io.joy1Right ## io.joy1Left ## io.joy1Down ## io.joy1Up
     atariCore.io.JOY1_n := joy1Debounce.io.debounced & atariPin[Bits]("joy1_n")
 
     // Joystick 2-4: no hardware pins — software-only via JOP AtariCtrl
@@ -284,11 +290,12 @@ class Atari800Ep4cgx150JopTop extends Component {
     io.vga_vs := vgaMux.io.vsync
 
     // =====================================================================
-    // LEDs
+    // LEDs — JOP diagnostic
     // =====================================================================
-    // Diagnostic: LED0 = PLL locked, LED1 = NOT memBusy (on when pipeline running freely)
-    io.led(0) := pllLocked
-    io.led(1) := ~jopCore.io.memBusy   // OFF = pipeline stalled waiting for memory
+    // LED0: JOP watchdog bit 0 (toggles if JOP microcode runs and reaches Java)
+    // LED1: JOP memBusy inverted (ON = pipeline running freely)
+    io.led(0) := jopCore.io.wd(0)
+    io.led(1) := ~jopCore.io.memBusy
   }
 }
 
