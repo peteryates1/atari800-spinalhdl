@@ -6,19 +6,23 @@ import jop.io._
 import jop.memory.JopMemoryConfig
 import jop.pipeline.JumpTableInitData
 import jop.utils.JopFileLoader
+import jop.memory.SdramDeviceInfo
 
 /**
  * JOP configuration for dual-PLL Atari+JOP build.
  *
  * JOP runs at 80 MHz (dram_pll c1) with 2M baud UART.
- * 256KB BRAM for serial boot (AtariSupervisor.jop is ~45 KB).
+ * 32 MB SDRAM (W9825G6JH6) via BmbSdramCtrl32 (Altera IP).
  * AlteraLpm memory style required for Cyclone IV.
  */
 object JopCoreForAtariDualPll {
 
+  val memDevice = MemoryDevice.W9825G6JH6
+
   def config: JopCoreConfig = JopCoreConfig(
     memConfig = JopMemoryConfig(
-      mainMemSize  = 128 * 1024,
+      addressWidth = 24,
+      mainMemSize  = 32 * 1024 * 1024,
       burstLen     = 0
     ),
     useDspMul = true,
@@ -41,7 +45,7 @@ object JopCoreForAtariDualPll {
       ))
     ),
     clkFreq = HertzNumber(80000000),
-    memoryStyle = Some(MemoryStyle.AlteraLpm),
+    memoryStyle = Some(MemoryStyle.AlteraLpm("../../jop-spinalhdl/asm/generated/serial")),
     useSyncRam = Some(true)
   )
 

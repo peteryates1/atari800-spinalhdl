@@ -16,6 +16,10 @@ set_global_assignment -name SYSTEMVERILOG_FILE atari_pll.sv
 set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/ip/altera_lpm/arom.vhd
 set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/ip/altera_lpm/aram.vhd
 
+# Altera SDRAM controller IP (tristate-capable, used by BmbSdramCtrl32)
+set_global_assignment -name VERILOG_FILE ../../jop-spinalhdl/fpga/ip/altera_sdram_tri_controller/altera_sdram_tri_controller.v
+set_global_assignment -name VERILOG_FILE ../../jop-spinalhdl/fpga/ip/altera_sdram_tri_controller/efifo_module.v
+
 # Search paths: SpinalHDL .bin files + .mif files for AlteraLpm
 set_global_assignment -name SEARCH_PATH ../../generated
 set_global_assignment -name SEARCH_PATH ../../jop-spinalhdl/asm/generated/serial
@@ -89,6 +93,49 @@ set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to joy1_down
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to joy1_left
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to joy1_right
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to joy1_fire
+
+# ---------------------------------------------------------------------------
+# SDRAM — W9825G6JH6 (32 MB, 16-bit) on QMTECH EP4CGX150 core board
+# ---------------------------------------------------------------------------
+set_location_assignment PIN_E22 -to sdram_clk
+set_location_assignment PIN_H26 -to sdram_CSn
+set_location_assignment PIN_K24 -to sdram_CKE
+set_location_assignment PIN_G25 -to sdram_WEn
+set_location_assignment PIN_H25 -to sdram_RASn
+set_location_assignment PIN_G26 -to sdram_CASn
+set_location_assignment PIN_J25 -to "sdram_BA[0]"
+set_location_assignment PIN_J26 -to "sdram_BA[1]"
+set_location_assignment PIN_L25 -to "sdram_ADDR[0]"
+set_location_assignment PIN_L26 -to "sdram_ADDR[1]"
+set_location_assignment PIN_M25 -to "sdram_ADDR[2]"
+set_location_assignment PIN_M26 -to "sdram_ADDR[3]"
+set_location_assignment PIN_N22 -to "sdram_ADDR[4]"
+set_location_assignment PIN_N23 -to "sdram_ADDR[5]"
+set_location_assignment PIN_N24 -to "sdram_ADDR[6]"
+set_location_assignment PIN_M22 -to "sdram_ADDR[7]"
+set_location_assignment PIN_M24 -to "sdram_ADDR[8]"
+set_location_assignment PIN_L23 -to "sdram_ADDR[9]"
+set_location_assignment PIN_K26 -to "sdram_ADDR[10]"
+set_location_assignment PIN_L24 -to "sdram_ADDR[11]"
+set_location_assignment PIN_K23 -to "sdram_ADDR[12]"
+set_location_assignment PIN_F26 -to "sdram_DQM[0]"
+set_location_assignment PIN_H24 -to "sdram_DQM[1]"
+set_location_assignment PIN_B25 -to "sdram_DQ[0]"
+set_location_assignment PIN_B26 -to "sdram_DQ[1]"
+set_location_assignment PIN_C25 -to "sdram_DQ[2]"
+set_location_assignment PIN_C26 -to "sdram_DQ[3]"
+set_location_assignment PIN_D25 -to "sdram_DQ[4]"
+set_location_assignment PIN_D26 -to "sdram_DQ[5]"
+set_location_assignment PIN_E25 -to "sdram_DQ[6]"
+set_location_assignment PIN_E26 -to "sdram_DQ[7]"
+set_location_assignment PIN_H23 -to "sdram_DQ[8]"
+set_location_assignment PIN_G24 -to "sdram_DQ[9]"
+set_location_assignment PIN_G22 -to "sdram_DQ[10]"
+set_location_assignment PIN_F24 -to "sdram_DQ[11]"
+set_location_assignment PIN_F23 -to "sdram_DQ[12]"
+set_location_assignment PIN_E24 -to "sdram_DQ[13]"
+set_location_assignment PIN_D24 -to "sdram_DQ[14]"
+set_location_assignment PIN_C24 -to "sdram_DQ[15]"
 
 # ---------------------------------------------------------------------------
 # LEDs (core board, active high)

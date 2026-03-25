@@ -23,8 +23,10 @@ See `boards/ep4cgx150/`.
 ### Dual-PLL build (EP4CGX150)
 
 JOP supervisor at 80 MHz + Atari core at 56.67 MHz using two independent PLLs
-with clock domain crossing. JOP handles USB keyboard (CH376S via SPI),
-serial keyboard relay, joystick input, console keys, and cold reset.
+with clock domain crossing. JOP has its own 32 MB SDRAM (W9825G6JH6) via
+BmbSdramCtrl32; Atari runs BRAM-only (48K internal RAM + OS/cartridge ROMs).
+JOP handles USB keyboard (CH376S via SPI), serial keyboard relay, joystick
+input, console keys, and cold reset.
 
 - **PMOD J10**: Joystick 1 (active low, directly from DB-9 connector)
 - **PMOD J11**: CH376S SPI module (USB keyboard + SD card host)
@@ -239,7 +241,9 @@ mode 2 (ANTIC's 40-column text mode). Fix: `Gtia.scala` lines 611-612.
 ## Resource Utilisation
 
 OS and cartridge ROMs are loaded from binary `.rom` files at elaboration time
-into block RAM. All targets meet timing at 56.67 MHz.
+into block RAM (bare-metal builds). In JOP supervisor builds, cartridge and
+BASIC ROMs can be loaded at runtime from SD card into internal RAM.
+All targets meet timing at their respective clock frequencies.
 
 ### Cyclone IV GX — EP4CGX150DF27I7 (QMTECH EP4CGX150 + DB_FPGA, **hardware verified**)
 
@@ -250,6 +254,16 @@ Bare-metal bring-up top (no JOP). Atari 800 OS + 16K internal RAM + Star Raiders
 | Logic Elements | 3,604 | 149,760 | 2% |
 | Memory bits | 313,678 | 6,635,520 | 5% |
 | PLLs | 1 | 8 | 13% |
+
+Dual-PLL build (Atari + JOP + SDRAM, **hardware verified**).
+JOP at 80 MHz with 32 MB SDRAM, Atari at 56.67 MHz BRAM-only.
+
+| Resource | Used | Available | % |
+|---|---|---|---|
+| Logic Elements | 13,697 | 149,760 | 9% |
+| Memory bits | 659,600 | 6,635,520 | 10% |
+| DSP 9-bit | 8 | 720 | 1% |
+| PLLs | 2 | 8 | 25% |
 
 ### Cyclone 10 LP — 10CL025YU256C8G (custom board / AC608)
 

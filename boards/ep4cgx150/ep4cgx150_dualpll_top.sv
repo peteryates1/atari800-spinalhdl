@@ -16,7 +16,19 @@ module ep4cgx150_dualpll_top (
     output wire        uart_tx,         // PIN_AD20
     input  wire        uart_rx,         // PIN_AE21
 
-    // CH376T SPI module — PMOD J11
+    // SDRAM — W9825G6JH6 (32 MB, 16-bit)
+    output wire [12:0] sdram_ADDR,
+    output wire [1:0]  sdram_BA,
+    inout  wire [15:0] sdram_DQ,
+    output wire [1:0]  sdram_DQM,
+    output wire        sdram_CKE,
+    output wire        sdram_CSn,
+    output wire        sdram_RASn,
+    output wire        sdram_CASn,
+    output wire        sdram_WEn,
+    output wire        sdram_clk,
+
+    // CH376S SPI module — PMOD J11
     output wire        ch376_sck,       // J11 pin 10 (AF22)
     output wire        ch376_mosi,      // J11 pin 3  (AE23)
     input  wire        ch376_miso,      // J11 pin 8  (AD21)
@@ -46,6 +58,17 @@ module ep4cgx150_dualpll_top (
 
         .io_uartTx       (uart_tx),
         .io_uartRx       (uart_rx),
+
+        .io_sdram_ADDR   (sdram_ADDR),
+        .io_sdram_BA     (sdram_BA),
+        .io_sdram_DQ     (sdram_DQ),
+        .io_sdram_DQM    (sdram_DQM),
+        .io_sdram_CKE    (sdram_CKE),
+        .io_sdram_CSn    (sdram_CSn),
+        .io_sdram_RASn   (sdram_RASn),
+        .io_sdram_CASn   (sdram_CASn),
+        .io_sdram_WEn    (sdram_WEn),
+        .io_sdram_clk    (sdram_clk),
 
         .io_ch376Sck     (ch376_sck),
         .io_ch376Mosi    (ch376_mosi),

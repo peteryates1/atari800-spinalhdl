@@ -3,15 +3,18 @@ package atari800
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.bmb._
+import spinal.lib.memory.sdram.sdr.SdramInterface
 import jop.system._
 import jop.system.memory.MemoryControllerFactory
+import jop.config.MemoryDevice
+import jop.memory.{BmbSdramCtrl32, SdramDeviceInfo}
 import jop.io._
 
 // Atari 800 + JOP top for QMTECH EP4CGX150 + DB_FPGA daughter board.
 // Dual-PLL design: JOP at 80 MHz (dram_pll), Atari at 56.67 MHz (atari_pll).
 //
-// JOP: 80 MHz, 256KB BRAM, serial boot via UART at 2M baud.
-//      Devices: uart, sdSpi (CH376T), vgaText (25 MHz pixel), atariCtrl.
+// JOP: 80 MHz, 32 MB SDRAM (W9825G6JH6), serial boot via UART at 2M baud.
+//      Devices: uart, sdSpi (CH376S), vgaText (25 MHz pixel), atariCtrl.
 // Atari: 56.67 MHz, 48K internal BRAM, Star Raiders ROM.
 //
 // CDC: AtariCtrl signals cross between JOP (80 MHz) and Atari (56.67 MHz)
@@ -40,6 +43,10 @@ class Atari800Ep4cgx150DualPllTop extends Component {
     val ch376Cs   = out Bool()
     val ch376Int  = in  Bool()
     val ch376Rst  = out Bool()
+
+    // SDRAM — W9825G6JH6 (32 MB, 16-bit)
+    val sdram = master(SdramInterface(SdramDeviceInfo.layoutFor(MemoryDevice.W9825G6JH6)))
+    val sdram_clk = out Bool()
 
     // Joystick 1 — PMOD J10 pins 1-4,7 (active low, DB-9)
     val joy1Up    = in Bool()
@@ -114,6 +121,7 @@ class Atari800Ep4cgx150DualPllTop extends Component {
   val jopArea = new ClockingArea(jopDomain) {
 
     val jopConfig = JopCoreForAtariDualPll.config
+    val memDevice = JopCoreForAtariDualPll.memDevice
 
     val cluster = JopCluster(
       cpuCnt     = 1,
@@ -124,12 +132,18 @@ class Atari800Ep4cgx150DualPllTop extends Component {
       vgaCd      = Some(vgaTextDomain)
     )
 
-    // JOP BRAM — 256KB (serial boot fills via UART)
-    val bramCtrl = MemoryControllerFactory.createBram(
+    // JOP SDRAM — W9825G6JH6 32 MB via Altera SDRAM controller
+    val sdramCtrl = BmbSdramCtrl32(
       bmbParameter = cluster.bmbParameter,
-      memSize      = jopConfig.memConfig.mainMemSize.toInt
+      layout       = SdramDeviceInfo.layoutFor(memDevice),
+      timing       = SdramDeviceInfo.timingFor(memDevice),
+      CAS          = memDevice.casLatency,
+      useAlteraCtrl = true,
+      clockFreqHz  = 80000000L
     )
-    bramCtrl.ram.io.bus <> cluster.io.bmb
+    sdramCtrl.io.bmb <> cluster.io.bmb
+    io.sdram <> sdramCtrl.io.sdram
+    io.sdram_clk := jopPll.io.c2  // 80 MHz, -3ns phase shift for SDRAM
 
     // UART
     io.uartTx := cluster.devicePin[Bool]("uart", "txd")
@@ -358,8 +372,9 @@ class Atari800Ep4cgx150DualPllTop extends Component {
 }
 
 object Atari800Ep4cgx150DualPllSv extends App {
+  import spinal.lib.io.InOutWrapper
   SpinalConfig(
     mode            = SystemVerilog,
     targetDirectory = "generated"
-  ).generate(new Atari800Ep4cgx150DualPllTop)
+  ).generate(InOutWrapper(new Atari800Ep4cgx150DualPllTop))
 }
