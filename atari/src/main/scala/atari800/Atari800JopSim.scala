@@ -317,7 +317,7 @@ class Atari800JopSim(boardConfig: AtariBoardConfig = Atari800JopSim.boardConfig)
   // =================================================================
   // VGA Overlay Mux — Atari video / JOP OSD text
   // =================================================================
-  val vgaMux = new VgaOverlayMux
+  val vgaMux = new VgaFullScreenMux
   vgaMux.io.osdEnable := atariPin[Bool]("osdEnable")
 
   // Atari scandoubler -> mux

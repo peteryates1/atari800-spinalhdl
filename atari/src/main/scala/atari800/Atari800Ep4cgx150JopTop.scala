@@ -269,7 +269,7 @@ class Atari800Ep4cgx150JopTop extends Component {
     // =====================================================================
     // VGA Overlay Mux — Atari video / JOP OSD text
     // =====================================================================
-    val vgaMux = new VgaOverlayMux
+    val vgaMux = new VgaFullScreenMux
     vgaMux.io.osdEnable  := atariPin[Bool]("osdEnable")
     vgaMux.io.atariR     := scandoubler.io.R
     vgaMux.io.atariG     := scandoubler.io.G

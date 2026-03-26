@@ -13,11 +13,12 @@ import jop.io._
 // Atari 800 + JOP top for QMTECH EP4CGX150 + DB_FPGA daughter board.
 // Single-PLL design: JOP and Atari both at 56.67 MHz (atari_pll).
 //
-// JOP: 56.67 MHz, 32 MB SDRAM (W9825G6JH6), serial boot via UART at 2M baud.
-//      Devices: uart, sdSpi (CH376S), vgaText (25 MHz pixel), atariCtrl.
+// JOP: 56.67 MHz, 32 MB SDRAM (W9825G6JH6), serial boot via UART at 500k baud.
+//      Devices: uart, sdSpi (CH376S), vgaTextOverlay, atariCtrl.
 // Atari: 56.67 MHz, 48K internal BRAM, Star Raiders ROM.
 //
 // Single clock domain: no CDC needed between JOP and Atari.
+// VGA text overlay runs in sys clock using scandoubler timing — no 25 MHz pixel clock.
 class Atari800Ep4cgx150DualPllTop extends Component {
   val io = new Bundle {
     // 50 MHz oscillator (PIN_B14)
@@ -59,15 +60,15 @@ class Atari800Ep4cgx150DualPllTop extends Component {
 
   // =========================================================================
   // PLL: AtariPll — 50 MHz -> 56.67 MHz (×17/÷15) for both JOP and Atari
-  // c0=56.67 MHz, c1=56.67 MHz (-3ns for SDRAM), c3=25 MHz (VGA text)
+  // c0=56.67 MHz, c1=56.67 MHz (-3ns for SDRAM)
+  // (c3=25 MHz available but unused — overlay runs at sys clock)
   // =========================================================================
   val pll = new AtariPll
   pll.io.areset := False
   pll.io.inclk0 := io.clk_in
 
-  val clkSys     = pll.io.c0      // 56.67 MHz — main clock for JOP + Atari
-  val clkVgaTxt  = pll.io.c3      // 25 MHz (VGA text pixel clock)
-  val pllLocked  = pll.io.locked
+  val clkSys    = pll.io.c0      // 56.67 MHz — main clock for JOP + Atari
+  val pllLocked = pll.io.locked
 
   io.sdram_clk := pll.io.c1       // 56.67 MHz, -3ns phase shift for SDRAM
 
@@ -95,13 +96,6 @@ class Atari800Ep4cgx150DualPllTop extends Component {
     config    = ClockDomainConfig(resetKind = SYNC, resetActiveLevel = LOW)
   )
 
-  // VGA text pixel — 25 MHz
-  val vgaTextDomain = ClockDomain(
-    clock     = clkVgaTxt,
-    reset     = sysReset,
-    config    = ClockDomainConfig(resetKind = SYNC, resetActiveLevel = HIGH)
-  )
-
   // =========================================================================
   // JOP — 56.67 MHz domain
   // =========================================================================
@@ -116,7 +110,7 @@ class Atari800Ep4cgx150DualPllTop extends Component {
       romInit    = Some(JopCoreForAtariDualPll.hwRomInit),
       ramInit    = Some(JopCoreForAtariDualPll.simRamInit),
       jbcInit    = Some(Seq.fill(2048)(BigInt(0))),
-      vgaCd      = Some(vgaTextDomain)
+      vgaCd      = None
     )
 
     // JOP SDRAM — W9825G6JH6 32 MB via Altera SDRAM controller
@@ -285,27 +279,25 @@ class Atari800Ep4cgx150DualPllTop extends Component {
     scandoubler.io.csync_in           := atariCore.io.VIDEO_CS
 
     // =====================================================================
-    // VGA Overlay Mux — Atari video / JOP OSD text
-    // VgaText runs at 25 MHz — CDC needed to sys domain (56.67 MHz)
+    // VGA Text Overlay — per-pixel compositing (same clock domain, no CDC)
     // =====================================================================
-    val jopVgaR     = BufferCC(jopArea.cluster.devicePin[Bits]("vgaText", "vgaR"))
-    val jopVgaG     = BufferCC(jopArea.cluster.devicePin[Bits]("vgaText", "vgaG"))
-    val jopVgaB     = BufferCC(jopArea.cluster.devicePin[Bits]("vgaText", "vgaB"))
-    val jopVgaHsync = BufferCC(jopArea.cluster.devicePin[Bool]("vgaText", "vgaHsync"), init = True)
-    val jopVgaVsync = BufferCC(jopArea.cluster.devicePin[Bool]("vgaText", "vgaVsync"), init = True)
 
+    // Feed scandoubler timing to overlay device
+    jopArea.cluster.devicePin[Bool]("vgaText", "doubledEnable") := doubledEnable
+    jopArea.cluster.devicePin[Bool]("vgaText", "hsyncIn")       := atariCore.io.VIDEO_HS
+    jopArea.cluster.devicePin[Bool]("vgaText", "vsyncIn")       := atariCore.io.VIDEO_VS
+
+    // Per-pixel compositor: overlay foreground replaces Atari video
     val vgaMux = new VgaOverlayMux
-    vgaMux.io.osdEnable  := False  // TODO: restore osdEnable once Atari video confirmed
     vgaMux.io.atariR     := scandoubler.io.R
     vgaMux.io.atariG     := scandoubler.io.G
     vgaMux.io.atariB     := scandoubler.io.B
     vgaMux.io.atariHsync := scandoubler.io.HSYNC
     vgaMux.io.atariVsync := scandoubler.io.VSYNC
-    vgaMux.io.jopR       := jopVgaR
-    vgaMux.io.jopG       := jopVgaG
-    vgaMux.io.jopB       := jopVgaB
-    vgaMux.io.jopHsync   := jopVgaHsync
-    vgaMux.io.jopVsync   := jopVgaVsync
+    vgaMux.io.overlayR      := jopArea.cluster.devicePin[Bits]("vgaText", "overlayR")
+    vgaMux.io.overlayG      := jopArea.cluster.devicePin[Bits]("vgaText", "overlayG")
+    vgaMux.io.overlayB      := jopArea.cluster.devicePin[Bits]("vgaText", "overlayB")
+    vgaMux.io.overlayActive := jopArea.cluster.devicePin[Bool]("vgaText", "overlayActive")
 
     // DB_FPGA VGA DAC: 5R 6G 5B (top bits of 8-bit channels)
     io.vga_r  := vgaMux.io.r(7 downto 3)

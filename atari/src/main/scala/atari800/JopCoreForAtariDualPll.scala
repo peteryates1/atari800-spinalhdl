@@ -32,7 +32,18 @@ object JopCoreForAtariDualPll {
     devices = Map(
       "uart"      -> DeviceInstance(DeviceType.Uart, params = Map("baudRate" -> 500000)),
       "sdSpi"     -> DeviceInstance(DeviceType.SdSpi, params = Map("clkDivInit" -> 199)),
-      "vgaText"   -> DeviceInstance(DeviceType.VgaText),
+      "vgaText"   -> DeviceInstance(DeviceType.Custom(
+        key = "vgatext",
+        addrBits = 4,
+        interruptCount = 1,
+        registerNames = Seq(
+          (0, "STATUS_CTRL"), (1, "CURSOR"), (2, "WRITE_CHAR_ATTR"),
+          (3, "DEFAULT_ATTR"), (4, "PALETTE"), (5, "COLS"), (6, "ROWS"),
+          (7, "DIRECT_WRITE"), (8, "CLEAR"), (9, "SCROLL"),
+          (10, "H_TEXT_START"), (11, "V_TEXT_START")
+        ),
+        factory = (_, _, _) => new VgaTextOverlayDevice
+      )),
       "atariCtrl" -> DeviceInstance(DeviceType.Custom(
         key = "atariCtrl",
         addrBits = 4,

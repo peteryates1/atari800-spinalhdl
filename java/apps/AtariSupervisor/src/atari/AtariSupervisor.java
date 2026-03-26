@@ -3,6 +3,7 @@ package atari;
 import com.jopdesign.sys.Const;
 import com.jopdesign.sys.JVMHelp;
 import com.jopdesign.sys.Native;
+import com.jopdesign.hw.VgaText;
 
 /**
  * Atari 800 supervisor running on JOP.
@@ -146,12 +147,23 @@ public class AtariSupervisor {
 		// --- Initialize Atari core ---
 		initAtari();
 
+		// --- Initialize VGA text overlay ---
+		VgaText vga = VgaText.getInstance();
+		vga.clear(VgaText.attr(VgaText.WHITE, VgaText.BLACK));
+		vga.setCursor(0, 0);
+		vga.writeString("Atari Supervisor", VgaText.attr(VgaText.YELLOW, VgaText.BLACK));
+		vga.enable();
+
 		// --- Initialize CH376T ---
 		boolean ch376ok = initCH376T();
 		if (ch376ok) {
 			JVMHelp.wr("CH376T ready\n");
+			vga.setCursor(0, 1);
+			vga.writeString("CH376T ready", VgaText.attr(VgaText.LIGHT_GREEN, VgaText.BLACK));
 		} else {
 			JVMHelp.wr("CH376T init failed\n");
+			vga.setCursor(0, 1);
+			vga.writeString("CH376T FAIL", VgaText.attr(VgaText.LIGHT_RED, VgaText.BLACK));
 		}
 
 		JVMHelp.wr("Serial KB ready\n");
