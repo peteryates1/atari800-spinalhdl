@@ -213,51 +213,62 @@ public class AtariSupervisor {
 			JVMHelp.wr("/4\n");
 		}
 
-		// Read ATARI_STATUS to check holdReset state
-		int status = Native.rd(ATARI_STATUS);
-		JVMHelp.wr("Status reg: ");
-		wrHex(status & 0xFF);
-		JVMHelp.wr("\n");
+		// --- Load cartridge ROM from SD card ---
+		int cartMode = CART_MODE_OFF;  // default: use BRAM cart (Star Raiders 8K)
+		try {
+			JVMHelp.wr("SD init...\n");
+			SdSpiBlockDevice sd = new SdSpiBlockDevice();
+			if (!sd.init()) {
+				JVMHelp.wr("SD init fail\n");
+				throw new Exception("sd init");
+			}
+			Fat32FileSystem fs = new Fat32FileSystem(sd);
+			if (!fs.mount(0)) {
+				JVMHelp.wr("FAT32 mount fail\n");
+				throw new Exception("mount");
+			}
+			JVMHelp.wr("FAT32 OK\n");
 
-		// Release Atari from reset: clear holdReset (bit 6), keep OSD on (bit 0)
-		Native.wr(CART_MODE_OFF, ATARI_CART_SEL);
+			// Debug: list root directory
+			int rootCluster = fs.getRootCluster();
+			JVMHelp.wr("Root cluster: ");
+			wrDec(rootCluster);
+			JVMHelp.wr("\n");
+			DirEntry[] rootEntries = fs.listDir(rootCluster);
+			if (rootEntries != null) {
+				JVMHelp.wr("Root: ");
+				wrDec(rootEntries.length);
+				JVMHelp.wr(" entries\n");
+				for (int i = 0; i < rootEntries.length; i++) {
+					if (rootEntries[i] == null) continue;
+					String n = rootEntries[i].getName();
+					if (n != null) {
+						JVMHelp.wr("  ");
+						JVMHelp.wr(n);
+						if (rootEntries[i].isDirectory()) JVMHelp.wr("/");
+						JVMHelp.wr("\n");
+					}
+				}
+			} else {
+				JVMHelp.wr("Root listing null\n");
+			}
+
+			if (loadCartRom(fs, vga)) {
+				cartMode = loadedCartMode;
+				JVMHelp.wr("Cart mode: ");
+				wrDec(cartMode);
+				JVMHelp.wr("\n");
+			} else {
+				JVMHelp.wr("No SD cart, using BRAM\n");
+			}
+		} catch (Exception e) {
+			JVMHelp.wr("SD failed, using BRAM\n");
+		}
+
+		// Release Atari from reset
+		Native.wr(cartMode, ATARI_CART_SEL);
 		Native.wr(0x01, ATARI_STATUS);
-		// Use single-char writes only — no string refs (avoid SDRAM method cache)
-		JVMHelp.wr('R');
-		JVMHelp.wr('E');
-		JVMHelp.wr('L');
-		JVMHelp.wr('\n');
-
-		// Wait a bit for Atari to start hammering SDRAM
-		delay(100000);  // 100ms
-
-		// Test: can JOP still read SDRAM while Atari is active?
-		JVMHelp.wr('T');  // "T" = starting test
-		int testVal = Native.rdMem(0x200000);  // read from Atari SDRAM region
-		wrHex((testVal >> 24) & 0xFF);
-		wrHex((testVal >> 16) & 0xFF);
-		wrHex((testVal >> 8) & 0xFF);
-		wrHex(testVal & 0xFF);
-		JVMHelp.wr('\n');
-
-		// Test: read from JOP's own region (word addr 0)
-		JVMHelp.wr('J');
-		testVal = Native.rdMem(0);
-		wrHex((testVal >> 24) & 0xFF);
-		wrHex((testVal >> 16) & 0xFF);
-		wrHex((testVal >> 8) & 0xFF);
-		wrHex(testVal & 0xFF);
-		JVMHelp.wr('\n');
-
-		// Re-read status using I/O (no SDRAM)
-		status = Native.rd(ATARI_STATUS);
-		JVMHelp.wr('S');
-		wrHex(status & 0xFF);
-		JVMHelp.wr('\n');
-
-		JVMHelp.wr('O');  // "OK" — survived
-		JVMHelp.wr('K');
-		JVMHelp.wr('\n');
+		JVMHelp.wr("Atari released\n");
 
 		// --- Main loop ---
 		// Check UART inline every iteration (pure I/O, no SDRAM access).
@@ -319,8 +330,11 @@ public class AtariSupervisor {
 		DirEntry cartDir = fs.findFile(fs.getRootCluster(), "cartridge");
 		if (cartDir != null && cartDir.isDirectory()) {
 			JVMHelp.wr("Found cartridge/\n");
-			// Look for Star Raiders first, then fall back to first valid ROM
-			entry = fs.findFile(cartDir.getStartCluster(), "Star Raiders.rom");
+			// Look for Gyruss first, then Star Raiders, then first valid ROM
+			entry = fs.findFile(cartDir.getStartCluster(), "Gyruss.rom");
+			if (entry == null) {
+				entry = fs.findFile(cartDir.getStartCluster(), "Star Raiders.rom");
+			}
 			if (entry == null) {
 				entry = findFirstRom(fs, cartDir.getStartCluster());
 			}

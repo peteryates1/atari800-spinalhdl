@@ -32,6 +32,8 @@ module ep4cgx150_dualpll_top (
     output wire        sd_clk,          // J3:9  (B21)
     output wire        sd_cmd,          // J3:10 (A22) — MOSI
     input  wire        sd_dat0,         // J3:8  (A23) — MISO
+    output wire        sd_dat1,         // J3:7  (B23) — pull high in SPI mode
+    output wire        sd_dat2,         // J3:1  (B19) — pull high in SPI mode
     output wire        sd_dat3,         // J3:11 (C19) — CS
     input  wire        sd_cd,           // J3:6  (B22) — card detect
 
@@ -83,5 +85,9 @@ module ep4cgx150_dualpll_top (
 
         .io_led          (led)
     );
+
+    // SD DAT1/DAT2 driven high for SPI mode (not used by SdSpi controller)
+    assign sd_dat1 = 1'b1;
+    assign sd_dat2 = 1'b1;
 
 endmodule

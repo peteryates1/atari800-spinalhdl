@@ -70,9 +70,13 @@ set_location_assignment PIN_AE21  -to uart_rx
 set_location_assignment PIN_B21   -to sd_clk
 set_location_assignment PIN_A22   -to sd_cmd
 set_location_assignment PIN_A23   -to sd_dat0
+set_location_assignment PIN_B23   -to sd_dat1
+set_location_assignment PIN_B19   -to sd_dat2
 set_location_assignment PIN_C19   -to sd_dat3
 set_location_assignment PIN_B22   -to sd_cd
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat0
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat1
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat2
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_cd
 
 # ---------------------------------------------------------------------------
