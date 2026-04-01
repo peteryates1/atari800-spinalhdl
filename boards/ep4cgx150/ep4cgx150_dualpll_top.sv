@@ -1,6 +1,6 @@
-// Atari 800 + JOP dual-PLL top for QMTECH EP4CGX150 + DB_FPGA daughter board.
+// Atari 800 + JOP top for QMTECH EP4CGX150 + DB_FPGA daughter board.
 // Thin wrapper: maps SpinalHDL io_xxx port names to board signal names.
-// JOP at 80 MHz (dram_pll), Atari at 56.67 MHz (atari_pll).
+// Single PLL: JOP and Atari both at 56.67 MHz. Shared SDRAM.
 
 module ep4cgx150_dualpll_top (
     input  wire        clk_in,          // PIN_B14  50 MHz oscillator
@@ -28,13 +28,12 @@ module ep4cgx150_dualpll_top (
     output wire        sdram_WEn,
     output wire        sdram_clk,
 
-    // CH376S SPI module — PMOD J11
-    output wire        ch376_sck,       // J11 pin 10 (AF22)
-    output wire        ch376_mosi,      // J11 pin 3  (AE23)
-    input  wire        ch376_miso,      // J11 pin 8  (AD21)
-    output wire        ch376_cs,        // J11 pin 2  (AC21)
-    input  wire        ch376_int,       // J11 pin 9  (AF23)
-    output wire        ch376_rst,       // J11 pin 4  (AE22)
+    // SD Card — DB_FPGA onboard microSD slot (SPI mode)
+    output wire        sd_clk,          // J3:9  (B21)
+    output wire        sd_cmd,          // J3:10 (A22) — MOSI
+    input  wire        sd_dat0,         // J3:8  (A23) — MISO
+    output wire        sd_dat3,         // J3:11 (C19) — CS
+    input  wire        sd_cd,           // J3:6  (B22) — card detect
 
     // Joystick 1 — PMOD J10 (active low, DB-9)
     input  wire        joy1_up,         // J10 pin 1 (AF20)
@@ -59,23 +58,22 @@ module ep4cgx150_dualpll_top (
         .io_uartTx       (uart_tx),
         .io_uartRx       (uart_rx),
 
-        .io_sdram_ADDR   (sdram_ADDR),
-        .io_sdram_BA     (sdram_BA),
-        .io_sdram_DQ     (sdram_DQ),
-        .io_sdram_DQM    (sdram_DQM),
-        .io_sdram_CKE    (sdram_CKE),
-        .io_sdram_CSn    (sdram_CSn),
-        .io_sdram_RASn   (sdram_RASn),
-        .io_sdram_CASn   (sdram_CASn),
-        .io_sdram_WEn    (sdram_WEn),
-        .io_sdram_clk    (sdram_clk),
+        .io_sdramAddr    (sdram_ADDR),
+        .io_sdramBa      (sdram_BA),
+        .io_sdramDq      (sdram_DQ),
+        .io_sdramDqm     (sdram_DQM),
+        .io_sdramCke     (sdram_CKE),
+        .io_sdramCsN     (sdram_CSn),
+        .io_sdramRasN    (sdram_RASn),
+        .io_sdramCasN    (sdram_CASn),
+        .io_sdramWeN     (sdram_WEn),
+        .io_sdramClk     (sdram_clk),
 
-        .io_ch376Sck     (ch376_sck),
-        .io_ch376Mosi    (ch376_mosi),
-        .io_ch376Miso    (ch376_miso),
-        .io_ch376Cs      (ch376_cs),
-        .io_ch376Int     (ch376_int),
-        .io_ch376Rst     (ch376_rst),
+        .io_sdClk        (sd_clk),
+        .io_sdCmd        (sd_cmd),
+        .io_sdDat0       (sd_dat0),
+        .io_sdDat3       (sd_dat3),
+        .io_sdCd         (sd_cd),
 
         .io_joy1Up       (joy1_up),
         .io_joy1Down     (joy1_down),

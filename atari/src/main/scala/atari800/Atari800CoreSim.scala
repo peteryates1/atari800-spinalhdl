@@ -79,12 +79,12 @@ class Atari800CoreSim(cartridge_rom: String = "") extends Component {
     cycle_length  = 32,
     video_bits    = 8,
     palette       = 0,
-    internal_rom  = 3,
-    internal_ram  = 49152,
-    low_memory    = 0,
-    stereo        = 1,
-    covox         = 1,
-    cartridge_rom = cartridge_rom
+    internal_rom   = 3,        // Atari 800 OS (atarios2 + atariosb)
+    internal_ram   = 0,        // All RAM via SDRAM (testing sdramOnlyBank path)
+    low_memory     = 0,
+    stereo         = 1,
+    covox          = 1,
+    cartridge_rom  = cartridge_rom
   )
 
   // Video

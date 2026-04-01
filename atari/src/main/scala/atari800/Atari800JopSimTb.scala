@@ -45,7 +45,7 @@ object Atari800JopSimTb extends App {
     // Memory map: JOP at 0x000000, Atari at boardConfig.atariSdramBase
     // ---------------------------------------------------------------
     val boardConfig = Atari800JopSim.boardConfig
-    val jopFilePath = "java/apps/AtariApp/AtariApp.jop"
+    val jopFilePath = "java/apps/AtariSupervisor/AtariSupervisor.jop"
     val SDRAM_JOP_OFFSET = 0x000000  // JOP always at physical byte 0 (jvm.asm sim boot)
     try {
       val jopData = JopFileLoader.loadJopFile(jopFilePath)
@@ -359,45 +359,48 @@ object Atari800JopSimTb extends App {
       // (RAM test starts around cpuEN=210200, cyc=456600)
       // ---------------------------------------------------------------
       // Watch for writes to RAM address 0x0001 (boot flag) and 0x0006 (RAMTOP)
-      if (cycleCount >= 100 && cycleCount <= 5000000) {
-        val ramGri = dut.atariCore.internalromram1.ramInt.get
-        val we = ramGri.weRam.toBoolean
-        val addr = ramGri.memAddr.toInt
-        if (we && addr == 1) {
+      // Only when internal RAM exists (internal_ram > 0)
+      if (dut.atariCore.internalromram1.ramInt.isDefined) {
+        if (cycleCount >= 100 && cycleCount <= 5000000) {
+          val ramGri = dut.atariCore.internalromram1.ramInt.get
+          val we = ramGri.weRam.toBoolean
+          val addr = ramGri.memAddr.toInt
+          if (we && addr == 1) {
+            val din = ramGri.io.data.toInt & 0xFF
+            val pc = dut.atariCore.atari800xl.cpu6502.debugPc.toInt
+            val a = dut.atariCore.atari800xl.cpu6502.debugA.toInt
+            val y = dut.atariCore.atari800xl.cpu6502.debugY.toInt
+            println(f"  ** ZP01 WRITE: din=0x${din}%02X PC=0x${pc}%04X A=0x${a}%02X Y=0x${y}%02X cyc=$cycleCount%d cpuEN=$cpuEnCount%d")
+          }
+          if (we && addr == 6) {
+            val din = ramGri.io.data.toInt & 0xFF
+            val pc = dut.atariCore.atari800xl.cpu6502.debugPc.toInt
+            val a = dut.atariCore.atari800xl.cpu6502.debugA.toInt
+            val x = dut.atariCore.atari800xl.cpu6502.debugX.toInt
+            val y = dut.atariCore.atari800xl.cpu6502.debugY.toInt
+            println(f"  ** ZP06 WRITE (RAMTOP): din=0x${din}%02X PC=0x${pc}%04X A=0x${a}%02X X=0x${x}%02X Y=0x${y}%02X cyc=$cycleCount%d cpuEN=$cpuEnCount%d")
+          }
+          // Also watch $05 (pointer hi, shared with RAMTOP mechanism)
+          if (we && addr == 5) {
+            val din = ramGri.io.data.toInt & 0xFF
+            val pc = dut.atariCore.atari800xl.cpu6502.debugPc.toInt
+            if (cycleCount >= 300000 && cycleCount <= 500000)
+              println(f"  ** ZP05 WRITE: din=0x${din}%02X PC=0x${pc}%04X cyc=$cycleCount%d cpuEN=$cpuEnCount%d")
+          }
+        }
+        // Trace internal RAM during first RAM test iteration (STA $01 at cpuEN=210382)
+        if (cpuEnCount >= 210370 && cpuEnCount <= 210420) {
+          val ramGri = dut.atariCore.internalromram1.ramInt.get
+          val we = ramGri.weRam.toBoolean
+          val addr = ramGri.memAddr.toInt
           val din = ramGri.io.data.toInt & 0xFF
+          val qr = ramGri.qRam.toInt & 0xFF
+          val cpuEn = dut.atariCore.atari800xl.cpu6502.CPU_ENABLE.toBoolean
           val pc = dut.atariCore.atari800xl.cpu6502.debugPc.toInt
           val a = dut.atariCore.atari800xl.cpu6502.debugA.toInt
           val y = dut.atariCore.atari800xl.cpu6502.debugY.toInt
-          println(f"  ** ZP01 WRITE: din=0x${din}%02X PC=0x${pc}%04X A=0x${a}%02X Y=0x${y}%02X cyc=$cycleCount%d cpuEN=$cpuEnCount%d")
+          println(f"  RAM_TRACE cpuEN=$cpuEnCount%d cyc=$cycleCount%d PC=$pc%04X A=$a%02X Y=$y%02X ramAddr=$addr%05X we=$we%b din=$din%02X qRam=$qr%02X cpuEn=$cpuEn%b")
         }
-        if (we && addr == 6) {
-          val din = ramGri.io.data.toInt & 0xFF
-          val pc = dut.atariCore.atari800xl.cpu6502.debugPc.toInt
-          val a = dut.atariCore.atari800xl.cpu6502.debugA.toInt
-          val x = dut.atariCore.atari800xl.cpu6502.debugX.toInt
-          val y = dut.atariCore.atari800xl.cpu6502.debugY.toInt
-          println(f"  ** ZP06 WRITE (RAMTOP): din=0x${din}%02X PC=0x${pc}%04X A=0x${a}%02X X=0x${x}%02X Y=0x${y}%02X cyc=$cycleCount%d cpuEN=$cpuEnCount%d")
-        }
-        // Also watch $05 (pointer hi, shared with RAMTOP mechanism)
-        if (we && addr == 5) {
-          val din = ramGri.io.data.toInt & 0xFF
-          val pc = dut.atariCore.atari800xl.cpu6502.debugPc.toInt
-          if (cycleCount >= 300000 && cycleCount <= 500000)
-            println(f"  ** ZP05 WRITE: din=0x${din}%02X PC=0x${pc}%04X cyc=$cycleCount%d cpuEN=$cpuEnCount%d")
-        }
-      }
-      // Trace internal RAM during first RAM test iteration (STA $01 at cpuEN=210382)
-      if (cpuEnCount >= 210370 && cpuEnCount <= 210420) {
-        val ramGri = dut.atariCore.internalromram1.ramInt.get
-        val we = ramGri.weRam.toBoolean
-        val addr = ramGri.memAddr.toInt
-        val din = ramGri.io.data.toInt & 0xFF
-        val qr = ramGri.qRam.toInt & 0xFF
-        val cpuEn = dut.atariCore.atari800xl.cpu6502.CPU_ENABLE.toBoolean
-        val pc = dut.atariCore.atari800xl.cpu6502.debugPc.toInt
-        val a = dut.atariCore.atari800xl.cpu6502.debugA.toInt
-        val y = dut.atariCore.atari800xl.cpu6502.debugY.toInt
-        println(f"  RAM_TRACE cpuEN=$cpuEnCount%d cyc=$cycleCount%d PC=$pc%04X A=$a%02X Y=$y%02X ramAddr=$addr%05X we=$we%b din=$din%02X qRam=$qr%02X cpuEn=$cpuEn%b")
       }
 
       // Trace SDRAM access during RAM test at page $40 (first failure)

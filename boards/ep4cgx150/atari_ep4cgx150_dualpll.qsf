@@ -1,6 +1,7 @@
 # Quartus project settings for Atari 800 + JOP on QMTECH EP4CGX150 + DB_FPGA
 # Target: EP4CGX150DF27I7 (Cyclone IV GX, 149,760 LEs)
-# Single PLL: atari_pll (56.67 MHz for both JOP and Atari, 25 MHz VGA text)
+# Single PLL: atari_pll (56.67 MHz for both JOP and Atari)
+# SD card on DB_FPGA microSD slot (SPI mode), shared SDRAM
 
 set_global_assignment -name DEVICE EP4CGX150DF27I7
 set_global_assignment -name TOP_LEVEL_ENTITY ep4cgx150_dualpll_top
@@ -15,9 +16,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE atari_pll.sv
 set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/ip/altera_lpm/arom.vhd
 set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/ip/altera_lpm/aram.vhd
 
-# Altera SDRAM controller IP (tristate-capable, used by BmbSdramCtrl32)
-set_global_assignment -name VERILOG_FILE ../../jop-spinalhdl/fpga/ip/altera_sdram_tri_controller/altera_sdram_tri_controller.v
-set_global_assignment -name VERILOG_FILE ../../jop-spinalhdl/fpga/ip/altera_sdram_tri_controller/efifo_module.v
+# SDRAM controller: SdramStatemachine (inline in generated SV, no external IP needed)
 
 # Search paths: SpinalHDL .bin files + .mif files for AlteraLpm
 set_global_assignment -name SEARCH_PATH ../../generated
@@ -66,16 +65,15 @@ set_location_assignment PIN_AD20  -to uart_tx
 set_location_assignment PIN_AE21  -to uart_rx
 
 # ---------------------------------------------------------------------------
-# CH376S SPI — PMOD J11
-# Wiring: sck->j11.10(AF22), sdi->j11.3(AE23), sdo->j11.8(AD21),
-#          scs->j11.2(AC21), int#->j11.9(AF23), rsti->j11.4(AE22)
+# SD Card — DB_FPGA onboard microSD slot (SPI mode, accent on J3)
 # ---------------------------------------------------------------------------
-set_location_assignment PIN_AF22  -to ch376_sck
-set_location_assignment PIN_AE23  -to ch376_mosi
-set_location_assignment PIN_AD21  -to ch376_miso
-set_location_assignment PIN_AC21  -to ch376_cs
-set_location_assignment PIN_AF23  -to ch376_int
-set_location_assignment PIN_AE22  -to ch376_rst
+set_location_assignment PIN_B21   -to sd_clk
+set_location_assignment PIN_A22   -to sd_cmd
+set_location_assignment PIN_A23   -to sd_dat0
+set_location_assignment PIN_C19   -to sd_dat3
+set_location_assignment PIN_B22   -to sd_cd
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat0
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_cd
 
 # ---------------------------------------------------------------------------
 # Joystick 1 — PMOD J10 (active low, DB-9)

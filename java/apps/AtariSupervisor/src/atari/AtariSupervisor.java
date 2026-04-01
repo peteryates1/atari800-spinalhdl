@@ -4,12 +4,31 @@ import com.jopdesign.sys.Const;
 import com.jopdesign.sys.JVMHelp;
 import com.jopdesign.sys.Native;
 import com.jopdesign.hw.VgaText;
+import com.jopdesign.fat32.SdSpiBlockDevice;
+import com.jopdesign.fat32.Fat32FileSystem;
+import com.jopdesign.fat32.Fat32InputStream;
+import com.jopdesign.fat32.DirEntry;
 
 /**
  * Atari 800 supervisor running on JOP.
  *
- * Initializes the Atari core via AtariCtrl registers, then polls
- * the CH376T USB host for keyboard input and passes it to the Atari.
+ * Boot sequence:
+ *   1. Hold Atari in reset (holdReset=1, default)
+ *   2. Init SD card, mount FAT32
+ *   3. Load cartridge ROM from SD card into SDRAM
+ *   4. Set cart type, release Atari from reset
+ *   5. Poll serial for keyboard/joystick input
+ *
+ * SDRAM memory map (24-bit physical addresses):
+ *   JOP:   0x000000 - 0x7FFFFF
+ *   Atari: 0x800000 - 0xFFFFFF
+ *
+ * Atari cartridge SDRAM addresses (8K standard cart, CART_MODE_8K):
+ *   sdramCartAddr[22:0] = 1 ## emuCartAddr[20] ## ~emuCartAddr[20] ## emuCartAddr[19:0]
+ *   For 8K cart (cfgBank=0): emuCartAddr = 0x00_0000..0x00_1FFF
+ *   -> sdramCartAddr = 0x500000..0x501FFF (23-bit)
+ *   -> physical SDRAM = 0xD00000..0xD01FFF (24-bit, with B"1" prefix)
+ *   -> JOP word addr  = 0x340000..0x3407FF (byte addr / 4)
  *
  * I/O addresses (from IoAddressAllocator):
  *   AtariCtrl: IO_BASE + 0x40 .. IO_BASE + 0x4F  (0xC0-0xCF)
@@ -19,7 +38,8 @@ public class AtariSupervisor {
 
 	// --- AtariCtrl register offsets from IO_BASE ---
 	static final int ATARI_BASE     = Const.IO_BASE + 0x40;
-	static final int ATARI_STATUS   = ATARI_BASE + 0;   // R: bit0=osd, bit1=locked; W: bit0=osdEn, bit7=coldReset
+	static final int ATARI_STATUS   = ATARI_BASE + 0;   // R: bit0=osd, bit1=locked, bit6=holdReset
+	                                                     // W: bit0=osdEn, bit6=holdReset, bit7=coldReset
 	static final int ATARI_CART_SEL = ATARI_BASE + 1;   // W: cartSelect[5:0]
 	static final int ATARI_CONFIG   = ATARI_BASE + 2;   // W: [0]=pal, [3:1]=ramSel, [4]=turbo, [5]=a800, [6]=hires
 	static final int ATARI_PADDLE01 = ATARI_BASE + 3;   // W: [7:0]=pad0, [15:8]=pad1
@@ -29,51 +49,34 @@ public class AtariSupervisor {
 	static final int ATARI_KB_THR   = ATARI_BASE + 9;   // W: [13:8]=throttle, [4]=start, [3]=select, [2]=option
 	static final int ATARI_KEYBOARD = ATARI_BASE + 12;  // W: [5:0]=scanCode, [8]=pressed, [9]=shift, [10]=ctrl, [11]=break
 
-	// --- SdSpi register offsets from IO_BASE ---
-	static final int SPI_STATUS = Const.IO_SD_SPI;       // R: bit0=busy; W: bit0=csAssert
-	static final int SPI_DATA   = Const.IO_SD_SPI + 1;   // R: rx byte; W: tx byte (starts xfer)
-	static final int SPI_CLKDIV = Const.IO_SD_SPI + 2;   // W: clock divider
+	// --- Cartridge types (matches CartLogic CART_MODE constants) ---
+	static final int CART_MODE_OFF = 0;
+	static final int CART_MODE_8K  = 1;   // A000-BFFF (8K)
+	static final int CART_MODE_16K = 33;  // 8000-BFFF (16K) = 0x21
 
-	// --- CH376T commands ---
-	static final int CMD_GET_IC_VER    = 0x01;
-	static final int CMD_CHECK_EXIST   = 0x06;
-	static final int CMD_SET_USB_MODE  = 0x15;
-	static final int CMD_GET_STATUS    = 0x22;
-	static final int CMD_RD_USB_DATA0  = 0x27;
-	static final int CMD_SET_RETRY     = 0x0B;
-	static final int CMD_RESET_ALL     = 0x05;
-	static final int CMD_SET_USB_ADDR  = 0x13;
-	static final int CMD_SET_USB_ID    = 0x12;
-	static final int CMD_ISSUE_TKN_X   = 0x4E;
-	static final int CMD_CLR_STALL     = 0x41;
+	// --- SDRAM addresses for cartridge ROM ---
+	// Physical SDRAM byte address: 0xD00000 (Atari prefix=1, sdramCartAddr=0x500000)
+	// JOP word address: 0xD00000 / 4 = 0x340000
+	// Same base for 8K and 16K (16K extends to 0xD03FFF)
+	static final int CART_WORD_ADDR = 0x340000;
 
-	// CH376T USB status codes
-	static final int USB_INT_SUCCESS   = 0x14;
-	static final int USB_INT_CONNECT   = 0x15;
-	static final int USB_INT_DISCONNECT = 0x16;
-
-	// USB token PIDs
-	static final int PID_SETUP = 0x0D;
-	static final int PID_IN    = 0x09;
-	static final int PID_OUT   = 0x01;
+	// Track what cart mode was loaded
+	static int loadedCartMode = CART_MODE_OFF;
 
 	// Timing
 	static final int WD_INTERVAL = 100000;  // microseconds between watchdog toggles
-
-	// USB HID keyboard state
-	static int lastKeycode = 0;
-	static int lastModifiers = 0;
-	static int usbDevAddr = 1;
-	static int usbEndpIn = 1;   // HID interrupt IN endpoint
-	static int hidToggle = 0;   // DATA0/DATA1 toggle for interrupt endpoint
 
 	// Atari keyboard state
 	static boolean keyPressed = false;
 	static int atariScanCode = 0;
 
+	// Console key state (F-keys from serial)
+	static boolean consolStart  = false;
+	static boolean consolSelect = false;
+	static boolean consolOption = false;
+
 	// --- USB HID scancode to Atari 800 scancode translation ---
 	// Index = USB HID usage ID, value = Atari scan code (0-63), -1 = unmapped
-	// Atari scan codes from Atari 800 keyboard matrix
 	static final int[] hidToAtari = {
 		-1, -1, -1, -1,  // 0x00-0x03: reserved
 		0x3F, // 0x04: A
@@ -132,19 +135,13 @@ public class AtariSupervisor {
 		0x3C, // 0x39: Caps Lock
 	};
 
-	// F-key to console key mapping
-	// F1=Start, F2=Select, F3=Option, F4=Reset
-	static boolean consolStart  = false;
-	static boolean consolSelect = false;
-	static boolean consolOption = false;
-
 	public static void main(String[] args) {
 
 		int w = 0, wd_next = 0;
 
 		JVMHelp.wr("Atari Supervisor starting...\n");
 
-		// --- Initialize Atari core ---
+		// --- Initialize Atari core (still held in reset) ---
 		initAtari();
 
 		// --- Initialize VGA text overlay ---
@@ -154,39 +151,133 @@ public class AtariSupervisor {
 		vga.writeString("Atari Supervisor", VgaText.attr(VgaText.YELLOW, VgaText.BLACK));
 		vga.enable();
 
-		// --- Initialize CH376T ---
-		boolean ch376ok = initCH376T();
-		if (ch376ok) {
-			JVMHelp.wr("CH376T ready\n");
-			vga.setCursor(0, 1);
-			vga.writeString("CH376T ready", VgaText.attr(VgaText.LIGHT_GREEN, VgaText.BLACK));
+		// --- SDRAM test: write/read Atari RAM region ---
+		// Atari SDRAM base: physical 0x800000 -> JOP word addr 0x200000
+		JVMHelp.wr("SDRAM test...\n");
+		int testBase = 0x200000;  // Atari RAM base in JOP word space
+		int errors = 0;
+		for (int i = 0; i < 16; i++) {
+			Native.wrMem(0xDEAD0000 | i, testBase + i);
+		}
+		for (int i = 0; i < 16; i++) {
+			int rd = Native.rdMem(testBase + i);
+			int exp = 0xDEAD0000 | i;
+			if (rd != exp) {
+				JVMHelp.wr("  [");
+				wrDec(i);
+				JVMHelp.wr("] W=");
+				wrHex((exp >> 24) & 0xFF); wrHex((exp >> 16) & 0xFF);
+				wrHex((exp >> 8) & 0xFF); wrHex(exp & 0xFF);
+				JVMHelp.wr(" R=");
+				wrHex((rd >> 24) & 0xFF); wrHex((rd >> 16) & 0xFF);
+				wrHex((rd >> 8) & 0xFF); wrHex(rd & 0xFF);
+				JVMHelp.wr("\n");
+				errors++;
+			}
+		}
+		if (errors == 0) {
+			JVMHelp.wr("SDRAM OK (16 words)\n");
 		} else {
-			JVMHelp.wr("CH376T init failed\n");
-			vga.setCursor(0, 1);
-			vga.writeString("CH376T FAIL", VgaText.attr(VgaText.LIGHT_RED, VgaText.BLACK));
+			JVMHelp.wr("SDRAM ERRORS: ");
+			wrDec(errors);
+			JVMHelp.wr("/16\n");
 		}
 
-		JVMHelp.wr("Serial KB ready\n");
+		// Also test cartridge region
+		JVMHelp.wr("Cart region test...\n");
+		errors = 0;
+		for (int i = 0; i < 4; i++) {
+			Native.wrMem(0xCAFE0000 | i, CART_WORD_ADDR + i);
+		}
+		for (int i = 0; i < 4; i++) {
+			int rd = Native.rdMem(CART_WORD_ADDR + i);
+			int exp = 0xCAFE0000 | i;
+			if (rd != exp) {
+				JVMHelp.wr("  Cart[");
+				wrDec(i);
+				JVMHelp.wr("] W=");
+				wrHex((exp >> 24) & 0xFF); wrHex((exp >> 16) & 0xFF);
+				wrHex((exp >> 8) & 0xFF); wrHex(exp & 0xFF);
+				JVMHelp.wr(" R=");
+				wrHex((rd >> 24) & 0xFF); wrHex((rd >> 16) & 0xFF);
+				wrHex((rd >> 8) & 0xFF); wrHex(rd & 0xFF);
+				JVMHelp.wr("\n");
+				errors++;
+			}
+		}
+		if (errors == 0) {
+			JVMHelp.wr("Cart region OK\n");
+		} else {
+			JVMHelp.wr("Cart ERRORS: ");
+			wrDec(errors);
+			JVMHelp.wr("/4\n");
+		}
+
+		// Read ATARI_STATUS to check holdReset state
+		int status = Native.rd(ATARI_STATUS);
+		JVMHelp.wr("Status reg: ");
+		wrHex(status & 0xFF);
+		JVMHelp.wr("\n");
+
+		// Release Atari from reset: clear holdReset (bit 6), keep OSD on (bit 0)
+		Native.wr(CART_MODE_OFF, ATARI_CART_SEL);
+		Native.wr(0x01, ATARI_STATUS);
+		// Use single-char writes only — no string refs (avoid SDRAM method cache)
+		JVMHelp.wr('R');
+		JVMHelp.wr('E');
+		JVMHelp.wr('L');
+		JVMHelp.wr('\n');
+
+		// Wait a bit for Atari to start hammering SDRAM
+		delay(100000);  // 100ms
+
+		// Test: can JOP still read SDRAM while Atari is active?
+		JVMHelp.wr('T');  // "T" = starting test
+		int testVal = Native.rdMem(0x200000);  // read from Atari SDRAM region
+		wrHex((testVal >> 24) & 0xFF);
+		wrHex((testVal >> 16) & 0xFF);
+		wrHex((testVal >> 8) & 0xFF);
+		wrHex(testVal & 0xFF);
+		JVMHelp.wr('\n');
+
+		// Test: read from JOP's own region (word addr 0)
+		JVMHelp.wr('J');
+		testVal = Native.rdMem(0);
+		wrHex((testVal >> 24) & 0xFF);
+		wrHex((testVal >> 16) & 0xFF);
+		wrHex((testVal >> 8) & 0xFF);
+		wrHex(testVal & 0xFF);
+		JVMHelp.wr('\n');
+
+		// Re-read status using I/O (no SDRAM)
+		status = Native.rd(ATARI_STATUS);
+		JVMHelp.wr('S');
+		wrHex(status & 0xFF);
+		JVMHelp.wr('\n');
+
+		JVMHelp.wr('O');  // "OK" — survived
+		JVMHelp.wr('K');
+		JVMHelp.wr('\n');
 
 		// --- Main loop ---
+		// Check UART inline every iteration (pure I/O, no SDRAM access).
+		// Only call pollSerial() when data actually arrives — this triggers
+		// method cache fills (SDRAM burst) but only on key presses, not
+		// continuously.  Keeps ANTIC DMA contention-free during normal display.
 		while (true) {
+			if ((Native.rd(Const.IO_UART_STATUS) & Const.MSK_UA_RDRF) != 0) {
+				pollSerial();
+			}
 			int now = Native.rd(Const.IO_US_CNT);
 			if (wd_next - now < 0) {
 				wd_next = now + WD_INTERVAL;
 				w = ~w;
 				Native.wr(w, Const.IO_WD);
 			}
-
-			if (ch376ok) {
-				pollKeyboard();
-			}
-
-			// Always poll serial for keyboard/joystick commands
-			pollSerial();
 		}
 	}
 
-	/** Initialize Atari core registers */
+	/** Initialize Atari core registers (Atari stays in reset via holdReset) */
 	static void initAtari() {
 		// PAL, 48K RAM (ramSelect=3), atari800mode, hires enabled
 		// Config reg: [0]=pal=1, [3:1]=ramSel=3, [5]=a800=1, [6]=hires=1
@@ -211,280 +302,124 @@ public class AtariSupervisor {
 	}
 
 	// ===================================================================
-	// SPI primitives
+	// SD card ROM loading
 	// ===================================================================
 
-	/** Wait for SPI transfer to complete */
-	static void spiWait() {
-		while ((Native.rd(SPI_STATUS) & 1) != 0) {
-			// busy
+	/**
+	 * Load cartridge ROM from SD card into SDRAM.
+	 * Searches cartridge/ directory for .rom files (8K or 16K).
+	 * Falls back to CART.ROM in root directory.
+	 * Sets loadedCartMode on success.
+	 * Returns true if loaded successfully.
+	 */
+	static boolean loadCartRom(Fat32FileSystem fs, VgaText vga) {
+		DirEntry entry = null;
+
+		// Try cartridge/ subdirectory first
+		DirEntry cartDir = fs.findFile(fs.getRootCluster(), "cartridge");
+		if (cartDir != null && cartDir.isDirectory()) {
+			JVMHelp.wr("Found cartridge/\n");
+			// Look for Star Raiders first, then fall back to first valid ROM
+			entry = fs.findFile(cartDir.getStartCluster(), "Star Raiders.rom");
+			if (entry == null) {
+				entry = findFirstRom(fs, cartDir.getStartCluster());
+			}
 		}
-	}
 
-	/** Send one byte via SPI and return received byte */
-	static int spiXfer(int tx) {
-		spiWait();
-		Native.wr(tx, SPI_DATA);
-		spiWait();
-		return Native.rd(SPI_DATA) & 0xFF;
-	}
-
-	/** Assert CS (active low) */
-	static void csAssert() {
-		Native.wr(1, SPI_STATUS);  // bit0 = CS assert
-	}
-
-	/** Deassert CS */
-	static void csDeassert() {
-		Native.wr(0, SPI_STATUS);
-	}
-
-	/** Set SPI clock divider. SPI_CLK = sys_clk / (2 * (div + 1)) */
-	static void spiSetDiv(int div) {
-		Native.wr(div, SPI_CLKDIV);
-	}
-
-	// ===================================================================
-	// CH376T SPI protocol
-	// ===================================================================
-
-	/** Send a CH376T command byte (preceded by 0x57, 0xAB header) */
-	static void ch376Cmd(int cmd) {
-		csAssert();
-		spiXfer(0x57);
-		spiXfer(0xAB);
-		spiXfer(cmd);
-	}
-
-	/** End a CH376T command (deassert CS) */
-	static void ch376End() {
-		csDeassert();
-	}
-
-	/** Send command + 1 data byte */
-	static void ch376CmdData(int cmd, int data) {
-		ch376Cmd(cmd);
-		spiXfer(data);
-		ch376End();
-	}
-
-	/** Read status after interrupt (GET_STATUS) */
-	static int ch376GetStatus() {
-		ch376Cmd(CMD_GET_STATUS);
-		int status = spiXfer(0xFF);
-		ch376End();
-		return status;
-	}
-
-	/** Wait for CH376T interrupt with timeout (microseconds) */
-	static int ch376WaitInt(int timeoutUs) {
-		int deadline = Native.rd(Const.IO_US_CNT) + timeoutUs;
-		while (true) {
-			int now = Native.rd(Const.IO_US_CNT);
-			if (deadline - now < 0) return -1;  // timeout
-			// INT# is active low, directly readable in SdSpi as "card detect"
-			// When INT# is low, cardPresent bit (bit 1) will be high
-			// Actually: check by issuing GET_STATUS periodically
-			// For simplicity, poll GET_STATUS
-			int status = ch376GetStatus();
-			if (status != 0) return status;
-			// Small delay between polls
+		// Fall back to CART.ROM in root
+		if (entry == null) {
+			entry = fs.findFile(fs.getRootCluster(), "CART.ROM");
 		}
-	}
 
-	// ===================================================================
-	// CH376T initialization
-	// ===================================================================
-
-	/** Initialize CH376T module. Returns true on success. */
-	static boolean initCH376T() {
-		// Set SPI clock to ~1 MHz for init (divider = 39 at 80 MHz)
-		spiSetDiv(39);
-
-		// Raw SPI test: send a byte with CS deasserted to verify SPI engine
-		csDeassert();
-		int raw = spiXfer(0xAA);
-		JVMHelp.wr("SPI raw: 0x");
-		wrHex(raw);
-		JVMHelp.wr("\n");
-
-		// Small delay after power-up
-		delay(50000);
-
-		// Reset
-		ch376Cmd(CMD_RESET_ALL);
-		ch376End();
-		delay(100000);  // 100ms after reset
-
-		// Check existence: send 0xA5, expect ~0xA5 = 0x5A back
-		ch376Cmd(CMD_CHECK_EXIST);
-		int resp1 = spiXfer(0xA5);  // send test byte, capture simultaneous response
-		int resp2 = spiXfer(0xFF);  // read next byte (if response comes one byte later)
-		ch376End();
-		JVMHelp.wr("SPI check: 0x");
-		wrHex(resp1);
-		JVMHelp.wr(" 0x");
-		wrHex(resp2);
-		JVMHelp.wr("\n");
-		int resp = (resp1 == 0x5A) ? resp1 : resp2;
-		if (resp != 0x5A) {
-			JVMHelp.wr("CH376S check FAIL\n");
+		if (entry == null) {
+			JVMHelp.wr("No ROM found\n");
 			return false;
 		}
 
-		// Get IC version
-		ch376Cmd(CMD_GET_IC_VER);
-		int ver = spiXfer(0xFF);
-		ch376End();
-		JVMHelp.wr("CH376T v0x");
-		wrHex(ver & 0x3F);
-		JVMHelp.wr("\n");
+		String romName = entry.getName();
+		int fileSize = entry.fileSize;
+		JVMHelp.wr(romName);
+		JVMHelp.wr(": ");
+		wrDec(fileSize);
+		JVMHelp.wr(" bytes\n");
 
-		// Set USB host mode
-		ch376CmdData(CMD_SET_USB_MODE, 0x06);  // mode 6 = USB host, auto-detect
-		delay(20000);
-
-		// Read mode response
-		ch376Cmd(CMD_SET_USB_MODE);
-		// Actually the response comes as status byte
-		ch376End();
-
-		// Wait for device connect (up to 2 seconds)
-		JVMHelp.wr("Waiting for USB...\n");
-		int status = ch376WaitInt(2000000);
-		if (status == USB_INT_CONNECT) {
-			JVMHelp.wr("USB connected\n");
-			// Speed up SPI for normal operation (~4 MHz)
-			spiSetDiv(7);
-			return setupHidKeyboard();
+		// Determine cart mode from file size
+		int cartMode;
+		if (fileSize == 8192) {
+			cartMode = CART_MODE_8K;
+		} else if (fileSize == 16384) {
+			cartMode = CART_MODE_16K;
+		} else {
+			JVMHelp.wr("Unsupported size\n");
+			return false;
 		}
 
-		JVMHelp.wr("No USB device\n");
-		return false;
-	}
+		// Read file and write to SDRAM
+		int wordAddr = CART_WORD_ADDR;
+		int wordsWritten = 0;
 
-	/** Set up a USB HID keyboard after device connect */
-	static boolean setupHidKeyboard() {
-		// For a basic HID keyboard, we need to:
-		// 1. Set device address (SET_ADDRESS via SETUP token)
-		// 2. Set configuration (SET_CONFIGURATION)
-		// 3. Then poll interrupt IN endpoint for HID reports
+		try {
+			Fat32InputStream in = fs.openFile(entry);
+			int bytesLeft = fileSize;
 
-		// Set USB address to 1
-		ch376CmdData(CMD_SET_USB_ADDR, usbDevAddr);
+			while (bytesLeft >= 4) {
+				int b0 = in.read();
+				int b1 = in.read();
+				int b2 = in.read();
+				int b3 = in.read();
+				if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) break;
 
-		// The CH376T handles enumeration internally in host mode 6
-		// After connect, we can directly read HID reports via GET_STATUS polling
+				// SDRAM is little-endian: DATA_IN[7:0] -> lowest byte addr.
+				// We want b0 at lowest addr, so:
+				// DATA_IN[7:0]=b0, [15:8]=b1, [23:16]=b2, [31:24]=b3
+				int word = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+				Native.wrMem(word, wordAddr);
+				wordAddr++;
+				wordsWritten++;
+				bytesLeft -= 4;
 
-		hidToggle = 0;  // Start with DATA0
+				// Watchdog every 256 words
+				if ((wordsWritten & 0xFF) == 0) {
+					Native.wr(~Native.rd(Const.IO_WD), Const.IO_WD);
+				}
+			}
+			in.close();
+		} catch (Exception e) {
+			JVMHelp.wr("Read error\n");
+			return false;
+		}
+
+		JVMHelp.wr("Loaded ");
+		wrDec(wordsWritten * 4);
+		JVMHelp.wr(" bytes to SDRAM\n");
+
+		loadedCartMode = cartMode;
 		return true;
 	}
 
-	// ===================================================================
-	// USB HID keyboard polling
-	// ===================================================================
+	/**
+	 * Find first .rom file with valid cart size (8K or 16K) in directory.
+	 */
+	static DirEntry findFirstRom(Fat32FileSystem fs, int dirCluster) {
+		DirEntry[] entries = fs.listDir(dirCluster);
+		if (entries == null) return null;
 
-	/** Poll CH376T for keyboard input, update Atari registers */
-	static void pollKeyboard() {
-		// Issue interrupt IN token to HID endpoint
-		ch376Cmd(CMD_ISSUE_TKN_X);
-		spiXfer(hidToggle != 0 ? 0x80 : 0x00);  // toggle bit in high nibble
-		spiXfer((PID_IN << 4) | (usbEndpIn & 0x0F));  // PID_IN + endpoint
-		ch376End();
-
-		// Wait for response (short timeout — we're polling)
-		int status = ch376WaitInt(5000);  // 5ms timeout
-
-		if (status == USB_INT_SUCCESS) {
-			hidToggle ^= 1;  // Toggle DATA0/DATA1
-
-			// Read HID report (8 bytes: modifier, reserved, key1..key6)
-			ch376Cmd(CMD_RD_USB_DATA0);
-			int len = spiXfer(0xFF);
-			if (len >= 3) {
-				int modifier = spiXfer(0xFF);     // byte 0: modifier keys
-				spiXfer(0xFF);                    // byte 1: reserved
-				int keycode = spiXfer(0xFF);      // byte 2: first key
-
-				// Read remaining bytes to drain the buffer
-				for (int i = 3; i < len; i++) {
-					spiXfer(0xFF);
-				}
-				ch376End();
-
-				processHidReport(modifier, keycode);
-			} else {
-				// Drain whatever bytes there are
-				for (int i = 0; i < len; i++) {
-					spiXfer(0xFF);
-				}
-				ch376End();
-			}
-		}
-		// NAK (0x2A) is normal — no new data, just ignore
-	}
-
-	/** Process a USB HID keyboard report */
-	static void processHidReport(int modifier, int keycode) {
-		// Check for F-key console mappings (even when other keys are pressed)
-		boolean f1 = false, f2 = false, f3 = false, f4 = false;
-		// F1-F4 are HID 0x3A-0x3D
-		// We only get keycode for byte 2, but F-keys could be in any position
-		// For simplicity, check first key only
-		if (keycode == 0x3A) f1 = true;
-		if (keycode == 0x3B) f2 = true;
-		if (keycode == 0x3C) f3 = true;
-		if (keycode == 0x3D) f4 = true;
-
-		// Update console keys
-		consolStart  = f1;
-		consolSelect = f2;
-		consolOption = f3;
-		updateConsoleKeys();
-
-		// Cold reset on F4
-		if (f4) {
-			Native.wr(0x80, ATARI_STATUS);  // bit 7 = cold reset pulse
-		}
-
-		// Handle regular key
-		if (keycode != lastKeycode || modifier != lastModifiers) {
-			if (keycode == 0 && lastKeycode != 0) {
-				// Key released
-				keyPressed = false;
-				Native.wr(0, ATARI_KEYBOARD);  // pressed=0
-			} else if (keycode != 0 && keycode < hidToAtari.length) {
-				int atariCode = hidToAtari[keycode];
-				if (atariCode >= 0) {
-					// Key pressed
-					boolean shift = (modifier & 0x22) != 0;  // left or right shift
-					boolean ctrl  = (modifier & 0x11) != 0;  // left or right ctrl
-					boolean brk   = (keycode == 0x48);        // Pause/Break key
-
-					int kbReg = (atariCode & 0x3F)
-						| (1 << 8)                // pressed
-						| (shift ? (1 << 9) : 0)  // shift
-						| (ctrl  ? (1 << 10) : 0) // control
-						| (brk   ? (1 << 11) : 0); // break
-
-					Native.wr(kbReg, ATARI_KEYBOARD);
-					keyPressed = true;
-					atariScanCode = atariCode;
+		for (int i = 0; i < entries.length; i++) {
+			DirEntry e = entries[i];
+			if (e == null || e.isDirectory()) continue;
+			String name = e.getName();
+			if (name == null) continue;
+			if (name.length() < 5) continue;
+			// Check for .rom or .ROM extension
+			String ext = name.substring(name.length() - 4);
+			if (ext.equalsIgnoreCase(".rom")) {
+				int sz = e.fileSize;
+				if (sz == 8192 || sz == 16384) {
+					return e;
 				}
 			}
-			lastKeycode = keycode;
-			lastModifiers = modifier;
 		}
-	}
-
-	/** Update console key register (Start/Select/Option + throttle) */
-	static void updateConsoleKeys() {
-		int throttle = 31;  // max throttle
-		int reg = (throttle << 8)
-			| (consolStart  ? (1 << 4) : 0)
-			| (consolSelect ? (1 << 3) : 0)
-			| (consolOption ? (1 << 2) : 0);
-		Native.wr(reg, ATARI_KB_THR);
+		return null;
 	}
 
 	// ===================================================================
@@ -565,12 +500,44 @@ public class AtariSupervisor {
 		}
 	}
 
+	/** Update console key register (Start/Select/Option + throttle) */
+	static void updateConsoleKeys() {
+		int throttle = 31;  // max throttle
+		int reg = (throttle << 8)
+			| (consolStart  ? (1 << 4) : 0)
+			| (consolSelect ? (1 << 3) : 0)
+			| (consolOption ? (1 << 2) : 0);
+		Native.wr(reg, ATARI_KB_THR);
+	}
+
+	// ===================================================================
+	// Utility
+	// ===================================================================
+
 	/** Print a byte as 2-digit hex */
 	static void wrHex(int val) {
 		int hi = (val >> 4) & 0xF;
 		int lo = val & 0xF;
 		JVMHelp.wr(hi < 10 ? '0' + hi : 'A' + hi - 10);
 		JVMHelp.wr(lo < 10 ? '0' + lo : 'A' + lo - 10);
+	}
+
+	/** Print a decimal number */
+	static void wrDec(int val) {
+		if (val < 0) { JVMHelp.wr('-'); val = -val; }
+		if (val == 0) { JVMHelp.wr('0'); return; }
+		// Max 10 digits for int
+		int div = 1000000000;
+		boolean started = false;
+		while (div > 0) {
+			int d = val / div;
+			if (d > 0 || started) {
+				JVMHelp.wr('0' + d);
+				started = true;
+			}
+			val = val % div;
+			div = div / 10;
+		}
 	}
 
 	/** Delay in microseconds (busy-wait on IO_US_CNT) */

@@ -11,6 +11,7 @@ JAVA ?= java
 JOP_JAVA := ../../../jop-spinalhdl/java
 TOOLS_DIR := $(JOP_JAVA)/tools
 TARGET_DIR := $(JOP_JAVA)/runtime
+FAT32_DIR := $(JOP_JAVA)/fat32
 LIB_DIR := $(JOP_JAVA)/lib
 
 APP_PKG := atari
@@ -33,7 +34,7 @@ all: jop
 
 classes:
 	mkdir -p $(CLASSES_DIR) $(BUILD_DIR)
-	find $(APP_SRC) $(TARGET_DIR)/src/jop $(TARGET_DIR)/src/jvm $(TARGET_DIR)/src/jdk -name '*.java' > $(BUILD_DIR)/sources.txt
+	find $(APP_SRC) $(TARGET_DIR)/src/jop $(TARGET_DIR)/src/jvm $(TARGET_DIR)/src/jdk $(FAT32_DIR)/src -name '*.java' > $(BUILD_DIR)/sources.txt
 	$(JAVAC6) -source 1.6 -target 1.6 -d $(CLASSES_DIR) @$(BUILD_DIR)/sources.txt
 
 preprocess: classes

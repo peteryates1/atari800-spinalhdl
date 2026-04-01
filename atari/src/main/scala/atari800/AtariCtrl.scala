@@ -12,8 +12,8 @@ import jop.io.HasBusIo
 // JopCore's I/O decoder routes accesses to this peripheral.
 //
 // Register map (4-bit address, 32-bit data):
-//   0x0  R: status — bit0=osdEnabled, bit1=pllLocked
-//        W: control — bit0=osdEnable, bit7=coldReset (pulse)
+//   0x0  R: status — bit0=osdEnabled, bit1=pllLocked, bit6=holdReset
+//        W: control — bit0=osdEnable, bit6=holdReset, bit7=coldReset (pulse)
 //   0x1  R/W: cartSelect[5:0]
 //   0x2  R/W: config — bit0=PAL, bit[3:1]=ramSelect, bit4=turboVblankOnly,
 //                       bit5=atari800mode, bit6=hiresEna
@@ -41,6 +41,7 @@ class AtariCtrl extends Component with HasBusIo {
     // Atari core control outputs
     val osdEnable              = out Bool()
     val coldReset              = out Bool()
+    val holdReset              = out Bool()
     val cartSelect             = out Bits(6 bits)
     val pal                    = out Bool()
     val ramSelect              = out Bits(3 bits)
@@ -97,6 +98,7 @@ class AtariCtrl extends Component with HasBusIo {
   // Registers with defaults
   val osdEnableReg   = RegInit(True)                       // OSD on at boot
   val coldResetReg   = RegInit(False)                      // pulse
+  val holdResetReg   = RegInit(True)                       // hold Atari in reset until JOP clears
   val cartSelectReg  = Reg(Bits(6 bits)) init 0            // no cartridge
   val configReg      = Reg(Bits(8 bits)) init B"01100111"  // PAL, ramSelect=011 (48K), atari800mode, hiresEna — matches AtariSupervisor
 
@@ -127,6 +129,7 @@ class AtariCtrl extends Component with HasBusIo {
     switch(bus.addr) {
       is(0x0) {
         osdEnableReg := bus.wrData(0)
+        holdResetReg := bus.wrData(6)
         when(bus.wrData(7)) { coldResetReg := True }
       }
       is(0x1) { cartSelectReg  := bus.wrData(5 downto 0) }
@@ -146,7 +149,7 @@ class AtariCtrl extends Component with HasBusIo {
   // Read handling
   bus.rdData := B(0, 32 bits)
   switch(bus.addr) {
-    is(0x0) { bus.rdData := B(0, 30 bits) ## io.pllLocked ## osdEnableReg }
+    is(0x0) { bus.rdData := B(0, 25 bits) ## holdResetReg ## B(0, 4 bits) ## io.pllLocked ## osdEnableReg }
     is(0x1) { bus.rdData := B(0, 26 bits) ## cartSelectReg }
     is(0x2) { bus.rdData := B(0, 24 bits) ## configReg }
     is(0x3) { bus.rdData := B(0, 16 bits) ## paddlePair0Reg }
@@ -164,6 +167,7 @@ class AtariCtrl extends Component with HasBusIo {
   // Output assignments
   io.osdEnable       := osdEnableReg
   io.coldReset       := coldResetReg
+  io.holdReset       := holdResetReg
   io.cartSelect      := cartSelectReg
   io.pal             := configReg(0)
   io.ramSelect       := configReg(3 downto 1)

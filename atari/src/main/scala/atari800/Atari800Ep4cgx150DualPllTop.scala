@@ -3,20 +3,18 @@ package atari800
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.bmb._
-import spinal.lib.memory.sdram.sdr.SdramInterface
 import jop.system._
-import jop.system.memory.MemoryControllerFactory
-import jop.config.MemoryDevice
-import jop.memory.{BmbSdramCtrl32, SdramDeviceInfo}
 import jop.io._
 
 // Atari 800 + JOP top for QMTECH EP4CGX150 + DB_FPGA daughter board.
 // Single-PLL design: JOP and Atari both at 56.67 MHz (atari_pll).
 //
-// JOP: 56.67 MHz, 32 MB SDRAM (W9825G6JH6), serial boot via UART at 500k baud.
+// JOP: 56.67 MHz, serial boot via UART at 500k baud.
 //      Devices: uart, sdSpi (CH376S), vgaTextOverlay, atariCtrl.
-// Atari: 56.67 MHz, 48K internal BRAM, Star Raiders ROM.
+// Atari: 56.67 MHz, all RAM/ROM via shared SDRAM.
 //
+// Shared SDRAM: SdramArbiter — Atari (priority, Port A) + JOP (Port B).
+// JOP loads OS ROM + cartridge into Atari SDRAM region before releasing Atari.
 // Single clock domain: no CDC needed between JOP and Atari.
 // VGA text overlay runs in sys clock using scandoubler timing — no 25 MHz pixel clock.
 class Atari800Ep4cgx150DualPllTop extends Component {
@@ -35,17 +33,24 @@ class Atari800Ep4cgx150DualPllTop extends Component {
     val uartTx  = out Bool()
     val uartRx  = in  Bool()
 
-    // CH376T SPI module — PMOD J11 (USB keyboard + SD card host)
-    val ch376Sck  = out Bool()
-    val ch376Mosi = out Bool()
-    val ch376Miso = in  Bool()
-    val ch376Cs   = out Bool()
-    val ch376Int  = in  Bool()
-    val ch376Rst  = out Bool()
+    // SD Card — DB_FPGA onboard microSD slot (SPI mode)
+    val sdClk   = out Bool()   // CLK  (J3:9,  B21)
+    val sdCmd   = out Bool()   // CMD  (J3:10, A22) — MOSI in SPI mode
+    val sdDat0  = in  Bool()   // DAT0 (J3:8,  A23) — MISO in SPI mode
+    val sdDat3  = out Bool()   // DAT3 (J3:11, C19) — CS   in SPI mode
+    val sdCd    = in  Bool()   // CD   (J3:6,  B22) — card detect (active low)
 
     // SDRAM — W9825G6JH6 (32 MB, 16-bit)
-    val sdram = master(SdramInterface(SdramDeviceInfo.layoutFor(MemoryDevice.W9825G6JH6)))
-    val sdram_clk = out Bool()
+    val sdramAddr = out Bits(13 bits)
+    val sdramBa   = out Bits(2 bits)
+    val sdramDq   = inout(Analog(Bits(16 bits)))
+    val sdramDqm  = out Bits(2 bits)
+    val sdramCke  = out Bool()
+    val sdramCsN  = out Bool()
+    val sdramRasN = out Bool()
+    val sdramCasN = out Bool()
+    val sdramWeN  = out Bool()
+    val sdramClk  = out Bool()
 
     // Joystick 1 — PMOD J10 pins 1-4,7 (active low, DB-9)
     val joy1Up    = in Bool()
@@ -70,10 +75,9 @@ class Atari800Ep4cgx150DualPllTop extends Component {
   val clkSys    = pll.io.c0      // 56.67 MHz — main clock for JOP + Atari
   val pllLocked = pll.io.locked
 
-  io.sdram_clk := pll.io.c1       // 56.67 MHz, -3ns phase shift for SDRAM
+  io.sdramClk := pll.io.c1        // 56.67 MHz, -3ns phase shift for SDRAM
 
-  // CH376S reset: RSTI is active HIGH — hold high during PLL reset, release (low) when locked
-  io.ch376Rst := !pllLocked
+  // (CH376T removed — using onboard SD card slot instead)
 
   // =========================================================================
   // Clock Domains
@@ -89,9 +93,14 @@ class Atari800Ep4cgx150DualPllTop extends Component {
   )
 
   // Atari domain — same clock, active-LOW reset (matches Atari core conventions)
+  // Gated by holdReset (JOP holds Atari in reset until SDRAM is loaded) and coldReset (pulse)
+  // These are wired after jopArea is created (forward reference resolved by SpinalHDL)
+  val atariHoldReset = Bool()
+  val atariColdReset = Bool()
+  val atariResetN = pllLocked & ~atariHoldReset & ~atariColdReset
   val atariDomain = ClockDomain(
     clock     = clkSys,
-    reset     = ~sysReset,
+    reset     = atariResetN,
     frequency = FixedFrequency(56670000 Hz),
     config    = ClockDomainConfig(resetKind = SYNC, resetActiveLevel = LOW)
   )
@@ -113,28 +122,80 @@ class Atari800Ep4cgx150DualPllTop extends Component {
       vgaCd      = None
     )
 
-    // JOP SDRAM — W9825G6JH6 32 MB via Altera SDRAM controller
-    val sdramCtrl = BmbSdramCtrl32(
-      bmbParameter = cluster.bmbParameter,
-      layout       = SdramDeviceInfo.layoutFor(memDevice),
-      timing       = SdramDeviceInfo.timingFor(memDevice),
-      CAS          = memDevice.casLatency,
-      useAlteraCtrl = true,
-      clockFreqHz  = JopCoreForAtariDualPll.clkFreqHz
+    // BmbToSdramReq — JOP BMB -> SDRAM request protocol
+    val bmbBridge = BmbToSdramReq(jopConfig.memConfig.bmbParameter)
+    bmbBridge.io.bmb <> cluster.io.bmb
+
+    // SDRAM Arbiter — Atari (priority, Port A) + JOP (Port B)
+    val arbiter = new SdramArbiter
+
+    // Port B: JOP (via BmbToSdramReq bridge)
+    arbiter.io.b.request        := bmbBridge.io.request
+    arbiter.io.b.readEnable     := bmbBridge.io.readEnable
+    arbiter.io.b.writeEnable    := bmbBridge.io.writeEnable
+    arbiter.io.b.addr           := bmbBridge.io.addr
+    arbiter.io.b.dataIn         := bmbBridge.io.dataIn
+    arbiter.io.b.byteAccess     := bmbBridge.io.byteAccess
+    arbiter.io.b.wordAccess     := bmbBridge.io.wordAccess
+    arbiter.io.b.longwordAccess := bmbBridge.io.longwordAccess
+    bmbBridge.io.complete       := arbiter.io.b.complete
+    bmbBridge.io.dataOut        := arbiter.io.b.dataOut
+
+    // SDRAM Controller — SdramStatemachine (Atari-native, shared by both masters)
+    val sdramCtrl = new SdramStatemachine(
+      ADDRESS_WIDTH = 24,
+      AP_BIT        = 10,
+      COLUMN_WIDTH  = 9,
+      ROW_WIDTH     = 13
     )
-    sdramCtrl.io.bmb <> cluster.io.bmb
-    io.sdram <> sdramCtrl.io.sdram
+    sdramCtrl.io.CLK_SYSTEM := clkSys
+    sdramCtrl.io.CLK_SDRAM  := pll.io.c1
+    sdramCtrl.io.RESET_N    := pllLocked
+
+    // Arbiter -> SDRAM controller
+    sdramCtrl.io.REQUEST         := arbiter.io.sdram.request
+    sdramCtrl.io.READ_EN         := arbiter.io.sdram.readEnable
+    sdramCtrl.io.WRITE_EN        := arbiter.io.sdram.writeEnable
+    sdramCtrl.io.BYTE_ACCESS     := arbiter.io.sdram.byteAccess
+    sdramCtrl.io.WORD_ACCESS     := arbiter.io.sdram.wordAccess
+    sdramCtrl.io.LONGWORD_ACCESS := arbiter.io.sdram.longwordAccess
+    sdramCtrl.io.REFRESH         := arbiter.io.sdram.refresh
+    sdramCtrl.io.ADDRESS_IN      := arbiter.io.sdram.addr
+    sdramCtrl.io.DATA_IN         := arbiter.io.sdram.dataIn
+
+    // SDRAM controller -> Arbiter
+    arbiter.io.sdram.complete := sdramCtrl.io.COMPLETE
+    arbiter.io.sdram.dataOut  := sdramCtrl.io.DATA_OUT
+
+    // Stall JOP until SDRAM init completes
+    bmbBridge.io.sdramReady := sdramCtrl.io.reset_client_n
+
+    // SDRAM physical pins
+    io.sdramAddr   := sdramCtrl.io.SDRAM_ADDR
+    io.sdramBa(0)  := sdramCtrl.io.SDRAM_BA0
+    io.sdramBa(1)  := sdramCtrl.io.SDRAM_BA1
+    io.sdramCsN    := sdramCtrl.io.SDRAM_CS_N
+    io.sdramRasN   := sdramCtrl.io.SDRAM_RAS_N
+    io.sdramCasN   := sdramCtrl.io.SDRAM_CAS_N
+    io.sdramWeN    := sdramCtrl.io.SDRAM_WE_N
+    io.sdramCke    := sdramCtrl.io.SDRAM_CKE
+    io.sdramDqm(0) := sdramCtrl.io.SDRAM_ldqm
+    io.sdramDqm(1) := sdramCtrl.io.SDRAM_udqm
+    sdramCtrl.io.SDRAM_DQ_IN := io.sdramDq
+    when(sdramCtrl.io.SDRAM_DQ_OE) {
+      io.sdramDq := sdramCtrl.io.SDRAM_DQ_OUT
+    }
 
     // UART
     io.uartTx := cluster.devicePin[Bool]("uart", "txd")
     cluster.devicePin[Bool]("uart", "rxd") := io.uartRx
 
-    // CH376T SPI
-    io.ch376Sck  := cluster.devicePin[Bool]("sdSpi", "sclk")
-    io.ch376Mosi := cluster.devicePin[Bool]("sdSpi", "mosi")
-    cluster.devicePin[Bool]("sdSpi", "miso") := io.ch376Miso
-    io.ch376Cs   := cluster.devicePin[Bool]("sdSpi", "cs")
-    cluster.devicePin[Bool]("sdSpi", "cd")   := io.ch376Int
+    // SD Card SPI (onboard microSD slot on DB_FPGA)
+    io.sdClk  := cluster.devicePin[Bool]("sdSpi", "sclk")
+    io.sdCmd  := cluster.devicePin[Bool]("sdSpi", "mosi")
+    cluster.devicePin[Bool]("sdSpi", "miso") := io.sdDat0
+    io.sdDat3 := cluster.devicePin[Bool]("sdSpi", "cs")
+    cluster.devicePin[Bool]("sdSpi", "cd")   := io.sdCd
 
     // AtariCtrl pins — same clock domain, no CDC needed
     val atariPins = cluster.devicePins("atariCtrl")
@@ -177,15 +238,15 @@ class Atari800Ep4cgx150DualPllTop extends Component {
     when(colourEnable) { doubledEnable := ~doubledEnable }
 
     // =====================================================================
-    // Atari 800 Core — BRAM-only
+    // Atari 800 Core — OS ROM in BRAM, all RAM via shared SDRAM
     // =====================================================================
     val atariCore = new Atari800CoreSimpleSdram(
       cycle_length   = 32,
       video_bits     = 8,
       palette        = 0,
-      internal_rom   = 3,
-      internal_ram   = 49152,
-      basic_in_sdram = false,
+      internal_rom   = 3,          // Atari 800 OS (atarios2 + atariosb)
+      internal_ram   = 16384,      // 16K BRAM + rest via SDRAM (reduces ANTIC contention)
+      low_memory     = 0,
       cartridge_rom  = "roms/Star Raiders.rom"
     )
 
@@ -259,9 +320,18 @@ class Atari800Ep4cgx150DualPllTop extends Component {
     atariCore.io.DMA_ADDR               := B(0, 24 bits)
     atariCore.io.DMA_WRITE_DATA         := B(0, 32 bits)
 
-    // SDRAM not used — BRAM covers all Atari memory
-    atariCore.io.SDRAM_REQUEST_COMPLETE := False
-    atariCore.io.SDRAM_DO               := B(0, 32 bits)
+    // SDRAM Arbiter Port A: Atari core (high priority)
+    jopArea.arbiter.io.a.request        := atariCore.io.SDRAM_REQUEST
+    jopArea.arbiter.io.a.readEnable     := atariCore.io.SDRAM_READ_ENABLE
+    jopArea.arbiter.io.a.writeEnable    := atariCore.io.SDRAM_WRITE_ENABLE
+    jopArea.arbiter.io.a.addr           := B"1" ## atariCore.io.SDRAM_ADDR  // 23->24, Atari at 0x800000
+    jopArea.arbiter.io.a.dataIn         := atariCore.io.SDRAM_DI
+    jopArea.arbiter.io.a.byteAccess     := atariCore.io.SDRAM_8BIT_WRITE_ENABLE
+    jopArea.arbiter.io.a.wordAccess     := atariCore.io.SDRAM_16BIT_WRITE_ENABLE
+    jopArea.arbiter.io.a.longwordAccess := atariCore.io.SDRAM_32BIT_WRITE_ENABLE
+    jopArea.arbiter.io.a.refresh        := atariCore.io.SDRAM_REFRESH
+    atariCore.io.SDRAM_REQUEST_COMPLETE := jopArea.arbiter.io.a.complete
+    atariCore.io.SDRAM_DO               := jopArea.arbiter.io.a.dataOut
 
     // =====================================================================
     // Scandoubler: 15 kHz Atari -> 31 kHz VGA
@@ -309,6 +379,10 @@ class Atari800Ep4cgx150DualPllTop extends Component {
 
   // Keyboard scan: tie off AtariCtrl's scan input (handled locally in atariArea)
   jopArea.atariPin[Bits]("keyboardScan") := B(0, 6 bits)
+
+  // Atari reset gating — wired here after both areas are created
+  atariHoldReset := jopArea.atariPin[Bool]("holdReset")
+  atariColdReset := jopArea.coldResetPulse
 
   // =========================================================================
   // LEDs

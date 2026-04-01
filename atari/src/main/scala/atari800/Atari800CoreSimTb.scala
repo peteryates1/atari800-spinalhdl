@@ -647,7 +647,10 @@ object Atari800CoreSimTb extends App {
     println(s"  DMA detail: lbWrites=$lbWriteCount dmaFetchLB=$dmaFetchLbCount instrFetch=$instrFetchCount cacheReady=$cacheReadyCount firstLineTransitions=$firstLineTransitions")
     println(s"  Distinct AN values (after 5M): ${distinctAN.toSeq.sorted.map(v => f"$v%d").mkString(", ")}")
 
-    // Dump internal RAM: display list and screen memory
+    // Dump internal RAM: display list and screen memory (only if internal RAM exists)
+    if (!dut.atariCore.internalromram1.ramInt.isDefined) {
+      println("\n--- Internal RAM dump skipped (internal_ram=0, all RAM via SDRAM) ---")
+    } else {
     println("\n--- Internal RAM dump (display list & screen) ---")
     val ram = dut.atariCore.internalromram1.ramInt.get
     // Display list at $3C20 (32 bytes)
@@ -714,5 +717,6 @@ object Atari800CoreSimTb extends App {
       }
     }
     println()
+    } // end if ramInt.isDefined
   }
 }

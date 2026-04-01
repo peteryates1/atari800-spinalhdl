@@ -155,6 +155,7 @@ class Atari800JopSim(boardConfig: AtariBoardConfig = Atari800JopSim.boardConfig)
     atariPins.elements.find(_._1 == name).get._2.asInstanceOf[T]
 
   atariPin[Bool]("pllLocked") := True  // sim: always locked
+  atariPin[Bits]("keyboardScan") := B(0, 6 bits)  // no keyboard in sim
 
   // No physical cartridge slot in sim
   atariPin[Bits]("cartSlotData") := B(0xFF, 8 bits)
@@ -165,14 +166,15 @@ class Atari800JopSim(boardConfig: AtariBoardConfig = Atari800JopSim.boardConfig)
   // Atari 800 Core
   // =================================================================
   val atariCore = new Atari800CoreSimpleSdram(
-    cycle_length = 32,
-    video_bits   = 8,
-    palette      = 0,
-    internal_rom = 1,
-    internal_ram = 16384,
-    low_memory   = 0,
-    stereo       = 1,
-    covox        = 1
+    cycle_length  = 32,
+    video_bits    = 8,
+    palette       = 0,
+    internal_rom  = 3,        // Atari 800 OS (atarios2 + atariosb)
+    internal_ram  = 0,        // All RAM via SDRAM (testing sdramOnlyBank + arbiter)
+    low_memory    = 0,
+    stereo        = 1,
+    covox         = 1,
+    cartridge_rom = "roms/Star Raiders.rom"
   )
 
   // Raw video out (pre-scandoubler)
