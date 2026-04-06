@@ -3,6 +3,10 @@ package atari;
 import com.jopdesign.sys.Const;
 import com.jopdesign.sys.Native;
 import com.jopdesign.sys.JVMHelp;
+import com.jopdesign.fat32.Fat32FileSystem;
+import com.jopdesign.fat32.Fat32RandomAccessFile;
+import com.jopdesign.fat32.BlockDevice;
+import com.jopdesign.fat32.DirEntry;
 
 /**
  * SIO disk drive emulator (D1:).
@@ -54,6 +58,9 @@ public class SioDiskEmu {
 	int sectorSize;    // 128 or 256 bytes
 	int sectorCount;   // total sectors on disk
 
+	// ATR file access
+	Fat32RandomAccessFile atrFile;
+
 	// Sector data buffer (max 256 bytes = 64 words)
 	int[] sectorBuf = new int[64];
 
@@ -62,6 +69,53 @@ public class SioDiskEmu {
 		mounted = false;
 		sectorSize = 128;
 		sectorCount = 0;
+		atrFile = null;
+	}
+
+	/**
+	 * Mount an ATR disk image from SD card.
+	 *
+	 * ATR format: 16-byte header + sector data.
+	 * Header: magic=0x0296, paragraphs (LE16), sectorSize (LE16),
+	 *         paragraphsHi (byte), unused...
+	 * Paragraphs = (fileSize - 16) / 16
+	 * Sectors 1-3 are always 128 bytes (boot sectors).
+	 * Sectors 4+ use the header's sectorSize.
+	 */
+	public boolean mountAtr(Fat32FileSystem fs, BlockDevice dev, DirEntry entry) {
+		atrFile = new Fat32RandomAccessFile(fs, dev, entry);
+
+		// Read ATR header (16 bytes)
+		int magic = atrFile.readByte(0) | (atrFile.readByte(1) << 8);
+		if (magic != 0x0296) {
+			JVMHelp.wr("Bad ATR magic\n");
+			atrFile = null;
+			return false;
+		}
+
+		int paraLo = atrFile.readByte(2) | (atrFile.readByte(3) << 8);
+		sectorSize = atrFile.readByte(4) | (atrFile.readByte(5) << 8);
+		int paraHi = atrFile.readByte(6) & 0xFF;
+
+		int paragraphs = paraLo | (paraHi << 16);
+		int dataSize = paragraphs * 16;  // total bytes of sector data
+
+		// Compute sector count:
+		// Boot sectors (1-3): 3 * 128 = 384 bytes
+		// Data sectors (4+): (dataSize - 384) / sectorSize
+		if (dataSize <= 384) {
+			sectorCount = dataSize / 128;
+		} else {
+			sectorCount = 3 + (dataSize - 384) / sectorSize;
+		}
+
+		mounted = true;
+		JVMHelp.wr("ATR: ");
+		AtariSupervisor.wrDec(sectorCount);
+		JVMHelp.wr(" sectors, ");
+		AtariSupervisor.wrDec(sectorSize);
+		JVMHelp.wr(" bytes/sector\n");
+		return true;
 	}
 
 	/**
@@ -237,15 +291,34 @@ public class SioDiskEmu {
 	}
 
 	/**
-	 * Read sector data into sectorBuf. Override in Phase 4 for ATR.
-	 * Returns false if read failed.
+	 * Read sector data from ATR file into sectorBuf.
+	 *
+	 * ATR layout:
+	 *   Offset 0-15: header (16 bytes)
+	 *   Offset 16: sector 1 (128 bytes, always)
+	 *   Offset 144: sector 2 (128 bytes, always)
+	 *   Offset 272: sector 3 (128 bytes, always)
+	 *   Offset 400: sector 4 (sectorSize bytes)
+	 *   ...
 	 */
 	boolean readSectorData(int sector, int size) {
-		// Stub: fill with zeros (Phase 4 will read from ATR file)
+		if (atrFile == null) return false;
+
+		// Compute file offset for this sector
+		int fileOffset;
+		if (sector <= 3) {
+			fileOffset = 16 + (sector - 1) * 128;
+		} else {
+			fileOffset = 16 + 384 + (sector - 4) * sectorSize;
+		}
+
+		// Clear buffer first
 		for (int i = 0; i < size / 4; i++) {
 			sectorBuf[i] = 0;
 		}
-		return mounted;
+
+		int n = atrFile.readBytes(fileOffset, sectorBuf, 0, size);
+		return n == size;
 	}
 
 	/** Get byte at offset from sectorBuf (packed 4 bytes per word, big-endian). */

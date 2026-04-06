@@ -210,7 +210,10 @@ public class AtariSupervisor {
 			JVMHelp.wr("/4\n");
 		}
 
-		// --- Load cartridge ROM from SD card ---
+		// --- SIO disk emulator ---
+		final SioDiskEmu sio = new SioDiskEmu();
+
+		// --- Load cartridge ROM + disk image from SD card ---
 		int cartMode = CART_MODE_OFF;  // default: use BRAM cart (Star Raiders 8K)
 		try {
 			JVMHelp.wr("SD init...\n");
@@ -258,6 +261,18 @@ public class AtariSupervisor {
 			} else {
 				JVMHelp.wr("No SD cart, using BRAM\n");
 			}
+
+			// Mount disk image from disk/ directory
+			DirEntry diskDir = fs.findFile(rootCluster, "disk");
+			if (diskDir != null && diskDir.isDirectory()) {
+				DirEntry atr = findFirstAtr(fs, diskDir.getStartCluster());
+				if (atr != null) {
+					JVMHelp.wr("Disk: ");
+					JVMHelp.wr(atr.getName());
+					JVMHelp.wr("\n");
+					sio.mountAtr(fs, sd, atr);
+				}
+			}
 		} catch (Exception e) {
 			JVMHelp.wr("SD failed, using BRAM\n");
 		}
@@ -266,9 +281,6 @@ public class AtariSupervisor {
 		Native.wr(cartMode, ATARI_CART_SEL);
 		Native.wr(0x01, ATARI_STATUS);
 		JVMHelp.wr("Atari released\n");
-
-		// --- SIO disk emulator (interrupt-driven) ---
-		final SioDiskEmu sio = new SioDiskEmu();
 		JVMHelp.addInterruptHandler(IoAddr.INT_SIOBRIDGE, new Runnable() {
 			public void run() {
 				sio.cmdPending = true;
@@ -419,6 +431,26 @@ public class AtariSupervisor {
 
 		loadedCartMode = cartMode;
 		return true;
+	}
+
+	/**
+	 * Find first .atr file in a directory.
+	 */
+	static DirEntry findFirstAtr(Fat32FileSystem fs, int dirCluster) {
+		DirEntry[] entries = fs.listDir(dirCluster);
+		if (entries == null) return null;
+
+		for (int i = 0; i < entries.length; i++) {
+			DirEntry e = entries[i];
+			if (e == null || e.isDirectory()) continue;
+			String name = e.getName();
+			if (name == null || name.length() < 5) continue;
+			String ext = name.substring(name.length() - 4);
+			if (ext.equalsIgnoreCase(".atr")) {
+				return e;
+			}
+		}
+		return null;
 	}
 
 	/**
