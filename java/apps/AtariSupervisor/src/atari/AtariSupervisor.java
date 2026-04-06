@@ -267,30 +267,25 @@ public class AtariSupervisor {
 		Native.wr(0x01, ATARI_STATUS);
 		JVMHelp.wr("Atari released\n");
 
-		// --- SIO bridge: interrupt-driven command frame monitoring ---
+		// --- SIO disk emulator (interrupt-driven) ---
+		final SioDiskEmu sio = new SioDiskEmu();
 		JVMHelp.addInterruptHandler(IoAddr.INT_SIOBRIDGE, new Runnable() {
 			public void run() {
-				JVMHelp.wr("SIO:");
-				while ((Native.rd(IoAddr.SIOBRIDGE_RX_STATUS) & 0x01) == 0) {
-					int b = Native.rd(IoAddr.SIOBRIDGE_RX_DATA);
-					wrHex(b & 0xFF);
-					JVMHelp.wr(" ");
-				}
-				JVMHelp.wr("\n");
+				sio.cmdPending = true;
 			}
 		});
 		// Enable SioBridge interrupt in mask + global enable
 		Native.wr(1 << IoAddr.INT_SIOBRIDGE, Const.IO_INTMASK);
 		Native.wr(1, Const.IO_INT_ENA);
+		JVMHelp.wr("SIO D1: ready\n");
 
 		// --- Main loop ---
-		// Check UART inline every iteration (pure I/O, no SDRAM access).
-		// Only call pollSerial() when data actually arrives — this triggers
-		// method cache fills (SDRAM burst) but only on key presses, not
-		// continuously.  Keeps ANTIC DMA contention-free during normal display.
 		while (true) {
 			if ((Native.rd(Const.IO_UART_STATUS) & Const.MSK_UA_RDRF) != 0) {
 				pollSerial();
+			}
+			if (sio.cmdPending) {
+				sio.processCommand();
 			}
 			int now = Native.rd(Const.IO_US_CNT);
 			if (wd_next - now < 0) {
