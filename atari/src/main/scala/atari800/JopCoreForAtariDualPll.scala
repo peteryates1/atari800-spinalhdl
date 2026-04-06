@@ -52,9 +52,20 @@ object JopCoreForAtariDualPll {
           (3, "PADDLE_01"), (4, "PADDLE_23"), (5, "PADDLE_45"), (6, "PADDLE_67"),
           (7, "JOY_12"), (8, "JOY_34"),
           (9, "KB_THROTTLE"),
-          (10, "CART_SLOT_ADDR"), (11, "CART_SLOT_DATA")
+          (10, "CART_SLOT_ADDR"), (11, "CART_SLOT_DATA"),
+          (12, "KEYBOARD")
         ),
         factory = (_, _, _) => new AtariCtrl
+      )),
+      "sioBridge" -> DeviceInstance(DeviceType.Custom(
+        key = "sioBridge",
+        addrBits = 4,
+        interruptCount = 1,
+        registerNames = Seq(
+          (0, "STATUS_CTRL"), (1, "RX_DATA"), (2, "TX_DATA"),
+          (3, "TX_STATUS"), (4, "BAUD_DIV"), (5, "RX_STATUS")
+        ),
+        factory = (_, _, _) => new SioBridge
       ))
     ),
     clkFreq = HertzNumber(clkFreqHz),

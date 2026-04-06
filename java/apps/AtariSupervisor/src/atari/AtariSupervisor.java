@@ -30,24 +30,21 @@ import com.jopdesign.fat32.DirEntry;
  *   -> physical SDRAM = 0xD00000..0xD01FFF (24-bit, with B"1" prefix)
  *   -> JOP word addr  = 0x340000..0x3407FF (byte addr / 4)
  *
- * I/O addresses (from IoAddressAllocator):
- *   AtariCtrl: IO_BASE + 0x40 .. IO_BASE + 0x4F  (0xC0-0xCF)
- *   SdSpi:     IO_BASE + 0x68 .. IO_BASE + 0x6B  (0xE8-0xEB)
+ * I/O addresses: auto-generated in IoAddr.java by IoAddrGenerator.
+ * Regenerate with: sbt "atari/runMain atari800.Atari800Ep4cgx150DualPllSv"
  */
 public class AtariSupervisor {
 
-	// --- AtariCtrl register offsets from IO_BASE ---
-	static final int ATARI_BASE     = Const.IO_BASE + 0x40;
-	static final int ATARI_STATUS   = ATARI_BASE + 0;   // R: bit0=osd, bit1=locked, bit6=holdReset
-	                                                     // W: bit0=osdEn, bit6=holdReset, bit7=coldReset
-	static final int ATARI_CART_SEL = ATARI_BASE + 1;   // W: cartSelect[5:0]
-	static final int ATARI_CONFIG   = ATARI_BASE + 2;   // W: [0]=pal, [3:1]=ramSel, [4]=turbo, [5]=a800, [6]=hires
-	static final int ATARI_PADDLE01 = ATARI_BASE + 3;   // W: [7:0]=pad0, [15:8]=pad1
-	static final int ATARI_PADDLE23 = ATARI_BASE + 4;   // W: [7:0]=pad2, [15:8]=pad3
-	static final int ATARI_JOY12    = ATARI_BASE + 7;   // W: [4:0]=joy1_n, [12:8]=joy2_n
-	static final int ATARI_JOY34    = ATARI_BASE + 8;   // W: [4:0]=joy3_n, [12:8]=joy4_n
-	static final int ATARI_KB_THR   = ATARI_BASE + 9;   // W: [13:8]=throttle, [4]=start, [3]=select, [2]=option
-	static final int ATARI_KEYBOARD = ATARI_BASE + 12;  // W: [5:0]=scanCode, [8]=pressed, [9]=shift, [10]=ctrl, [11]=break
+	// --- AtariCtrl registers (from generated IoAddr.java) ---
+	static final int ATARI_STATUS   = IoAddr.ATARICTRL_STATUS_CTRL;
+	static final int ATARI_CART_SEL = IoAddr.ATARICTRL_CART_SELECT;
+	static final int ATARI_CONFIG   = IoAddr.ATARICTRL_CONFIG;
+	static final int ATARI_PADDLE01 = IoAddr.ATARICTRL_PADDLE_01;
+	static final int ATARI_PADDLE23 = IoAddr.ATARICTRL_PADDLE_23;
+	static final int ATARI_JOY12    = IoAddr.ATARICTRL_JOY_12;
+	static final int ATARI_JOY34    = IoAddr.ATARICTRL_JOY_34;
+	static final int ATARI_KB_THR   = IoAddr.ATARICTRL_KB_THROTTLE;
+	static final int ATARI_KEYBOARD = IoAddr.ATARICTRL_KEYBOARD;
 
 	// --- Cartridge types (matches CartLogic CART_MODE constants) ---
 	static final int CART_MODE_OFF = 0;
@@ -330,10 +327,12 @@ public class AtariSupervisor {
 		DirEntry cartDir = fs.findFile(fs.getRootCluster(), "cartridge");
 		if (cartDir != null && cartDir.isDirectory()) {
 			JVMHelp.wr("Found cartridge/\n");
-			// Look for Gyruss first, then Star Raiders, then first valid ROM
+			// Look for Star Raiders first, then Gyruss, then first valid ROM
 			entry = fs.findFile(cartDir.getStartCluster(), "Gyruss.rom");
+			// entry = fs.findFile(cartDir.getStartCluster(), "Star Raiders.rom");
 			if (entry == null) {
 				entry = fs.findFile(cartDir.getStartCluster(), "Star Raiders.rom");
+				// entry = fs.findFile(cartDir.getStartCluster(), "Gyruss.rom");
 			}
 			if (entry == null) {
 				entry = findFirstRom(fs, cartDir.getStartCluster());
