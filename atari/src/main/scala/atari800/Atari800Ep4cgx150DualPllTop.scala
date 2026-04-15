@@ -252,7 +252,7 @@ class Atari800Ep4cgx150DualPllTop extends Component {
       internal_rom   = 3,          // Atari 800 OS (atarios2 + atariosb)
       internal_ram   = 16384,      // 16K BRAM + rest via SDRAM (reduces ANTIC contention)
       low_memory     = 0,
-      cartridge_rom  = "roms/Star Raiders.rom"
+      cartridge_rom  = ""
     )
 
     atariCore.io.PAL                       := atariPin[Bool]("pal")

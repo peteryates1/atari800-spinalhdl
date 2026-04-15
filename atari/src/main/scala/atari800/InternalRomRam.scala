@@ -66,18 +66,22 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
     // Default: open bus (A000-BFFF when no cartridge, or unassigned ranges)
     io.romData := B(0xFF, 8 bits)
 
-    // Cartridge slot: only instantiate ROM when a file is provided (simulation).
-    if (cartridgeRom.nonEmpty) {
+    // Cartridge slot: always instantiate BRAM to keep netlist stable.
+    // When no file is provided, fill with 0xFF (no cartridge present).
+    val cartData = if (cartridgeRom.nonEmpty) {
       val bytes = Files.readAllBytes(Paths.get(cartridgeRom))
       println(s"[InternalRomRam] Loading cartridge ROM: $cartridgeRom (${bytes.length} bytes)")
-      val cartData = bytes.map(b => B((b.toInt & 0xFF), 8 bits)).toSeq
-      val cartRom = Mem(Bits(8 bits), initialContent = cartData)
-      val cartAddr = io.romAddr(12 downto 0).asUInt
-      val cartQ = cartRom.readSync(cartAddr)
+      bytes.map(b => B((b.toInt & 0xFF), 8 bits)).toSeq
+    } else {
+      println(s"[InternalRomRam] Cartridge ROM: empty (8K x 0xFF placeholder)")
+      Seq.fill(8192)(B(0xFF, 8 bits))
+    }
+    val cartRom = Mem(Bits(8 bits), initialContent = cartData)
+    val cartAddr = io.romAddr(12 downto 0).asUInt
+    val cartQ = cartRom.readSync(cartAddr)
 
-      when(io.romAddr(15)) {
-        io.romData := cartQ
-      }
+    when(io.romAddr(15)) {
+      io.romData := cartQ
     }
 
     when(~io.romAddr(15)) {

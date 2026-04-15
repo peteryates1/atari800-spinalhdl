@@ -314,7 +314,7 @@ class Atari800CoreSimpleSdram(
   atari800xl.io.PBI_REQUEST_COMPLETE := False
   atari800xl.io.PBI_DISABLE         := True
 
-  atari800xl.io.CART_RD5  := Bool(internal_rom != 3)  // False when BASIC cartridge present (internal_rom=3)
+  atari800xl.io.CART_RD5  := Bool(internal_rom != 3 || cartridge_rom.isEmpty)  // True = no cartridge in right slot
   atari800xl.io.PBI_MPD_N := True
   atari800xl.io.PBI_IRQ_N := True
 

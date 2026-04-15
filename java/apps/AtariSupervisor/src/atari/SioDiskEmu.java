@@ -52,6 +52,9 @@ public class SioDiskEmu {
 
 	// Set by interrupt handler, cleared by processCommand()
 	public boolean cmdPending;
+	// Debug counters
+	public int cmdProcessed;
+	public int intCount;
 
 	// Disk state
 	boolean mounted;
@@ -124,22 +127,37 @@ public class SioDiskEmu {
 	 */
 	public void processCommand() {
 		cmdPending = false;
+		cmdProcessed++;
 
-		// Read command frame from RX FIFO (5 bytes)
-		int[] frame = new int[5];
-		int count = 0;
-		while (count < 5 && (Native.rd(IoAddr.SIOBRIDGE_RX_STATUS) & 0x01) == 0) {
-			frame[count] = Native.rd(IoAddr.SIOBRIDGE_RX_DATA) & 0xFF;
-			count++;
+		// Drain FIFO silently — no UART output before response (ACK must arrive <3ms)
+		int[] rawBuf = new int[16];
+		int total = 0;
+		while ((Native.rd(IoAddr.SIOBRIDGE_RX_STATUS) & 0x01) == 0 && total < 16) {
+			rawBuf[total] = Native.rd(IoAddr.SIOBRIDGE_RX_DATA);
+			total++;
 		}
 
-		// Drain any extra bytes (noise, partial frames)
-		while ((Native.rd(IoAddr.SIOBRIDGE_RX_STATUS) & 0x01) == 0) {
-			Native.rd(IoAddr.SIOBRIDGE_RX_DATA);
+		// Find last complete frame using cmdByteIndex tags
+		int[] frame = new int[5];
+		int count = 0;
+		boolean found = false;
+		for (int i = 0; i < total; i++) {
+			int data = rawBuf[i] & 0xFF;
+			int idx  = (rawBuf[i] >> 8) & 0xFF;
+			if (idx == 0) {
+				frame[0] = data;
+				count = 1;
+				found = true;
+			} else if (found && idx == count && count < 5) {
+				frame[count] = data;
+				count++;
+			}
 		}
 
 		if (count < 5) {
-			// Short frame — ignore
+			JVMHelp.wr("SIO: short frame (");
+			AtariSupervisor.wrDec(count);
+			JVMHelp.wr("/5)\n");
 			return;
 		}
 
@@ -155,17 +173,18 @@ public class SioDiskEmu {
 		// Validate checksum
 		int calcSum = sioChecksum(frame, 4);
 		if (calcSum != checksum) {
-			// Bad checksum — send NAK
 			delayUs(T2_DELAY);
 			enableTx();
 			sendByte(SIO_NAK);
 			waitTxDone();
 			disableTx();
+			JVMHelp.wr("SIO NAK: bad cksum\n");
 			return;
 		}
 
-		// Dispatch command
 		int sector = (aux2 << 8) | aux1;
+
+		// Dispatch — response is time-critical, debug output follows
 		switch (command) {
 		case CMD_READ_SECTOR:
 			cmdReadSector(sector);
@@ -177,7 +196,6 @@ public class SioDiskEmu {
 			cmdGetSpeed();
 			break;
 		default:
-			// Unknown command — NAK
 			delayUs(T2_DELAY);
 			enableTx();
 			sendByte(SIO_NAK);
@@ -185,6 +203,15 @@ public class SioDiskEmu {
 			disableTx();
 			break;
 		}
+
+		// Debug output AFTER response is complete
+		JVMHelp.wr("D1:");
+		AtariSupervisor.wrHex(command);
+		JVMHelp.wr(" s=");
+		AtariSupervisor.wrDec(sector);
+		JVMHelp.wr(" #");
+		AtariSupervisor.wrDec(cmdProcessed);
+		JVMHelp.wr("\n");
 	}
 
 	/**
@@ -356,11 +383,12 @@ public class SioDiskEmu {
 		Native.wr(b & 0xFF, IoAddr.SIOBRIDGE_TX_DATA);
 	}
 
-	/** Wait for TX FIFO to drain completely (all bytes serialized). */
+	/** Wait for TX FIFO to drain and P2S serializer to finish last byte. */
 	void waitTxDone() {
-		while ((Native.rd(IoAddr.SIOBRIDGE_TX_STATUS) & 0x01) == 0) {
-			// TX FIFO not empty — wait
-		}
+		// Wait for FIFO empty (TX_STATUS bit 0)
+		while ((Native.rd(IoAddr.SIOBRIDGE_TX_STATUS) & 0x01) == 0) {}
+		// Wait for P2S serializer idle (STATUS bit 2 = TX_BUSY)
+		while ((Native.rd(IoAddr.SIOBRIDGE_STATUS_CTRL) & 0x04) != 0) {}
 	}
 
 	// ===== Utility =====

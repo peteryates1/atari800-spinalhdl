@@ -214,15 +214,29 @@ public class AtariSupervisor {
 		final SioDiskEmu sio = new SioDiskEmu();
 
 		// --- Load cartridge ROM + disk image from SD card ---
-		int cartMode = CART_MODE_OFF;  // default: use BRAM cart (Star Raiders 8K)
+		// For SIO testing: boot without cartridge so OS keeps retrying D1:
+		int cartMode = CART_MODE_OFF;
+		SdSpiBlockDevice sd = null;
+		Fat32FileSystem fs = null;
 		try {
 			JVMHelp.wr("SD init...\n");
-			SdSpiBlockDevice sd = new SdSpiBlockDevice();
-			if (!sd.init()) {
+			sd = new SdSpiBlockDevice();
+			// Retry SD init up to 3 times (card may need time after FPGA programming)
+			boolean sdOk = false;
+			for (int sdRetry = 0; sdRetry < 3 && !sdOk; sdRetry++) {
+				if (sdRetry > 0) {
+					JVMHelp.wr("SD retry ");
+					wrDec(sdRetry);
+					JVMHelp.wr("...\n");
+					delay(500000);
+				}
+				sdOk = sd.init();
+			}
+			if (!sdOk) {
 				JVMHelp.wr("SD init fail\n");
 				throw new Exception("sd init");
 			}
-			Fat32FileSystem fs = new Fat32FileSystem(sd);
+			fs = new Fat32FileSystem(sd);
 			if (!fs.mount(0)) {
 				JVMHelp.wr("FAT32 mount fail\n");
 				throw new Exception("mount");
@@ -231,39 +245,21 @@ public class AtariSupervisor {
 
 			// Debug: list root directory
 			int rootCluster = fs.getRootCluster();
-			JVMHelp.wr("Root cluster: ");
-			wrDec(rootCluster);
-			JVMHelp.wr("\n");
 			DirEntry[] rootEntries = fs.listDir(rootCluster);
 			if (rootEntries != null) {
 				JVMHelp.wr("Root: ");
 				wrDec(rootEntries.length);
 				JVMHelp.wr(" entries\n");
-				for (int i = 0; i < rootEntries.length; i++) {
-					if (rootEntries[i] == null) continue;
-					String n = rootEntries[i].getName();
-					if (n != null) {
-						JVMHelp.wr("  ");
-						JVMHelp.wr(n);
-						if (rootEntries[i].isDirectory()) JVMHelp.wr("/");
-						JVMHelp.wr("\n");
-					}
-				}
-			} else {
-				JVMHelp.wr("Root listing null\n");
 			}
 
-			if (loadCartRom(fs, vga)) {
-				cartMode = loadedCartMode;
-				JVMHelp.wr("Cart mode: ");
-				wrDec(cartMode);
-				JVMHelp.wr("\n");
-			} else {
-				JVMHelp.wr("No SD cart, using BRAM\n");
-			}
+			// Skip cartridge load for SIO testing — boot with no cart
+			// if (loadCartRom(fs, vga)) {
+			// 	cartMode = loadedCartMode;
+			// }
 
-			// Mount disk image from disk/ directory
-			DirEntry diskDir = fs.findFile(rootCluster, "disk");
+			// Mount disk image from disks/ (or disk/) directory
+			DirEntry diskDir = fs.findFile(rootCluster, "disks");
+			if (diskDir == null) diskDir = fs.findFile(rootCluster, "disk");
 			if (diskDir != null && diskDir.isDirectory()) {
 				DirEntry atr = findFirstAtr(fs, diskDir.getStartCluster());
 				if (atr != null) {
@@ -274,32 +270,54 @@ public class AtariSupervisor {
 				}
 			}
 		} catch (Exception e) {
-			JVMHelp.wr("SD failed, using BRAM\n");
+			JVMHelp.wr("SD failed\n");
 		}
 
-		// Release Atari from reset
-		Native.wr(cartMode, ATARI_CART_SEL);
-		Native.wr(0x01, ATARI_STATUS);
-		JVMHelp.wr("Atari released\n");
+		// Setup SIO interrupt BEFORE releasing Atari, so we catch the first command frame
 		JVMHelp.addInterruptHandler(IoAddr.INT_SIOBRIDGE, new Runnable() {
 			public void run() {
 				sio.cmdPending = true;
+				sio.intCount++;
 			}
 		});
-		// Enable SioBridge interrupt in mask + global enable
-		Native.wr(1 << IoAddr.INT_SIOBRIDGE, Const.IO_INTMASK);
+		int mask = Native.rd(Const.IO_INTMASK);
+		Native.wr(mask | (1 << IoAddr.INT_SIOBRIDGE), Const.IO_INTMASK);
 		Native.wr(1, Const.IO_INT_ENA);
-		JVMHelp.wr("SIO D1: ready\n");
+
+		// Release Atari from reset — no cartridge, OS will try D1: boot
+		Native.wr(cartMode, ATARI_CART_SEL);
+		Native.wr(0x01, ATARI_STATUS);
+		JVMHelp.wr("Atari released (no cart), SIO ready\n");
 
 		// --- Main loop ---
+		int sioDbgTimer = Native.rd(Const.IO_US_CNT);
+		int pollTriggers = 0;
 		while (true) {
 			if ((Native.rd(Const.IO_UART_STATUS) & Const.MSK_UA_RDRF) != 0) {
 				pollSerial();
+			}
+			// Check SIO: interrupt-driven + polling backup via CMD_EDGE
+			int sioStat = Native.rd(IoAddr.SIOBRIDGE_STATUS_CTRL);
+			if ((sioStat & 0x10) != 0 && !sio.cmdPending) {
+				// CMD_EDGE set but interrupt didn't fire — polling catches it
+				sio.cmdPending = true;
+				pollTriggers++;
 			}
 			if (sio.cmdPending) {
 				sio.processCommand();
 			}
 			int now = Native.rd(Const.IO_US_CNT);
+			// Debug: every 2 seconds
+			if (now - sioDbgTimer > 2000000) {
+				sioDbgTimer = now;
+				JVMHelp.wr("SIO: int=");
+				wrDec(sio.intCount);
+				JVMHelp.wr(" poll=");
+				wrDec(pollTriggers);
+				JVMHelp.wr(" proc=");
+				wrDec(sio.cmdProcessed);
+				JVMHelp.wr("\n");
+			}
 			if (wd_next - now < 0) {
 				wd_next = now + WD_INTERVAL;
 				w = ~w;

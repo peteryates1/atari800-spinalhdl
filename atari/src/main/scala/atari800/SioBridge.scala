@@ -69,6 +69,13 @@ class SioBridge extends Component with HasBusIo {
 
   val rxReadData = rxMem.readAsync(rxRdPtr)
 
+  // Latch RX data on bus.rd to prevent JOP ioRdPending re-sampling corruption.
+  // During re-sampling, rxRdPtr has already advanced; the latch holds the correct value.
+  val rxReadLatch = Reg(Bits(16 bits)) init 0
+  when(bus.rd && bus.addr === 1) {
+    rxReadLatch := rxReadData
+  }
+
   // Interrupt: one-cycle pulse when command frame ends and RX FIFO has data
   bus.cmdInterrupt := cmdRising && !rxEmpty
 
@@ -188,7 +195,7 @@ class SioBridge extends Component with HasBusIo {
       when(bus.rd) { cmdEdge := False; framingErr := False }
     }
     is(0x1) {
-      bus.rdData := B(0, 16 bits) ## rxReadData
+      bus.rdData := B(0, 16 bits) ## Mux(bus.rd, rxReadData, rxReadLatch)
       when(bus.rd) { rxPop := True }
     }
     is(0x3) {
