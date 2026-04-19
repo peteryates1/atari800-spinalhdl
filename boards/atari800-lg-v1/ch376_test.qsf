@@ -1,0 +1,33 @@
+# CH376T SPI test — minimal UART-to-SPI bridge
+# Target: EP4CGX150DF27I7 on QMTECH core board + ATARI-800-LG-V1 base board
+
+set_global_assignment -name DEVICE EP4CGX150DF27I7
+set_global_assignment -name TOP_LEVEL_ENTITY ch376_test_top
+set_global_assignment -name FAMILY "Cyclone IV GX"
+set_global_assignment -name SYSTEMVERILOG_FILE ch376_test_top.sv
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+
+# Clock
+set_location_assignment PIN_B14 -to clk_in
+
+# UART (CH340)
+set_location_assignment PIN_AF24 -to uart_tx
+set_location_assignment PIN_AC21 -to uart_rx
+
+# CH376T SPI
+set_location_assignment PIN_A7  -to ch376_sck
+set_location_assignment PIN_B6  -to ch376_mosi
+set_location_assignment PIN_B7  -to ch376_miso
+set_location_assignment PIN_A6  -to ch376_cs
+set_location_assignment PIN_B11 -to ch376_int
+set_location_assignment PIN_B10 -to ch376_rst
+set_location_assignment PIN_C10 -to ch376_spi_n
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ch376_miso
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ch376_int
+
+# LEDs
+set_location_assignment PIN_A25 -to led[0]
+set_location_assignment PIN_A24 -to led[1]
+
+set_global_assignment -name LAST_QUARTUS_VERSION "25.1std.0 Lite Edition"
