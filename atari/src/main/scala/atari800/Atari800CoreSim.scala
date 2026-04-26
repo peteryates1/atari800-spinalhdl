@@ -8,7 +8,7 @@ import spinal.lib._
 // - No Analog inout signals
 // - Uses internal RAM (no SDRAM controller needed)
 // - Behavioral SDRAM model driven from testbench via simple interface
-class Atari800CoreSim(cartridge_rom: String = "") extends Component {
+class Atari800CoreSim(cartridge_rom: String = "", internal_ram: Int = 0) extends Component {
   val io = new Bundle {
     // VGA output
     val vga_r     = out Bits(4 bits)
@@ -34,6 +34,14 @@ class Atari800CoreSim(cartridge_rom: String = "") extends Component {
 
     // Joystick port 1 (active low: fire, right, left, down, up)
     val joy1 = in Bits(5 bits)
+
+    // SIO pins (exposed so testbench can emulate a disk drive).
+    // Atari drives TXD out, COMMAND low during command frames, CLOCKOUT for
+    // SIO bit clock. Testbench drives RXD back to the Atari.
+    val sio_txd      = out Bool()
+    val sio_command  = out Bool()
+    val sio_clockout = out Bool()
+    val sio_rxd      = in  Bool()
 
     // SDRAM interface - directly exposed for behavioral model in testbench
     val sdramRequest         = out Bool()
@@ -80,7 +88,7 @@ class Atari800CoreSim(cartridge_rom: String = "") extends Component {
     video_bits    = 8,
     palette       = 0,
     internal_rom   = 3,        // Atari 800 OS (atarios2 + atariosb)
-    internal_ram   = 0,        // All RAM via SDRAM (testing sdramOnlyBank path)
+    internal_ram   = internal_ram,
     low_memory     = 0,
     stereo         = 1,
     covox          = 1,
@@ -115,8 +123,11 @@ class Atari800CoreSim(cartridge_rom: String = "") extends Component {
   // Keyboard (no keys pressed)
   atariCore.io.KEYBOARD_RESPONSE := B"11"
 
-  // SIO
-  atariCore.io.SIO_RXD := True
+  // SIO — wired out to testbench so a behavioural disk drive can respond
+  atariCore.io.SIO_RXD := io.sio_rxd
+  io.sio_txd      := atariCore.io.SIO_TXD
+  io.sio_command  := atariCore.io.SIO_COMMAND
+  io.sio_clockout := atariCore.io.SIO_CLOCKOUT
 
   // Console
   atariCore.io.CONSOL_OPTION := io.option_btn

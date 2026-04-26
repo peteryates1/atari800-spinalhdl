@@ -130,7 +130,15 @@ class Atari800Ep4cgx150DualPllTop extends Component {
     val arbiter = new SdramArbiter
 
     // Port B: JOP (via BmbToSdramReq bridge)
-    arbiter.io.b.request        := bmbBridge.io.request
+    // Blanking gate: defer JOP SDRAM requests to blanking intervals (HBLANK/VBLANK)
+    // to avoid ANTIC DMA contention during active display. During boot (Atari held
+    // in reset), access is unrestricted. The arbiter's edge detector captures the
+    // delayed pulse; BmbToSdramReq stays in WAIT with stable signals until complete.
+    val bReqHeld = RegInit(False)  // captured request waiting for blanking
+    val blanking = Bool()          // wired after atariCore is created
+    when(bmbBridge.io.request && !blanking) { bReqHeld := True }
+    when(bReqHeld && blanking) { bReqHeld := False }
+    arbiter.io.b.request        := (bmbBridge.io.request && blanking) || (bReqHeld && blanking)
     arbiter.io.b.readEnable     := bmbBridge.io.readEnable
     arbiter.io.b.writeEnable    := bmbBridge.io.writeEnable
     arbiter.io.b.addr           := bmbBridge.io.addr
@@ -250,7 +258,7 @@ class Atari800Ep4cgx150DualPllTop extends Component {
       video_bits     = 8,
       palette        = 0,
       internal_rom   = 3,          // Atari 800 OS (atarios2 + atariosb)
-      internal_ram   = 16384,      // 16K BRAM + rest via SDRAM (reduces ANTIC contention)
+      internal_ram   = 16384,      // 16K BRAM + rest via SDRAM
       low_memory     = 0,
       cartridge_rom  = ""
     )
@@ -343,6 +351,10 @@ class Atari800Ep4cgx150DualPllTop extends Component {
     jopArea.arbiter.io.a.refresh        := atariCore.io.SDRAM_REFRESH
     atariCore.io.SDRAM_REQUEST_COMPLETE := jopArea.arbiter.io.a.complete
     atariCore.io.SDRAM_DO               := jopArea.arbiter.io.a.dataOut
+
+    // Blanking gate: allow JOP SDRAM during HBLANK/VBLANK (no ANTIC DMA)
+    // or while Atari is held in reset (JOP needs unrestricted access for boot loading)
+    jopArea.blanking := atariCore.io.VIDEO_BLANK | atariHoldReset
 
     // =====================================================================
     // Scandoubler: 15 kHz Atari -> 31 kHz VGA

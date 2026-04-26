@@ -10,7 +10,7 @@ set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
 # Source files
 set_global_assignment -name SYSTEMVERILOG_FILE ep4cgx150_dualpll_top.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../generated/Atari800Ep4cgx150DualPllTop.sv
-set_global_assignment -name SYSTEMVERILOG_FILE atari_pll.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../cyclone4/atari_pll.sv
 
 # Altera LPM ROM/RAM primitives (used by AlteraLpm memory style)
 set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/ip/altera_lpm/arom.vhd
@@ -141,6 +141,8 @@ set_location_assignment PIN_C24 -to "sdram_DQ[15]"
 # ---------------------------------------------------------------------------
 # LEDs (core board, active high)
 # ---------------------------------------------------------------------------
+# A25 -> LED1 -> D1
+# A24 -> LED2 -> D2
 set_location_assignment PIN_A25   -to "led[0]"
 set_location_assignment PIN_A24   -to "led[1]"
 

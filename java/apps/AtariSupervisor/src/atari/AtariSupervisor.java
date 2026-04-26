@@ -4,6 +4,7 @@ import com.jopdesign.sys.Const;
 import com.jopdesign.sys.JVMHelp;
 import com.jopdesign.sys.Native;
 import com.jopdesign.hw.VgaText;
+import com.jopdesign.fat32.BlockDevice;
 import com.jopdesign.fat32.SdSpiBlockDevice;
 import com.jopdesign.fat32.Fat32FileSystem;
 import com.jopdesign.fat32.Fat32InputStream;
@@ -216,25 +217,35 @@ public class AtariSupervisor {
 		// --- Load cartridge ROM + disk image from SD card ---
 		// For SIO testing: boot without cartridge so OS keeps retrying D1:
 		int cartMode = CART_MODE_OFF;
-		SdSpiBlockDevice sd = null;
+		BlockDevice sd = null;
 		Fat32FileSystem fs = null;
 		try {
-			JVMHelp.wr("SD init...\n");
-			sd = new SdSpiBlockDevice();
-			// Retry SD init up to 3 times (card may need time after FPGA programming)
-			boolean sdOk = false;
-			for (int sdRetry = 0; sdRetry < 3 && !sdOk; sdRetry++) {
-				if (sdRetry > 0) {
-					JVMHelp.wr("SD retry ");
-					wrDec(sdRetry);
-					JVMHelp.wr("...\n");
-					delay(500000);
+			// Try CH376T first (ATARI-800-LG-V1 board has CH376T on SPI)
+			// CHECK_EXIST probe is safe — reads 0xFF if no CH376T present
+			JVMHelp.wr("CH376T probe...\n");
+			Ch376BlockDevice ch376sd = new Ch376BlockDevice();
+			if (ch376sd.init()) {
+				JVMHelp.wr("CH376T SD OK\n");
+				sd = ch376sd;
+			} else {
+				// Fall back to raw SD card (direct SPI to SD card socket)
+				JVMHelp.wr("Raw SD init...\n");
+				SdSpiBlockDevice rawSd = new SdSpiBlockDevice();
+				boolean sdOk = false;
+				for (int sdRetry = 0; sdRetry < 3 && !sdOk; sdRetry++) {
+					if (sdRetry > 0) {
+						JVMHelp.wr("SD retry ");
+						wrDec(sdRetry);
+						JVMHelp.wr("...\n");
+						delay(500000);
+					}
+					sdOk = rawSd.init();
 				}
-				sdOk = sd.init();
-			}
-			if (!sdOk) {
-				JVMHelp.wr("SD init fail\n");
-				throw new Exception("sd init");
+				if (!sdOk) {
+					JVMHelp.wr("SD init fail\n");
+					throw new Exception("sd init");
+				}
+				sd = rawSd;
 			}
 			fs = new Fat32FileSystem(sd);
 			if (!fs.mount(0)) {
@@ -283,6 +294,10 @@ public class AtariSupervisor {
 		int mask = Native.rd(Const.IO_INTMASK);
 		Native.wr(mask | (1 << IoAddr.INT_SIOBRIDGE), Const.IO_INTMASK);
 		Native.wr(1, Const.IO_INT_ENA);
+
+		// Disable VGA overlay before releasing Atari
+		vga.disable();
+		Native.wr(0, IoAddr.VGATEXT_STATUS_CTRL);  // belt-and-suspenders
 
 		// Release Atari from reset — no cartridge, OS will try D1: boot
 		Native.wr(cartMode, ATARI_CART_SEL);
@@ -458,14 +473,19 @@ public class AtariSupervisor {
 		DirEntry[] entries = fs.listDir(dirCluster);
 		if (entries == null) return null;
 
-		for (int i = 0; i < entries.length; i++) {
-			DirEntry e = entries[i];
-			if (e == null || e.isDirectory()) continue;
-			String name = e.getName();
-			if (name == null || name.length() < 5) continue;
-			String ext = name.substring(name.length() - 4);
-			if (ext.equalsIgnoreCase(".atr")) {
-				return e;
+		// DEBUGGING: prefer "Jumpman" for display-blank investigation.
+		// Falls back to any ATR if Jumpman not present.
+		for (int pass = 0; pass < 2; pass++) {
+			for (int i = 0; i < entries.length; i++) {
+				DirEntry e = entries[i];
+				if (e == null || e.isDirectory()) continue;
+				String name = e.getName();
+				if (name == null || name.length() < 5) continue;
+				String ext = name.substring(name.length() - 4);
+				if (ext.equalsIgnoreCase(".atr")) {
+					if (pass == 0 && !name.startsWith("Jumpman")) continue;
+					return e;
+				}
 			}
 		}
 		return null;
@@ -571,7 +591,110 @@ public class AtariSupervisor {
 			// Cold reset
 			Native.wr(0x80, ATARI_STATUS);
 			break;
+		case 'X': {
+			// Raw SPI transfer: 'X' <len> <b0> ... <bN-1>
+			// Asserts CS, transfers each byte (full duplex), deasserts CS.
+			// Returns text: "X:<HH> <HH> ...\n"
+			int len = uartReadTimeout(500000);
+			if (len < 0 || len > 64) break;
+			int[] rxBuf = new int[64];
+			com.jopdesign.hw.SdSpi spiDev = com.jopdesign.hw.SdSpi.getInstance();
+			spiDev.csAssert();
+			for (int xi = 0; xi < len; xi++) {
+				int b = uartReadTimeout(500000);
+				if (b < 0) { spiDev.csDeassert(); JVMHelp.wr("X:ERR\n"); break; }
+				rxBuf[xi] = spiDev.transfer(b);
+			}
+			spiDev.csDeassert();
+			JVMHelp.wr("X:");
+			for (int xi = 0; xi < len; xi++) {
+				wrHex(rxBuf[xi]);
+				JVMHelp.wr(' ');
+			}
+			JVMHelp.wr('\n');
+			break;
 		}
+		case 'Y': {
+			// SPI clock divider: 'Y' <divLo> <divHi>
+			int dlo = uartReadTimeout(500000);
+			int dhi = uartReadTimeout(500000);
+			if (dlo < 0 || dhi < 0) break;
+			int div = (dhi << 8) | dlo;
+			com.jopdesign.hw.SdSpi.getInstance().setClockDivider(div);
+			JVMHelp.wr("Y=");
+			wrDec(div);
+			JVMHelp.wr("\n");
+			break;
+		}
+		case 'M': {
+			// Memory peek: 'M' <addrLo> <addrHi> <lenLo> <lenHi>
+			// Dumps Atari CPU-space bytes as hex text.
+			// Only $4000-$BFFF is SDRAM-backed (readable from JOP).
+			// $0000-$3FFF (internal BRAM) and $C000-$FFFF (OS ROM BRAM) print "??".
+			JVMHelp.wr("M!");
+			// Timeout must exceed Python pacing (50 ms/byte in atari_peek.py).
+			// SIO processing can block the main loop ~20 ms per sector — use
+			// 500 ms to avoid races during sustained disk loading.
+			int aLo = uartReadTimeout(500000);
+			int aHi = uartReadTimeout(500000);
+			int nLo = uartReadTimeout(500000);
+			int nHi = uartReadTimeout(500000);
+			if (aLo < 0 || aHi < 0 || nLo < 0 || nHi < 0) {
+				JVMHelp.wr("M?");
+				wrDec(aLo); JVMHelp.wr(',');
+				wrDec(aHi); JVMHelp.wr(',');
+				wrDec(nLo); JVMHelp.wr(',');
+				wrDec(nHi); JVMHelp.wr('\n');
+				break;
+			}
+			int addr = ((aHi & 0xFF) << 8) | (aLo & 0xFF);
+			int len  = ((nHi & 0xFF) << 8) | (nLo & 0xFF);
+			if (len == 0) len = 256;
+			if (len > 4096) len = 4096;  // cap to avoid long blocking
+			dumpAtariMem(addr, len);
+			break;
+		}
+		}
+	}
+
+	/**
+	 * Dump Atari CPU-space address range as hex text over UART.
+	 * Output format (each row): "AAAA: BB BB BB ... BB\n"
+	 * Header: "M<addr>:<len>\n"  Footer: "END\n"
+	 * Addresses outside SDRAM-backed range ($4000-$BFFF) print "??".
+	 */
+	static void dumpAtariMem(int startAddr, int len) {
+		JVMHelp.wr("M");
+		wrHex((startAddr >> 8) & 0xFF);
+		wrHex(startAddr & 0xFF);
+		JVMHelp.wr(':');
+		wrHex((len >> 8) & 0xFF);
+		wrHex(len & 0xFF);
+		JVMHelp.wr('\n');
+		for (int off = 0; off < len; off += 16) {
+			int rowAddr = (startAddr + off) & 0xFFFF;
+			wrHex((rowAddr >> 8) & 0xFF);
+			wrHex(rowAddr & 0xFF);
+			JVMHelp.wr(':');
+			int rowLen = len - off;
+			if (rowLen > 16) rowLen = 16;
+			for (int i = 0; i < rowLen; i++) {
+				int a = (startAddr + off + i) & 0xFFFF;
+				JVMHelp.wr(' ');
+				if (a >= 0x4000 && a < 0xC000) {
+					int wa = 0x200000 + (a >> 2);
+					int word = Native.rdMem(wa);
+					int b = (word >> ((a & 3) * 8)) & 0xFF;
+					wrHex(b);
+				} else {
+					JVMHelp.wr("??");
+				}
+			}
+			JVMHelp.wr('\n');
+			// Watchdog each row (dump can span >100 ms at 500 kbaud)
+			Native.wr(~Native.rd(Const.IO_WD), Const.IO_WD);
+		}
+		JVMHelp.wr("END\n");
 	}
 
 	/** Update console key register (Start/Select/Option + throttle) */
