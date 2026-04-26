@@ -39,6 +39,13 @@ class Pokey(CUSTOM_KEYBOARD_SCAN: Int = 0) extends Component {
     val sioClockout        = out Bool()
 
     val potReset           = out Bool()
+
+    // Debug: keyboard event signals
+    val keyIrqPulse        = out Bool()   // one-cycle pulse when key registered
+    val keyHeldOut         = out Bool()   // true while registered key is held
+    val kbIrqEnabled       = out Bool()   // IRQEN bit 6 — keyboard interrupt enabled
+    val kbIrqPending       = out Bool()   // IRQST bit 6 inverted — interrupt pending
+    val kbcodeReadPulse    = out Bool()   // one-cycle pulse when CPU reads KBCODE
   }
 
   // clock enables
@@ -765,6 +772,14 @@ class Pokey(CUSTOM_KEYBOARD_SCAN: Int = 0) extends Component {
   kbcode      := pokeyKeyboardScanner1.io.keycode
   otherKeyIrq := pokeyKeyboardScanner1.io.otherKeyIrq
   breakIrq    := pokeyKeyboardScanner1.io.breakIrq
+  io.keyIrqPulse := pokeyKeyboardScanner1.io.otherKeyIrq
+  io.keyHeldOut  := pokeyKeyboardScanner1.io.keyHeld
+  io.kbIrqEnabled := irqenReg(6)
+  io.kbIrqPending := ~irqstReg(6)  // irqst is active LOW — invert for "pending"
+
+  // Detect when CPU acknowledges the keyboard IRQ (IRQST bit 6 goes 0→1)
+  val prevIrqst6 = RegNext(irqstReg(6)) init True
+  io.kbcodeReadPulse := ~prevIrqst6 & irqstReg(6)  // rising edge = acknowledged
 
   // POT scan
   pot0Next := pot0Reg

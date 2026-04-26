@@ -1,7 +1,7 @@
 QUARTUS     = /opt/altera/25.1/quartus/bin
 GEN_DIR     = ../../generated
 JOP_DIR     = ../../jop-spinalhdl
-QP          = atari800_lg_v1
+QP          = atari800_lg_v1_bram
 
 SERIAL_PORT ?= /dev/ttyUSB0
 BAUD        = 500000
@@ -16,7 +16,7 @@ MONITOR_PY  = $(JOP_DIR)/fpga/scripts/monitor.py
 # SpinalHDL generate (same design as ep4cgx150 dualpll)
 # ---------------------------------------------------------------------------
 generate:
-	cd ../.. && sbt "atari/runMain atari800.Atari800Ep4cgx150DualPllSv"
+	cd ../.. && sbt "atari/runMain atari800.Atari800LgV1Sv"
 
 # ---------------------------------------------------------------------------
 # Quartus build

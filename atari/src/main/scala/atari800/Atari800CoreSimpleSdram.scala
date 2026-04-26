@@ -48,6 +48,11 @@ class Atari800CoreSimpleSdram(
     // Keyboard
     val KEYBOARD_RESPONSE = in  Bits(2 bits)
     val KEYBOARD_SCAN     = out Bits(6 bits)
+    val KEY_IRQ_PULSE     = out Bool()
+    val KEY_HELD          = out Bool()
+    val KB_IRQ_ENABLED    = out Bool()
+    val KB_IRQ_PENDING    = out Bool()
+    val KB_IRQ_ACK        = out Bool()
 
     // SIO
     val SIO_COMMAND  = out Bool()
@@ -297,6 +302,11 @@ class Atari800CoreSimpleSdram(
 
   atari800xl.io.KEYBOARD_RESPONSE := io.KEYBOARD_RESPONSE
   io.KEYBOARD_SCAN                := atari800xl.io.KEYBOARD_SCAN
+  io.KEY_IRQ_PULSE                := atari800xl.io.KEY_IRQ_PULSE
+  io.KEY_HELD                     := atari800xl.io.KEY_HELD
+  io.KB_IRQ_ENABLED               := atari800xl.io.KB_IRQ_ENABLED
+  io.KB_IRQ_PENDING               := atari800xl.io.KB_IRQ_PENDING
+  io.KB_IRQ_ACK                   := atari800xl.io.KB_IRQ_ACK
 
   atari800xl.io.POT_IN  := POT_IN
   POT_RESET              := atari800xl.io.POT_RESET

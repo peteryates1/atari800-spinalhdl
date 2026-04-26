@@ -68,6 +68,11 @@ class Atari800Core(
     // Keyboard
     val KEYBOARD_RESPONSE = in  Bits(2 bits)
     val KEYBOARD_SCAN     = out Bits(6 bits)
+    val KEY_IRQ_PULSE     = out Bool()   // debug: POKEY registered a keypress
+    val KEY_HELD          = out Bool()   // debug: POKEY sees key held
+    val KB_IRQ_ENABLED    = out Bool()   // debug: IRQEN bit 6
+    val KB_IRQ_PENDING    = out Bool()   // debug: keyboard IRQ pending
+    val KB_IRQ_ACK        = out Bool()   // debug: keyboard IRQ acknowledged
 
     // Pots
     val POT_IN    = in  Bits(8 bits)
@@ -634,6 +639,11 @@ class Atari800Core(
   POKEY1_CHANNEL3              := pokey1.io.channel3Out
   POKEY1_DO                    := pokey1.io.dataOut
   io.KEYBOARD_SCAN             := pokey1.io.keyboardScan
+  io.KEY_IRQ_PULSE             := pokey1.io.keyIrqPulse
+  io.KEY_HELD                  := pokey1.io.keyHeldOut
+  io.KB_IRQ_ENABLED            := pokey1.io.kbIrqEnabled
+  io.KB_IRQ_PENDING            := pokey1.io.kbIrqPending
+  io.KB_IRQ_ACK                := pokey1.io.kbcodeReadPulse
 
   // Console
   CONSOL_IN := True ## io.CONSOL_OPTION ## io.CONSOL_SELECT ## io.CONSOL_START
