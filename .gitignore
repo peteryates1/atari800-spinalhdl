@@ -32,13 +32,23 @@ boards/i9plus-6v1/vivado_pid*.str
 
 # Simulation
 sim_workspace/
+simWorkspace/
 
 # IDE
 .idea/
 .bsp/
+.bloop/
 .metals/
 .vscode/
+project/metals.sbt
+
+# Backup files
+*.bak
+
+# ROM / disk images (copyrighted material — keep out of repo)
+roms/
 *.rom
+*.atr
 
 # Java
 java/apps/*/build
