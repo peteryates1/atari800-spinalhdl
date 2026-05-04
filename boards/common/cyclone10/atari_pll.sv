@@ -1,8 +1,8 @@
-// ALTPLL for QMTECH EP4CGX150: 50 MHz -> 56.67 MHz (multiply=17, divide=15)
-// c0: 56.67 MHz system clock (JOP + Atari)
-// c1: 56.67 MHz SDRAM clock (-3 ns phase shift for read timing)
+// ALTPLL for Cyclone 10 LP: 50 MHz -> 56.67 MHz (multiply=17, divide=15)
+// c0: 56.67 MHz system clock (Atari core + peripherals)
+// c1: unused (SDRAM clock on other builds)
 // c2: unused
-// c3: 25 MHz VGA text pixel clock (divide=2)
+// c3: unused
 module atari_pll (
     input  wire areset,
     input  wire inclk0,
@@ -21,17 +21,9 @@ module atari_pll (
         .clk0_duty_cycle(50),
         .clk0_multiply_by(17),
         .clk0_phase_shift("0"),
-        .clk1_divide_by(15),
-        .clk1_duty_cycle(50),
-        .clk1_multiply_by(17),
-        .clk1_phase_shift("-3000"),
-        .clk3_divide_by(2),
-        .clk3_duty_cycle(50),
-        .clk3_multiply_by(1),
-        .clk3_phase_shift("0"),
         .compensate_clock("CLK0"),
         .inclk0_input_frequency(20000),
-        .intended_device_family("Cyclone IV GX"),
+        .intended_device_family("Cyclone 10 LP"),
         .lpm_hint("CBX_MODULE_PREFIX=atari_pll"),
         .lpm_type("altpll"),
         .operation_mode("NORMAL"),
@@ -62,9 +54,9 @@ module atari_pll (
         .port_scanread("PORT_UNUSED"),
         .port_scanwrite("PORT_UNUSED"),
         .port_clk0("PORT_USED"),
-        .port_clk1("PORT_USED"),
+        .port_clk1("PORT_UNUSED"),
         .port_clk2("PORT_UNUSED"),
-        .port_clk3("PORT_USED"),
+        .port_clk3("PORT_UNUSED"),
         .port_clk4("PORT_UNUSED"),
         .port_clk5("PORT_UNUSED"),
         .self_reset_on_loss_lock("OFF"),
@@ -107,8 +99,8 @@ module atari_pll (
     );
 
     assign c0 = clk_int[0];
-    assign c1 = clk_int[1];
+    assign c1 = 1'b0;
     assign c2 = 1'b0;
-    assign c3 = clk_int[3];
+    assign c3 = 1'b0;
 
 endmodule

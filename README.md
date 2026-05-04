@@ -18,7 +18,7 @@ Frame capture produces correct PAL-palette colour output.
 
 **Hardware verified** — memo pad and Star Raiders confirmed running on
 QMTECH EP4CGX150 + DB_FPGA daughter board v4 (VGA output, 56.67 MHz).
-See `boards/ep4cgx150/`.
+See `boards/db_fpga_v4/qmtech-ep4cgx150/`.
 
 ### Dual-PLL build (EP4CGX150)
 
@@ -71,11 +71,26 @@ atari/                   Atari 800 core
 java/apps/AtariSupervisor/   JOP application: Atari core supervisor (USB keyboard, serial relay)
 jop-spinalhdl/           JOP soft-core (git submodule, pure library — no Atari-specific code)
 boards/
-  ep4cgx150/             QMTECH EP4CGX150 + DB_FPGA (Cyclone IV GX, hardware verified)
-  AC608/                 Cyclone 10 LP custom board (Quartus 25.1)
-  i5-7v0/                Colorlight i5 v7.0 (ECP5 LFE5U-25F, yosys/nextpnr)
-  i9-7v2/                Colorlight i9 v7.2 (ECP5 LFE5U-45F, yosys/nextpnr)
-  i9plus-6v1/            Colorlight i9+ v6.1 (XC7A50T, Vivado)
+  common/                       Shared per-FPGA-family entities (PLLs, etc.)
+    cyclone4/                     Cyclone IV GX PLL primitive
+    cyclone10/                    Cyclone 10 LP PLL primitive
+  db_fpga_v4/qmtech-ep4cgx150/  QMTECH EP4CGX150 + DB_FPGA v4 (Cyclone IV GX, hardware verified)
+    atari_ep4cgx150/              Single-PLL bare-metal Atari (no JOP, BRAM-only)
+    atari_ep4cgx150_jop/          Single-PLL Atari + JOP supervisor (BRAM-only + CH376T)
+    atari_ep4cgx150_dualpll/      Dual-PLL JOP @80 MHz + Atari @56.67 MHz, shared SDRAM
+  atari800-lg-v1/               ATARI-800-LG-V1 base board (CH340 UART, CH376T USB/SD, VGA, joysticks)
+    qmtech-ep4cgx150/             EP4CGX150 core builds for V1 base board
+      atari800_lg_v1/                Dual-PLL Atari + JOP (uses Atari800Ep4cgx150DualPllTop)
+      atari800_lg_v1_bram/           BRAM-only build (no JOP, no SDRAM)
+      ch376_test/                    CH376T standalone bring-up test
+      vga_test/                      VGA test pattern (no SpinalHDL)
+    qmtech-10cl025/               10CL025 core build for V1 base board
+      atari800_lg_v1_10cl025/        BRAM-only build (40K RAM + cart + OS = 58 of 66 M9K)
+  atari800-lg-v1.1/             ATARI-800-LG-V1.1 base board (V1.1 fixes for SD card etc.)
+  AC608/                        Cyclone 10 LP custom board (Quartus 25.1)
+  i5-7v0/                       Colorlight i5 v7.0 (ECP5 LFE5U-25F, yosys/nextpnr)
+  i9-7v2/                       Colorlight i9 v7.2 (ECP5 LFE5U-45F, yosys/nextpnr)
+  i9plus-6v1/                   Colorlight i9+ v6.1 (XC7A50T, Vivado)
 generated/               SpinalHDL output (.sv + .bin) — gitignored
 unused_scala/            Archived/inactive modules
 tools/
@@ -129,36 +144,42 @@ Convert to PNG with ImageMagick: `convert frame.ppm frame.png`
 sbt "atari/runMain atari800.Atari800JopTopSv"
 ```
 
-### EP4CGX150 builds (QMTECH EP4CGX150 + DB_FPGA)
+### EP4CGX150 + DB_FPGA v4 builds
+
+Each project lives in its own directory under
+`boards/db_fpga_v4/qmtech-ep4cgx150/`:
 
 ```sh
-cd boards/ep4cgx150
-
-# Bare-metal (no JOP)
-make generate   # SpinalHDL → Atari800Ep4cgx150Top.sv
+# Bare-metal (no JOP) — single PLL, BRAM-only
+cd boards/db_fpga_v4/qmtech-ep4cgx150/atari_ep4cgx150
+make generate   # SpinalHDL → generated/Atari800Ep4cgx150Top.sv
 make build      # Quartus compile
 make program    # JTAG via USB-Blaster
 
 # Single-PLL JOP (56.67 MHz shared clock)
-make generate-jop
-make build-jop
-make program-jop
-make download-jop   # Serial boot AtariSupervisor.jop (500 kbaud)
+cd boards/db_fpga_v4/qmtech-ep4cgx150/atari_ep4cgx150_jop
+make generate
+make build
+make program
+make download   # Serial boot AtariSupervisor.jop (500 kbaud)
 
 # Dual-PLL JOP (80 MHz JOP + 56.67 MHz Atari, recommended)
-make generate-dualpll
-make build-dualpll
-make program-dualpll
-make download-dualpll  # Serial boot AtariSupervisor.jop (2 Mbaud)
-make run-dualpll       # program + download + monitor in one step
+cd boards/db_fpga_v4/qmtech-ep4cgx150/atari_ep4cgx150_dualpll
+make generate
+make build
+make program
+make download   # Serial boot AtariSupervisor.jop
+make run        # program + download + monitor in one step
 ```
+
+All Quartus build artifacts go to `output_files/` per project.
 
 JOP software build chain (rebuild after Java source changes).
 Const.java generation and app compilation are driven entirely from
 atari800-spinalhdl — jop-spinalhdl is a pure reusable submodule:
 
 ```sh
-cd boards/ep4cgx150
+# Run from either of the JOP-using project dirs above
 make const-java   # Generate Const.java from Atari JOP config (via sbt)
 make asm          # Build microcode (serial boot variant)
 make jop-app      # Build AtariSupervisor.jop (from java/apps/AtariSupervisor/)

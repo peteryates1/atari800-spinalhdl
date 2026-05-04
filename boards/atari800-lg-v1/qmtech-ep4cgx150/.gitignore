@@ -1,0 +1,10 @@
+# Quartus build artifacts (PROJECT_OUTPUT_DIRECTORY = output_files in every QSF)
+*/db/
+*/incremental_db/
+*/output_files/
+*/*.qws
+*/*.cdf
+
+# SpinalHDL-generated SV mirror copies (Ch376KeyboardTestTop is regenerated on build)
+*/Ch376KeyboardTestTop.sv
+*/Ch376KeyboardTestTop.sv_*.bin
