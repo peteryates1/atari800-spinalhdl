@@ -4,10 +4,10 @@ import spinal.core._
 import spinal.lib._
 
 // Atari 800 standalone top for ATARI-800-LG-V1 base board + QMTECH EP4CGX150.
-// BRAM-only: 48K internal RAM, OS ROM, Star Raiders cartridge — no SDRAM, no JOP.
+// BRAM-only: 48K user space, OS ROM, Star Raiders cartridge — no SDRAM, no JOP.
+// Cart ROM auto-replaces upper RAM so total BRAM = 58 M9K (fits 10CL025).
 //
 // Clock: 50 MHz ALTPLL (x17/÷15) -> 56.67 MHz -> cycle_length=32 -> 6502 at ~1.77 MHz
-// RAM:   48K in BRAM (24 M9K)
 // VGA:   5-5-5 resistor DAC on base board, scandoubled ~31 kHz
 // Audio: 1-bit sigma-delta DAC on AUDIO_L / AUDIO_R pins
 class Atari800LgV1Top extends Component {
@@ -100,7 +100,7 @@ class Atari800LgV1Top extends Component {
       video_bits     = 8,
       palette        = 0,
       internal_rom   = 3,
-      internal_ram   = 49152,
+      internal_ram   = 49152,  // 48K address space; cart ROM auto-replaces upper RAM
       basic_in_sdram = false,
       cartridge_rom  = "roms/Star Raiders.rom"
     )

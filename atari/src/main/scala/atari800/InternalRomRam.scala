@@ -7,6 +7,10 @@ import java.nio.file.{Files, Paths}
 // Loads OS and BASIC ROMs from .rom binary files at elaboration time.
 // romDir: directory containing .rom files (default "roms")
 // cartridgeRom: path to 8K/16K ROM file for cartridge slot (empty = none)
+//
+// BRAM budget: for internalRom=3 (Atari 800), cart ROM replaces the top of RAM
+// so total BRAM stays constant.  Caller passes internalRam = total user address
+// space (e.g. 49152 for 48K), and the RAM block is reduced by the cart file size.
 class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRom: String = "",
                      withBasic: Boolean = true, romDir: String = "roms") extends Component {
   val io = new Bundle {
@@ -50,7 +54,8 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
     romRequestNext := io.romRequest & ~io.romWrEnable
     io.romRequestComplete := romRequestReg
   } else if (internalRom == 3) {
-    // d800-dfff (2K) + e000-ffff (8K) + a000-bfff (8K cartridge slot)
+    // Atari 800 OS: D800-DFFF (2K) + E000-FFFF (8K) + optional cartridge
+    // Cart ROM replaces upper RAM — no BRAM wasted on double-allocation.
     val rom2 = new FileRom(s"$romDir/atarios2.rom", 2048)
     rom2.io.clock   := io.clock
     rom2.io.address := io.romAddr(10 downto 0).asUInt
@@ -63,25 +68,26 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
     rom10.io.we      := False
     rom10.io.data    := io.romDataIn
 
-    // Default: open bus (A000-BFFF when no cartridge, or unassigned ranges)
+    // Default: open bus
     io.romData := B(0xFF, 8 bits)
 
-    // Cartridge slot: always instantiate BRAM to keep netlist stable.
-    // When no file is provided, fill with 0xFF (no cartridge present).
-    val cartData = if (cartridgeRom.nonEmpty) {
-      val bytes = Files.readAllBytes(Paths.get(cartridgeRom))
-      println(s"[InternalRomRam] Loading cartridge ROM: $cartridgeRom (${bytes.length} bytes)")
-      bytes.map(b => B((b.toInt & 0xFF), 8 bits)).toSeq
-    } else {
-      println(s"[InternalRomRam] Cartridge ROM: empty (8K x 0xFF placeholder)")
-      Seq.fill(8192)(B(0xFF, 8 bits))
-    }
-    val cartRom = Mem(Bits(8 bits), initialContent = cartData)
-    val cartAddr = io.romAddr(12 downto 0).asUInt
-    val cartQ = cartRom.readSync(cartAddr)
+    // Cartridge: only allocate BRAM when a ROM file is provided.
+    // AddressDecoder routes A000-BFFF to ROM bus when cartRd5=0 (cart present),
+    // or to RAM bus when cartRd5=1 (no cart) — so no placeholder needed.
+    if (cartridgeRom.nonEmpty) {
+      val cartBytes = Files.readAllBytes(Paths.get(cartridgeRom))
+      println(s"[InternalRomRam] Cart ROM: $cartridgeRom (${cartBytes.length} bytes), " +
+              s"RAM reduced from ${internalRam} to ${internalRam - cartBytes.length}")
+      val cartData = cartBytes.map(b => B((b.toInt & 0xFF), 8 bits)).toSeq
+      val cartRom = Mem(Bits(8 bits), initialContent = cartData)
+      val cartAddr = io.romAddr(12 downto 0).asUInt
+      val cartQ = cartRom.readSync(cartAddr)
 
-    when(io.romAddr(15)) {
-      io.romData := cartQ
+      when(io.romAddr(15)) {
+        io.romData := cartQ
+      }
+    } else {
+      println(s"[InternalRomRam] No cartridge — full ${internalRam} bytes RAM")
     }
 
     when(~io.romAddr(15)) {
@@ -152,12 +158,16 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
   }
 
   // =========================================================================
-  // RAM section
+  // RAM section — cart ROM (if any) replaces upper RAM, keeping total constant
   // =========================================================================
-  val ramInt = if (internalRam > 0) {
+  private val cartFileSize = if (internalRom == 3 && cartridgeRom.nonEmpty)
+    Files.readAllBytes(Paths.get(cartridgeRom)).length else 0
+  private val effectiveRam = internalRam - cartFileSize
+
+  val ramInt = if (effectiveRam > 0) {
     val ramweTemp = io.ramWrEnable & io.ramRequest
 
-    val r = new GenericRamInfer(ADDRESS_WIDTH = 19, SPACE = internalRam, DATA_WIDTH = 8)
+    val r = new GenericRamInfer(ADDRESS_WIDTH = 19, SPACE = effectiveRam, DATA_WIDTH = 8)
     r.io.address := io.ramAddr
     r.io.data    := io.ramDataIn
     r.io.we      := ramweTemp
