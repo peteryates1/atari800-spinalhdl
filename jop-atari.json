@@ -1,0 +1,32 @@
+{
+    "default" : {
+        "roms" : [{
+            "path":"/os/atariio2.rom",
+            "start":"E000"
+        },{
+            "path":"/os/atariiob.rom",
+            "start":"D000"
+        }],
+        "cartridge" : {
+            "path":"/cartridge/Star Raiders.rom"
+        }
+    },
+    "basic" : {
+        "roms" : [{
+            "path":"/os/atariio2.rom",
+            "start":"E000"
+        },{
+            "path":"/os/atariiob.rom",
+            "start":"D000"
+        }],
+        "cartridge" : {
+            "path":"/cartridge/Basic.rom",
+            "start":"8000"
+        },
+        "drives" : [{
+            "path":"/disk/DOS.atr"
+        },{
+            "path":"/disk/MyDisk.atr"
+        }]
+    }
+}
