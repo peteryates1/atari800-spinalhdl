@@ -975,6 +975,6 @@ class Ch376KeyboardTestTop extends Component {
 object Ch376KeyboardTestSv extends App {
   SpinalConfig(
     mode = SystemVerilog,
-    targetDirectory = "boards/atari800-lg-v1"
+    targetDirectory = "boards/atari800-lg-v1/qmtech-ep4cgx150/ch376_test"
   ).generate(new Ch376KeyboardTestTop)
 }
