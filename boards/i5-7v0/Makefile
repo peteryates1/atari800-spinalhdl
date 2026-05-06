@@ -31,7 +31,13 @@ BIT = $(BUILD)/$(TOP).bit
 LOG_SYNTH = $(BUILD)/synth.log
 LOG_PNR = $(BUILD)/pnr.log
 
-.PHONY: synth pnr bitstream clean
+.PHONY: generate synth pnr bitstream clean
+
+# ---------------------------------------------------------------------------
+# SpinalHDL generate
+# ---------------------------------------------------------------------------
+generate:
+	cd ../.. && sbt "atari/runMain atari800.Atari800Ecp5BramSv"
 
 synth: $(JSON)
 
