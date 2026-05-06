@@ -9,18 +9,18 @@ set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
 
 # Source files
 set_global_assignment -name SYSTEMVERILOG_FILE ep4cgx150_dualpll_top.sv
-set_global_assignment -name SYSTEMVERILOG_FILE ../../generated/Atari800Ep4cgx150DualPllTop.sv
-set_global_assignment -name SYSTEMVERILOG_FILE ../cyclone4/atari_pll.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../../../generated/Atari800Ep4cgx150DualPllTop.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../../common/cyclone4/atari_pll.sv
 
 # Altera LPM ROM/RAM primitives (used by AlteraLpm memory style)
-set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/ip/altera_lpm/arom.vhd
-set_global_assignment -name VHDL_FILE ../../jop-spinalhdl/fpga/ip/altera_lpm/aram.vhd
+set_global_assignment -name VHDL_FILE ../../../../jop-spinalhdl/fpga/ip/altera_lpm/arom.vhd
+set_global_assignment -name VHDL_FILE ../../../../jop-spinalhdl/fpga/ip/altera_lpm/aram.vhd
 
 # SDRAM controller: SdramStatemachine (inline in generated SV, no external IP needed)
 
 # Search paths: SpinalHDL .bin files + .mif files for AlteraLpm
-set_global_assignment -name SEARCH_PATH ../../generated
-set_global_assignment -name SEARCH_PATH ../../jop-spinalhdl/asm/generated/serial
+set_global_assignment -name SEARCH_PATH ../../../../generated
+set_global_assignment -name SEARCH_PATH ../../../../jop-spinalhdl/asm/generated/serial
 
 # Timing constraints
 set_global_assignment -name SDC_FILE atari_ep4cgx150_dualpll.sdc
@@ -30,6 +30,9 @@ set_global_assignment -name FAMILY "Cyclone IV GX"
 set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
 set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+
+# All build artifacts → output_files/
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 
 # ---------------------------------------------------------------------------
 # Clock

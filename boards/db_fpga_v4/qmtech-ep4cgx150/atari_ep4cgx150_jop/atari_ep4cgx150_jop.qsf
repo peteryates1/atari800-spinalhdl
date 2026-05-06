@@ -8,11 +8,11 @@ set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
 
 # Source files
 set_global_assignment -name SYSTEMVERILOG_FILE ep4cgx150_jop_top.sv
-set_global_assignment -name SYSTEMVERILOG_FILE ../../generated/Atari800Ep4cgx150JopTop.sv
-set_global_assignment -name SYSTEMVERILOG_FILE atari_pll.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../../../generated/Atari800Ep4cgx150JopTop.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../../common/cyclone4/atari_pll.sv
 
 # Search path for SpinalHDL .bin init files
-set_global_assignment -name SEARCH_PATH ../../generated
+set_global_assignment -name SEARCH_PATH ../../../../generated
 
 # Timing constraints
 set_global_assignment -name SDC_FILE atari_ep4cgx150_jop.sdc
@@ -22,6 +22,9 @@ set_global_assignment -name FAMILY "Cyclone IV GX"
 set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
 set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
 set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+
+# All build artifacts → output_files/
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 
 # ---------------------------------------------------------------------------
 # Clock
