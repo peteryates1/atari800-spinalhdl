@@ -1,0 +1,18 @@
+# Quartus project: V1.1 audio bring-up.
+# Two distinct square-wave tones (440 Hz / 880 Hz) on L/R, swapped every 2 s.
+
+set_global_assignment -name DEVICE EP4CGX150DF27I7
+set_global_assignment -name FAMILY "Cyclone IV GX"
+set_global_assignment -name TOP_LEVEL_ENTITY audio_test
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
+
+set_global_assignment -name SYSTEMVERILOG_FILE audio_test.sv
+set_global_assignment -name SDC_FILE audio_test.sdc
+
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+
+set_global_assignment -name SOURCE_TCL_SCRIPT_FILE ../v1_1_pins.tcl
+set_global_assignment -name LAST_QUARTUS_VERSION "25.1std.0 Lite Edition"

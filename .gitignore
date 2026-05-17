@@ -6,12 +6,14 @@ project/project/
 # SpinalHDL generated output
 generated/
 
-# Quartus build artifacts
-boards/AC608/db/
-boards/AC608/incremental_db/
-boards/AC608/output_files/
-boards/AC608/*.sv.bak
-boards/AC608/fit_check_assignment_defaults.qdf
+# Quartus build artifacts — global patterns under boards/
+boards/**/db/
+boards/**/incremental_db/
+boards/**/output_files/
+boards/**/*.qws
+boards/**/*.cdf
+boards/**/*.sv.bak
+boards/**/*_assignment_defaults.qdf
 
 # Quartus-copied generated files (from make quartus-prep)
 boards/AC608/Atari800JopTop.sv

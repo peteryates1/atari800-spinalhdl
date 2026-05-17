@@ -6,6 +6,10 @@
 #         Netlist_ATARI-800-QMTechCB-LG-V1_1_2026-04-28.enet)
 # FPGA pin tables: /srv/git/qmtech/QMTECH_Cyclone10_10CL006_025/10CL025YU256/Connectors.csv
 
+# ---------- Free dual-purpose configuration pins for regular IO ----------
+# PIN_F16 is nCEO by default — needed for ch376_sd_int (U9.43). Reclaim it.
+set_global_assignment -name CYCLONEII_RESERVE_NCEO_AFTER_CONFIGURATION "USE AS REGULAR IO"
+
 # ---------- Clock (QMTECH 10CL025 onboard 50 MHz oscillator) ----------
 set_location_assignment PIN_E2 -to clk_in
 
