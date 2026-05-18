@@ -291,7 +291,7 @@ class Ch376UsbKeyboard(sysClkHz: Int = 50000000) extends Component {
   when(io.pokeyKeyIrq) { dbgPokeyIrqSeen := True }
 
   // ---- Main FSM ----
-  val state      = Reg(UInt(6 bits))  init 0
+  val state      = Reg(UInt(7 bits))  init 0
   val waitInt    = Reg(Bool())        init False
   val intTimeout = Reg(UInt(32 bits)) init 0
   val dataToggle = Reg(Bool())        init False
@@ -307,7 +307,7 @@ class Ch376UsbKeyboard(sysClkHz: Int = 50000000) extends Component {
   val enumLogVal     = Reg(Bits(8 bits)) init 0
   val enumLogTrigger = Reg(Bool()) init False
 
-  io.dbgState := state.asBits
+  io.dbgState := state.asBits.resized
 
   // INT# wait logic with timeout
   when(waitInt) {
@@ -442,11 +442,51 @@ class Ch376UsbKeyboard(sysClkHz: Int = 50000000) extends Component {
           cmdCode := B(0x22); cmdWrLen := 0; cmdRdLen := 1
           cmdGo := True; state := 20
         } otherwise {
-          state := 21
+          state := 60   // → GET_DESCR before SET_ADDRESS (V1.1 chip needs this)
         }
       }
       is(20) { // Drained, loop
         delayCnt := U(msToClocks(10), 32 bits); state := 19
+      }
+
+      // ---- GET_DESCR(DEVICE) before SET_ADDRESS ----
+      // The CH376T high-level CMD_SET_ADDRESS (0x45) fails on V1.1's chip rev
+      // (IC_VER 0x45) if the device hasn't first responded to a control IN.
+      // FPGC's reference enumeration (ch376.c) reads the device descriptor
+      // first then sets the address. We do the same — issue GET_DESCR(DEVICE)
+      // and consume the result so the chip's buffer state is clean.
+      is(60) { // GET_DESCR — type 0x01 = DEVICE
+        cmdCode := B(0x46); cmdWrBuf(0) := B(0x01); cmdWrLen := 1; cmdRdLen := 0
+        cmdGo := True; state := 61
+      }
+      is(61) { // Wait for INT#
+        waitInt := True; intTimeout := U(msToClocks(1000), 32 bits)
+        state := 62
+      }
+      is(62) { // GET_STATUS
+        cmdCode := B(0x22); cmdWrLen := 0; cmdRdLen := 1
+        cmdGo := True; state := 63
+      }
+      is(63) { // Check result — 'D' label
+        enumLogLabel := B(0x44, 8 bits)  // 'D' — GET_DESCR result
+        enumLogVal   := cmdRd(0)
+        enumLogTrigger := True
+        when(cmdRd(0) === B(0x14)) {
+          // Success — drain the descriptor bytes (don't care about contents,
+          // just clear the chip's USB buffer).
+          cmdCode := B(0x27); cmdWrLen := 0; cmdRdLen := 8  // RD_USB_DATA0, first 8 bytes
+          cmdGo := True; state := 64
+        } otherwise {
+          // GET_DESCR failed — retry enumeration with toggled speed
+          usbSpeed := Mux(usbSpeed === B(0x02, 8 bits), B(0x00, 8 bits), B(0x02, 8 bits))
+          retryCount := retryCount + 1
+          when(retryCount >= 5) { delayCnt := U(msToClocks(2000), 32 bits); state := 0 }
+          .otherwise { delayCnt := U(msToClocks(200), 32 bits); state := 10 }
+        }
+      }
+      is(64) { // Descriptor drained, proceed to SET_ADDRESS
+        delayCnt := U(msToClocks(5), 32 bits)
+        state := 21
       }
 
       // ---- Enumerate: SET_ADDRESS ----

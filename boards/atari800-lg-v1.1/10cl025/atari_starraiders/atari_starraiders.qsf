@@ -1,0 +1,26 @@
+# Quartus project: V1.1 + 10CL025 full Atari 800 with Star Raiders cartridge.
+# BRAM-only (48K user RAM + 8K cart ROM + 10K OS = 58 of 66 M9K). No JOP, no SDRAM.
+
+set_global_assignment -name DEVICE 10CL025YU256I7G
+set_global_assignment -name FAMILY "Cyclone 10 LP"
+set_global_assignment -name TOP_LEVEL_ENTITY atari_starraiders
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
+
+# Top wrapper + SpinalHDL-generated Atari core + Cyclone 10 LP PLLs
+set_global_assignment -name SYSTEMVERILOG_FILE atari_starraiders.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ch376_pll.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../../../generated/Atari800LgV1Top.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../../common/cyclone10/atari_pll.sv
+
+# Search path for the .bin ROM/RAM images loaded by the generated core.
+set_global_assignment -name SEARCH_PATH ../../../../generated
+
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name SDC_FILE atari_starraiders.sdc
+
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
+
+set_global_assignment -name SOURCE_TCL_SCRIPT_FILE ../v1_1_pins.tcl
+set_global_assignment -name LAST_QUARTUS_VERSION "25.1std.0 Lite Edition"
