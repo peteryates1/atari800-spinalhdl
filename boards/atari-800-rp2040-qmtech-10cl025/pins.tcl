@@ -55,18 +55,19 @@ set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to rm2_irq_n
 
 # ---------- SD card (SDIO 4-bit, J7 DM3AT-SF-PEJM5) ----------
 # Native SDIO; can also run in SPI mode (CLK=clk, MOSI=cmd, MISO=dat0, CS=dat3).
+# Split DAT[2:0] into sd_dat_in[2:0] (FPGA inputs) and DAT3 into sd_dat_3
+# (FPGA output = SPI CS). The SV wrapper assigns directions per bit.
 set_location_assignment PIN_D16 -to sd_cd          ;# U4.46 CD   (active-low card detect)
-set_location_assignment PIN_D14 -to sd_dat[1]      ;# U4.47
-set_location_assignment PIN_C14 -to sd_dat[0]      ;# U4.48 (= MISO in SPI mode)
+set_location_assignment PIN_D14 -to sd_dat_in[1]   ;# U4.47
+set_location_assignment PIN_C14 -to sd_dat_in[0]   ;# U4.48 (= MISO in SPI mode)
 set_location_assignment PIN_C16 -to sd_clk         ;# U4.49
 set_location_assignment PIN_C15 -to sd_cmd         ;# U4.50 (= MOSI in SPI mode)
-set_location_assignment PIN_B16 -to sd_dat[3]      ;# U4.51 (= CS in SPI mode)
-set_location_assignment PIN_A15 -to sd_dat[2]      ;# U4.52
+set_location_assignment PIN_B16 -to sd_dat_3       ;# U4.51 (= CS in SPI mode)
+set_location_assignment PIN_A15 -to sd_dat_in[2]   ;# U4.52
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_cd
-set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat[0]
-set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat[1]
-set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat[2]
-set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat[3]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat_in[0]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat_in[1]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_dat_in[2]
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to sd_cmd
 
 # ---------- Joystick 2 (active-low, J11 DB9) ----------
@@ -102,22 +103,23 @@ set_location_assignment PIN_C9 -to rp_csn          ;# U4.97 FPGA_CSN   (RP2040 G
 set_location_assignment PIN_D9 -to rp_miso         ;# U4.98 FPGA_DO    (FPGA out → RP2040 GPIO16)
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to rp_csn
 
-# ---------- RP2040 GPIO bus (13 lines, general-purpose RP2040↔FPGA) ----------
-# RP2040 pin numbering is preserved in net names (GPIOnn).
-set_location_assignment PIN_C6  -to rp_gpio[4]     ;# U4.86
-set_location_assignment PIN_E7  -to rp_gpio[5]     ;# U4.88
-set_location_assignment PIN_B6  -to rp_gpio[10]    ;# U4.90
-set_location_assignment PIN_B7  -to rp_gpio[11]    ;# U4.92
-set_location_assignment PIN_A7  -to rp_gpio[12]    ;# U4.94
-set_location_assignment PIN_E10 -to rp_gpio[13]    ;# U4.101
-set_location_assignment PIN_E9  -to rp_gpio[14]    ;# U4.100
-set_location_assignment PIN_F9  -to rp_gpio[15]    ;# U4.99
-set_location_assignment PIN_E8  -to rp_gpio[20]    ;# U4.93
-set_location_assignment PIN_A6  -to rp_gpio[21]    ;# U4.91
-set_location_assignment PIN_A5  -to rp_gpio[22]    ;# U4.89
-set_location_assignment PIN_B5  -to rp_gpio[23]    ;# U4.87
-set_location_assignment PIN_D6  -to rp_gpio[24]    ;# U4.85
-set_location_assignment PIN_A4  -to rp_gpio[25]    ;# U4.83
+# ---------- RP2040 GPIO bus (14 lines, general-purpose RP2040↔FPGA) ----------
+# Each RP2040 GPIO pin is its own scalar net (rp_gpioNN); the SV wrapper
+# fixes direction per bit. RP2040 GPIO numbering preserved in the net name.
+set_location_assignment PIN_C6  -to rp_gpio4       ;# U4.86  (input: → rm2_bt_on)
+set_location_assignment PIN_E7  -to rp_gpio5       ;# U4.88  (input: → rm2_wifi_on)
+set_location_assignment PIN_B6  -to rp_gpio10      ;# U4.90  (input: → sd_clk)
+set_location_assignment PIN_B7  -to rp_gpio11      ;# U4.92  (input: → sd_cmd/MOSI)
+set_location_assignment PIN_A7  -to rp_gpio12      ;# U4.94  (output: ← sd_dat0/MISO)
+set_location_assignment PIN_E10 -to rp_gpio13      ;# U4.101 (input: → sd_dat3/CS)
+set_location_assignment PIN_E9  -to rp_gpio14      ;# U4.100 (output: ← sd_cd)
+set_location_assignment PIN_F9  -to rp_gpio15      ;# U4.99  (output: spare/heartbeat)
+set_location_assignment PIN_E8  -to rp_gpio20      ;# U4.93  (input: → rm2_sck)
+set_location_assignment PIN_A6  -to rp_gpio21      ;# U4.91  (input: → rm2_mosi)
+set_location_assignment PIN_A5  -to rp_gpio22      ;# U4.89  (output: ← rm2_miso)
+set_location_assignment PIN_B5  -to rp_gpio23      ;# U4.87  (input: → rm2_cs)
+set_location_assignment PIN_D6  -to rp_gpio24      ;# U4.85  (output: ← rm2_irq_n)
+set_location_assignment PIN_A4  -to rp_gpio25      ;# U4.83  (output: PLL lock)
 
 # ---------- Core-board user LED (QMTECH 10CL025, PIN_N9) ----------
 set_location_assignment PIN_N9 -to led_core[0]
