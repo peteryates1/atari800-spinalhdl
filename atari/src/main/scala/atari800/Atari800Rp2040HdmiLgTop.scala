@@ -238,6 +238,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     rgb_hs.addTag(crossClockDomain)
     rgb_vs.addTag(crossClockDomain)
     rgb_de.addTag(crossClockDomain)
+    doubledEnable.addTag(crossClockDomain)
   }
 
   // =========================================================================
@@ -246,6 +247,10 @@ class Atari800Rp2040HdmiLgTop extends Component {
   // — synchronous-related-clocks since pixel = sys / 2 — so direct hookup is
   // safe for a sanity build. A proper async FIFO can be inserted later.
   // =========================================================================
+  // NOTE: HdmiLineBuf (dual-clock scan-converter to de-jitter the video) is
+  // written but its v1 output raster doesn't lock — needs a simulation testbench
+  // to debug. Reverted to the direct (synchronous-related, slightly shimmery but
+  // working) hookup for now. See HdmiLineBuf.scala.
   val dvi = new DvidOut
   dvi.io.clkPixel := clkPixel
   dvi.io.clkTmds  := clkTmds
