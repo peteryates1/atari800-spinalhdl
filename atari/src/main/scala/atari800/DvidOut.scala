@@ -97,8 +97,11 @@ class DvidOut extends Component {
       shift1L := oddBits(pixelArea.ch1Lat)
       shift2H := evenBits(pixelArea.ch2Lat)
       shift2L := oddBits(pixelArea.ch2Lat)
-      // Clock pattern: 0000011111 -> h=01010, l=00011
-      shiftCH := B"01010"
+      // Clock word 0000011111 -> serialised stream 1111100000 (clean half-rate
+      // clock). evenBits = h = 00111, oddBits = l = 00011. (Previously h was
+      // wrongly 01010, which serialised to 0111001000 — a malformed clock that
+      // no HDMI sink could lock to.)
+      shiftCH := B"00111"
       shiftCL := B"00011"
     } otherwise {
       shiftCnt := shiftCnt + 1
