@@ -1,0 +1,16 @@
+# Quartus project: standalone SDRAM bring-up test (SdramStatemachine @ 100 MHz).
+set_global_assignment -name DEVICE 10CL025YU256I7G
+set_global_assignment -name FAMILY "Cyclone 10 LP"
+set_global_assignment -name TOP_LEVEL_ENTITY SdramTestTop
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
+set_global_assignment -name SYSTEMVERILOG_FILE ../../../generated/SdramTestTop.sv
+set_global_assignment -name VERILOG_FILE pll.v
+set_global_assignment -name SEARCH_PATH ../../../generated
+set_global_assignment -name SDC_FILE sdram_test.sdc
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+# clk_in, led_core[0], and all sdram_* pins (names match this design)
+set_global_assignment -name SOURCE_TCL_SCRIPT_FILE ../pins.tcl
+
+set_global_assignment -name LAST_QUARTUS_VERSION "25.1std.0 Lite Edition"
