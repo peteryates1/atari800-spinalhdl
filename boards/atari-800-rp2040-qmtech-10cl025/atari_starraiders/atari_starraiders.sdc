@@ -5,14 +5,19 @@ create_clock -name clk_in -period 20.000 [get_ports clk_in]
 derive_pll_clocks
 derive_clock_uncertainty
 
-# Atari sys clock (57.69) and HDMI pixel/TMDS clocks (25/125) are unrelated
-# frequencies. The handful of crossing signals (scandoubler RGB → DvidOut)
-# are tagged crossClockDomain in the SpinalHDL; tell Quartus to treat the
-# domains as asynchronous so it doesn't try to close the meaningless
-# setup/hold paths between them.
+# Three asynchronous clock domains:
+#   1. Atari sys 57.69 MHz          (atari_pll = pll_1, clk[0])
+#   2. HDMI pixel/TMDS 25/125 MHz   (atari_pll = pll_1, clk[1]/clk[2])
+#   3. SDRAM 100 MHz                 (sdramPll, clk[0]/clk[1])
+# NOTE: both PLLs' auto-generated instance is "pll1", so a bare "*pll1|clk[0]"
+# filter matches BOTH the 57.69 and 100 MHz clocks and wrongly groups them as
+# related — the source of intermittent SDRAM behaviour. Filter on the SpinalHDL
+# instance names (pll_1 vs sdramPll) to keep the sys<->SDRAM crossing async.
+# SdramStatemachine has 2-FF synchronisers, so the crossing is safe.
 set_clock_groups -asynchronous \
-    -group [get_clocks {*pll1|clk[0]}] \
-    -group [get_clocks {*pll1|clk[1] *pll1|clk[2]}]
+    -group [get_clocks {*pll_1|altpll_component|auto_generated|pll1|clk[0]}] \
+    -group [get_clocks {*pll_1|altpll_component|auto_generated|pll1|clk[1] *pll_1|altpll_component|auto_generated|pll1|clk[2]}] \
+    -group [get_clocks {*sdramPll|altpll_component|auto_generated|pll1|clk[*]}]
 
 # Known benign warning: "Worst-case minimum pulse width slack is -5.4 ns" on
 # the 125 MHz TMDS clock at slow 100C. This is a Quartus 25.1 timing-model

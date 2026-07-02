@@ -82,7 +82,19 @@ module atari_starraiders (
     output wire        rp_gpio25,
 
     // Core-board LED
-    output wire [0:0]  led_core
+    output wire [0:0]  led_core,
+
+    // SDRAM (QMTech 10CL025 on-module)
+    output wire        sdram_clk,
+    output wire        sdram_cke,
+    output wire        sdram_csn,
+    output wire        sdram_rasn,
+    output wire        sdram_casn,
+    output wire        sdram_wen,
+    output wire [1:0]  sdram_ba,
+    output wire [12:0] sdram_addr,
+    output wire [1:0]  sdram_dqm,
+    inout  wire [15:0] sdram_dq
 );
 
     Atari800Rp2040HdmiLgTop u_top (
@@ -152,7 +164,18 @@ module atari_starraiders (
         .io_rp_gpio24_out(rp_gpio24),
         .io_rp_gpio25_out(rp_gpio25),
 
-        .io_led_core     (led_core)
+        .io_led_core     (led_core),
+
+        .io_sdram_clk    (sdram_clk),
+        .io_sdram_cke    (sdram_cke),
+        .io_sdram_csn    (sdram_csn),
+        .io_sdram_rasn   (sdram_rasn),
+        .io_sdram_casn   (sdram_casn),
+        .io_sdram_wen    (sdram_wen),
+        .io_sdram_ba     (sdram_ba),
+        .io_sdram_addr   (sdram_addr),
+        .io_sdram_dqm    (sdram_dqm),
+        .io_sdram_dq     (sdram_dq)
     );
 
 endmodule

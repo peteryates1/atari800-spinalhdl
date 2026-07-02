@@ -105,6 +105,18 @@ class Atari800Rp2040HdmiLgTop extends Component {
 
     // ----- Core-board user LED -----
     val led_core = out Bits(1 bits)
+
+    // ----- SDRAM (QMTech 10CL025 on-module, 16-bit) -----
+    val sdram_clk  = out Bool()
+    val sdram_cke  = out Bool()
+    val sdram_csn  = out Bool()
+    val sdram_rasn = out Bool()
+    val sdram_casn = out Bool()
+    val sdram_wen  = out Bool()
+    val sdram_ba   = out Bits(2 bits)
+    val sdram_addr = out Bits(13 bits)
+    val sdram_dqm  = out Bits(2 bits)
+    val sdram_dq   = inout(Analog(Bits(16 bits)))
   }
 
   // =========================================================================
@@ -117,6 +129,13 @@ class Atari800Rp2040HdmiLgTop extends Component {
   val clkSys   = pll.io.c0      // 56.67 MHz Atari system
   val clkPixel = pll.io.c1      // 28.33 MHz HDMI pixel
   val clkTmds  = pll.io.c2      // 141.67 MHz HDMI TMDS (5× pixel)
+
+  // Second PLL (QMTech-proven pll.v): 50 MHz -> 100 MHz for the SDRAM domain.
+  val sdramPll = new SdramPll
+  sdramPll.areset := False
+  sdramPll.inclk0 := io.clk_in
+  val clkSdram = sdramPll.c0     // 100 MHz SDRAM controller clock
+  io.sdram_clk := sdramPll.c1    // dedicated 100 MHz clock to the SDRAM chip
   val pllLocked = pll.io.locked
 
   // System reset: high when PLL locks and the console-reset button is unpressed
@@ -146,14 +165,14 @@ class Atari800Rp2040HdmiLgTop extends Component {
       video_bits     = 8,
       palette        = 0,
       internal_rom   = 3,
-      internal_ram   = 49152,
+      internal_ram   = 0,          // all Atari RAM in SDRAM (frees BRAM)
       basic_in_sdram = false,
       cartridge_rom  = "roms/Star Raiders.rom"
     )
 
     atari.io.PAL                       := True
     atari.io.RAM_SELECT                := B"011"
-    atari.io.HALT                      := False
+    // atari.io.HALT is driven below (held until SDRAM init completes)
     atari.io.TURBO_VBLANK_ONLY         := False
     atari.io.THROTTLE_COUNT_6502       := B(31, 6 bits)
     atari.io.emulated_cartridge_select := B(0, 6 bits)
@@ -195,8 +214,55 @@ class Atari800Rp2040HdmiLgTop extends Component {
     atari.io.DMA_ADDR               := B(0, 24 bits)
     atari.io.DMA_WRITE_DATA         := B(0, 32 bits)
 
-    atari.io.SDRAM_REQUEST_COMPLETE := False
-    atari.io.SDRAM_DO               := B(0, 32 bits)
+    // -----------------------------------------------------------------
+    // SDRAM controller — Atari RAM lives in SDRAM (internal_ram=0).
+    // Sole master (no JOP): the MiST/AC608 pattern. SdramStatemachine
+    // handles the CLK_SYSTEM(57.69) <-> CLK_SDRAM(100) crossing internally.
+    // -----------------------------------------------------------------
+    // Hold controller reset low for SDRAM power-up (~568 us @57.69 MHz).
+    val sdramPor = Reg(UInt(16 bits)) init 0
+    when(sdramPor =/= sdramPor.maxValue) { sdramPor := sdramPor + 1 }
+
+    val sdramCtrl = new SdramStatemachine(
+      ADDRESS_WIDTH = 24, ROW_WIDTH = 13, COLUMN_WIDTH = 9, AP_BIT = 10
+    )
+    sdramCtrl.io.CLK_SYSTEM      := clkSys
+    sdramCtrl.io.CLK_SDRAM       := clkSdram
+    sdramCtrl.io.RESET_N         := sysResetN & sdramPor.msb
+    sdramCtrl.io.READ_EN         := atari.io.SDRAM_READ_ENABLE
+    sdramCtrl.io.WRITE_EN        := atari.io.SDRAM_WRITE_ENABLE
+    sdramCtrl.io.REQUEST         := atari.io.SDRAM_REQUEST
+    sdramCtrl.io.BYTE_ACCESS     := atari.io.SDRAM_8BIT_WRITE_ENABLE
+    sdramCtrl.io.WORD_ACCESS     := atari.io.SDRAM_16BIT_WRITE_ENABLE
+    sdramCtrl.io.LONGWORD_ACCESS := atari.io.SDRAM_32BIT_WRITE_ENABLE
+    sdramCtrl.io.REFRESH         := atari.io.SDRAM_REFRESH
+    sdramCtrl.io.ADDRESS_IN      := B"00" ## atari.io.SDRAM_ADDR
+    sdramCtrl.io.DATA_IN         := atari.io.SDRAM_DI
+    atari.io.SDRAM_REQUEST_COMPLETE := sdramCtrl.io.COMPLETE
+    atari.io.SDRAM_DO               := sdramCtrl.io.DATA_OUT
+
+    // Hold the Atari CPU halted until SDRAM init completes so its first RAM
+    // accesses (page zero / stack / OS RAM clear) don't hit uninitialised SDRAM.
+    val sdramReady = BufferCC(sdramCtrl.io.reset_client_n, False)
+    atari.io.HALT := ~sdramReady
+
+    // DEBUG: heartbeat that only ticks once SDRAM init completes.
+    //   blink  => reset_client_n asserted (SDRAM init OK, Atari released)
+    //   steady => init never completes (SDRAM/clocking/handshake problem)
+    val dbgHb = Reg(UInt(24 bits)) init 0
+    when(sdramReady) { dbgHb := dbgHb + 1 }
+
+    // SDRAM pin wiring
+    io.sdram_addr := sdramCtrl.io.SDRAM_ADDR
+    io.sdram_ba   := sdramCtrl.io.SDRAM_BA1 ## sdramCtrl.io.SDRAM_BA0
+    io.sdram_cke  := sdramCtrl.io.SDRAM_CKE
+    io.sdram_csn  := sdramCtrl.io.SDRAM_CS_N
+    io.sdram_rasn := sdramCtrl.io.SDRAM_RAS_N
+    io.sdram_casn := sdramCtrl.io.SDRAM_CAS_N
+    io.sdram_wen  := sdramCtrl.io.SDRAM_WE_N
+    io.sdram_dqm  := sdramCtrl.io.SDRAM_udqm ## sdramCtrl.io.SDRAM_ldqm
+    sdramCtrl.io.SDRAM_DQ_IN := io.sdram_dq
+    when(sdramCtrl.io.SDRAM_DQ_OE) { io.sdram_dq := sdramCtrl.io.SDRAM_DQ_OUT }
 
     // -----------------------------------------------------------------
     // Scandoubler → 8-bit-per-channel RGB at ~31 kHz
@@ -310,7 +376,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
   // -----------------------------------------------------------------
   // Core LED — PLL lock status
   // -----------------------------------------------------------------
-  io.led_core(0) := pllLocked
+  io.led_core(0) := sysArea.dbgHb(23)   // DEBUG: blink=SDRAM init OK, steady=init failed
 }
 
 object Atari800Rp2040HdmiLgSv extends App {
