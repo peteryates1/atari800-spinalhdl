@@ -59,10 +59,23 @@ class VideoFbRead2(
     val hsC = hc >= (hActive + hFront) && hc < (hActive + hFront + hSync)
     val vsC = vc >= (vActive + vFront) && vc < (vActive + vFront + vSync)
 
-    def srcYof(oy: UInt): UInt = ((oy * srcH) / vActive).resize(log2Up(srcH))
-    val nextVc   = Mux(vc === (vTotal - 1), U(0), vc + 1)
-    val nextOutY = Mux(nextVc < vActive, nextVc.resize(log2Up(vActive)), U(0))
-    val nextSrcY = srcYof(nextOutY)
+    // Vertical nearest-neighbour via a DDA (no divider -> meets 74 MHz timing).
+    // curSrcY tracks floor(vc*srcH/vActive) for the current line; nextSrcY looks
+    // one line ahead for the prefetch.
+    val vAcc    = Reg(UInt(log2Up(vActive + srcH) bits)) init 0
+    val curSrcY = Reg(UInt(log2Up(srcH) bits)) init 0
+    when(lineEnd) {
+      when(vc === (vTotal - 1)) { vAcc := 0; curSrcY := 0 }
+        .elsewhen((vc + 1) < vActive) {
+          val acc2 = vAcc + srcH
+          when(acc2 >= vActive) { vAcc := (acc2 - vActive).resized; curSrcY := curSrcY + 1 }
+            .otherwise          { vAcc := acc2.resized }
+        }
+    }
+    val nextSrcY = Mux(vc === (vTotal - 1), U(0, log2Up(srcH) bits),
+                    Mux((vc + 1) < vActive,
+                        (curSrcY + ((vAcc + srcH) >= vActive).asUInt).resize(log2Up(srcH)),
+                        U(0, log2Up(srcH) bits)))
 
     val dispBank = Reg(Bool()) init False
 

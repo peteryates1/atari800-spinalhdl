@@ -127,8 +127,12 @@ class Atari800Rp2040HdmiLgTop extends Component {
   pll.io.inclk0 := io.clk_in
 
   val clkSys   = pll.io.c0      // 56.67 MHz Atari system
-  val clkPixel = pll.io.c1      // 28.33 MHz HDMI pixel
-  val clkTmds  = pll.io.c2      // 141.67 MHz HDMI TMDS (5× pixel)
+
+  // HDMI PLL (pll_hdmi.v): 50 MHz -> 74.25 MHz pixel + 371.25 MHz TMDS (720p).
+  val hdmiPll = new PllHdmi
+  hdmiPll.inclk0 := io.clk_in
+  val clkPixel = hdmiPll.c0     // 74.25 MHz 720p pixel clock
+  val clkTmds  = hdmiPll.c1     // 371.25 MHz TMDS (5x pixel)
 
   // Second PLL (QMTech-proven pll.v): 50 MHz -> 100 MHz for the SDRAM domain.
   val sdramPll = new SdramPll
@@ -229,17 +233,70 @@ class Atari800Rp2040HdmiLgTop extends Component {
     sdramCtrl.io.CLK_SYSTEM      := clkSys
     sdramCtrl.io.CLK_SDRAM       := clkSdram
     sdramCtrl.io.RESET_N         := sysResetN & sdramPor.msb
-    sdramCtrl.io.READ_EN         := atari.io.SDRAM_READ_ENABLE
-    sdramCtrl.io.WRITE_EN        := atari.io.SDRAM_WRITE_ENABLE
-    sdramCtrl.io.REQUEST         := atari.io.SDRAM_REQUEST
-    sdramCtrl.io.BYTE_ACCESS     := atari.io.SDRAM_8BIT_WRITE_ENABLE
-    sdramCtrl.io.WORD_ACCESS     := atari.io.SDRAM_16BIT_WRITE_ENABLE
-    sdramCtrl.io.LONGWORD_ACCESS := atari.io.SDRAM_32BIT_WRITE_ENABLE
-    sdramCtrl.io.REFRESH         := atari.io.SDRAM_REFRESH
-    sdramCtrl.io.ADDRESS_IN      := B"00" ## atari.io.SDRAM_ADDR
-    sdramCtrl.io.DATA_IN         := atari.io.SDRAM_DI
-    atari.io.SDRAM_REQUEST_COMPLETE := sdramCtrl.io.COMPLETE
-    atari.io.SDRAM_DO               := sdramCtrl.io.DATA_OUT
+    // 3-port SDRAM arbiter: A = Atari RAM (priority), B = framebuffer write,
+    // C = framebuffer read (720p scaler). B/C are latency-tolerant.
+    val arb = new SdramArbiter3
+
+    // Port A — Atari core
+    arb.io.a.request        := atari.io.SDRAM_REQUEST
+    arb.io.a.readEnable     := atari.io.SDRAM_READ_ENABLE
+    arb.io.a.writeEnable    := atari.io.SDRAM_WRITE_ENABLE
+    arb.io.a.addr           := B"0" ## atari.io.SDRAM_ADDR
+    arb.io.a.dataIn         := atari.io.SDRAM_DI
+    arb.io.a.byteAccess     := atari.io.SDRAM_8BIT_WRITE_ENABLE
+    arb.io.a.wordAccess     := atari.io.SDRAM_16BIT_WRITE_ENABLE
+    arb.io.a.longwordAccess := atari.io.SDRAM_32BIT_WRITE_ENABLE
+    arb.io.a.refresh        := atari.io.SDRAM_REFRESH
+    atari.io.SDRAM_REQUEST_COMPLETE := arb.io.a.complete
+    atari.io.SDRAM_DO               := arb.io.a.dataOut
+
+    // Port B — framebuffer write: capture raw Atari video (8-bit GTIA index)
+    val fbWrite = new VideoFbWrite(fbBase = 0, width = 384, strideLog2 = 9, height = 288, addrWidth = 24)
+    fbWrite.io.pixStrobe := colourEnable
+    fbWrite.io.colour    := atari.io.VIDEO_B
+    fbWrite.io.hsync     := atari.io.VIDEO_HS
+    fbWrite.io.vsync     := atari.io.VIDEO_VS
+    fbWrite.io.blank     := atari.io.VIDEO_BLANK
+    arb.io.b.request        := fbWrite.io.wrReq
+    fbWrite.io.wrComplete   := arb.io.b.complete
+    arb.io.b.readEnable     := False
+    arb.io.b.writeEnable    := True
+    arb.io.b.addr           := fbWrite.io.wrAddr
+    arb.io.b.dataIn         := fbWrite.io.wrData
+    arb.io.b.byteAccess     := fbWrite.io.wrByte
+    arb.io.b.wordAccess     := False
+    arb.io.b.longwordAccess := False
+
+    // Port C — framebuffer read/scaler (dual-clock: fetch in sys, output at pixel)
+    val fbRead = new VideoFbRead2(
+      srcW = 384, srcH = 288, strideLog2 = 9, fbBase = 0,
+      hActive = 1280, hFront = 110, hSync = 40, hBack = 220,
+      vActive = 720,  vFront = 5,   vSync = 5,  vBack = 20, addrWidth = 24)
+    fbRead.io.clkFetch := clkSys
+    fbRead.io.clkPixel := clkPixel
+    arb.io.c.request        := fbRead.io.rdReq
+    fbRead.io.rdComplete    := arb.io.c.complete
+    arb.io.c.readEnable     := True
+    arb.io.c.writeEnable    := False
+    arb.io.c.addr           := fbRead.io.rdAddr
+    arb.io.c.dataIn         := B(0, 32 bits)
+    arb.io.c.byteAccess     := True
+    arb.io.c.wordAccess     := False
+    arb.io.c.longwordAccess := False
+    fbRead.io.rdData        := arb.io.c.dataOut(7 downto 0)
+
+    // Arbiter -> SdramStatemachine
+    sdramCtrl.io.READ_EN         := arb.io.sdram.readEnable
+    sdramCtrl.io.WRITE_EN        := arb.io.sdram.writeEnable
+    sdramCtrl.io.REQUEST         := arb.io.sdram.request
+    sdramCtrl.io.BYTE_ACCESS     := arb.io.sdram.byteAccess
+    sdramCtrl.io.WORD_ACCESS     := arb.io.sdram.wordAccess
+    sdramCtrl.io.LONGWORD_ACCESS := arb.io.sdram.longwordAccess
+    sdramCtrl.io.REFRESH         := arb.io.sdram.refresh
+    sdramCtrl.io.ADDRESS_IN      := arb.io.sdram.addr
+    sdramCtrl.io.DATA_IN         := arb.io.sdram.dataIn
+    arb.io.sdram.complete := sdramCtrl.io.COMPLETE
+    arb.io.sdram.dataOut  := sdramCtrl.io.DATA_OUT
 
     // Hold the Atari CPU halted until SDRAM init completes so its first RAM
     // accesses (page zero / stack / OS RAM clear) don't hit uninitialised SDRAM.
@@ -264,20 +321,8 @@ class Atari800Rp2040HdmiLgTop extends Component {
     sdramCtrl.io.SDRAM_DQ_IN := io.sdram_dq
     when(sdramCtrl.io.SDRAM_DQ_OE) { io.sdram_dq := sdramCtrl.io.SDRAM_DQ_OUT }
 
-    // -----------------------------------------------------------------
-    // Scandoubler → 8-bit-per-channel RGB at ~31 kHz
-    // -----------------------------------------------------------------
-    val scandoubler = new Scandoubler(video_bits = 8)
-    scandoubler.io.VGA                := True
-    scandoubler.io.COMPOSITE_ON_HSYNC := False
-    scandoubler.io.colour_enable      := colourEnable
-    scandoubler.io.doubled_enable     := doubledEnable
-    scandoubler.io.scanlines_on       := False
-    scandoubler.io.pal                := True
-    scandoubler.io.colour_in          := atari.io.VIDEO_B
-    scandoubler.io.vsync_in           := atari.io.VIDEO_VS
-    scandoubler.io.hsync_in           := atari.io.VIDEO_HS
-    scandoubler.io.csync_in           := atari.io.VIDEO_CS
+    // Video now goes Atari -> VideoFbWrite -> SDRAM framebuffer -> VideoFbRead2
+    // (720p scaler) -> GtiaPalette -> DvidOut. No scandoubler in the HDMI path.
 
     // -----------------------------------------------------------------
     // Audio: 16-bit signed → 1-bit sigma-delta
@@ -289,43 +334,46 @@ class Atari800Rp2040HdmiLgTop extends Component {
     sigmaDeltaL := sigmaDeltaL(15 downto 0).resize(17) + audioUnsignedL
     sigmaDeltaR := sigmaDeltaR(15 downto 0).resize(17) + audioUnsignedR
 
-    // Save the scandoubler output for cross-domain consumption by DvidOut.
-    // sys → pixel is a synchronous related-clock crossing (pixel = sys/2);
-    // tag so SpinalHDL's CDC checker accepts it.
-    val rgb_r  = scandoubler.io.R
-    val rgb_g  = scandoubler.io.G
-    val rgb_b  = scandoubler.io.B
-    val rgb_hs = scandoubler.io.HSYNC
-    val rgb_vs = scandoubler.io.VSYNC
-    val rgb_de = ~atari.io.VIDEO_BLANK
-    rgb_r.addTag(crossClockDomain)
-    rgb_g.addTag(crossClockDomain)
-    rgb_b.addTag(crossClockDomain)
-    rgb_hs.addTag(crossClockDomain)
-    rgb_vs.addTag(crossClockDomain)
-    rgb_de.addTag(crossClockDomain)
-    doubledEnable.addTag(crossClockDomain)
+    // Framebuffer read/scaler pixel-domain outputs (crossed to DvidOut below).
+    val vidPix = fbRead.io.pix
+    val vidDe  = fbRead.io.de
+    val vidHs  = fbRead.io.hs
+    val vidVs  = fbRead.io.vs
+    vidPix.addTag(crossClockDomain)
+    vidDe.addTag(crossClockDomain)
+    vidHs.addTag(crossClockDomain)
+    vidVs.addTag(crossClockDomain)
   }
 
   // =========================================================================
-  // HDMI / DVI output. The DvidOut module is internally clocked on its own
-  // pixel + TMDS clock domains. Scandoubler signals are sourced from sysDomain
-  // — synchronous-related-clocks since pixel = sys / 2 — so direct hookup is
-  // safe for a sanity build. A proper async FIFO can be inserted later.
+  // HDMI 720p output: the framebuffer scaler's 8-bit GTIA colour index goes
+  // through GtiaPalette -> DvidOut (own pixel + TMDS clock domains). Video is
+  // fully re-clocked through the SDRAM framebuffer, so no async shimmer.
   // =========================================================================
-  // NOTE: HdmiLineBuf (dual-clock scan-converter to de-jitter the video) is
-  // written but its v1 output raster doesn't lock — needs a simulation testbench
-  // to debug. Reverted to the direct (synchronous-related, slightly shimmery but
-  // working) hookup for now. See HdmiLineBuf.scala.
+  // Palette + a pixel-domain pipeline register so DvidOut's TMDS encoder gets
+  // REGISTERED RGB (as the reference does) — splits the cache-read + palette LUT
+  // path from the 8b/10b encoder so both meet the 74.25 MHz pixel clock.
+  val pixelArea = new ClockingArea(ClockDomain(clkPixel, config = ClockDomainConfig(resetKind = BOOT))) {
+    val palette = new GtiaPalette
+    palette.io.atariColour := sysArea.vidPix
+    palette.io.pal         := True
+    val r  = RegNext(palette.io.rNext)
+    val g  = RegNext(palette.io.gNext)
+    val b  = RegNext(palette.io.bNext)
+    val de = RegNext(sysArea.vidDe) init False   // match the +1 palette-reg latency
+    val hs = RegNext(sysArea.vidHs) init False
+    val vs = RegNext(sysArea.vidVs) init False
+  }
+
   val dvi = new DvidOut
   dvi.io.clkPixel := clkPixel
   dvi.io.clkTmds  := clkTmds
-  dvi.io.red      := sysArea.rgb_r
-  dvi.io.green    := sysArea.rgb_g
-  dvi.io.blue     := sysArea.rgb_b
-  dvi.io.hsync    := sysArea.rgb_hs
-  dvi.io.vsync    := sysArea.rgb_vs
-  dvi.io.de       := sysArea.rgb_de
+  dvi.io.red      := pixelArea.r
+  dvi.io.green    := pixelArea.g
+  dvi.io.blue     := pixelArea.b
+  dvi.io.hsync    := pixelArea.hs
+  dvi.io.vsync    := pixelArea.vs
+  dvi.io.de       := pixelArea.de
 
   io.hdmi_clk_p := dvi.io.tmdsClkP
   io.hdmi_clk_n := dvi.io.tmdsClkN

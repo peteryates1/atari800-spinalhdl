@@ -11,6 +11,7 @@ set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
 set_global_assignment -name SYSTEMVERILOG_FILE atari_starraiders.sv
 set_global_assignment -name SYSTEMVERILOG_FILE atari_pll.sv
 set_global_assignment -name VERILOG_FILE pll.v
+set_global_assignment -name VERILOG_FILE pll_hdmi.v
 set_global_assignment -name SYSTEMVERILOG_FILE ../../../generated/Atari800Rp2040HdmiLgTop.sv
 
 # Search path for the .bin ROM/RAM images embedded in the generated core.

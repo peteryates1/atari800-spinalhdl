@@ -17,7 +17,8 @@ derive_clock_uncertainty
 set_clock_groups -asynchronous \
     -group [get_clocks {*pll_1|altpll_component|auto_generated|pll1|clk[0]}] \
     -group [get_clocks {*pll_1|altpll_component|auto_generated|pll1|clk[1] *pll_1|altpll_component|auto_generated|pll1|clk[2]}] \
-    -group [get_clocks {*sdramPll|altpll_component|auto_generated|pll1|clk[*]}]
+    -group [get_clocks {*sdramPll|altpll_component|auto_generated|pll1|clk[*]}] \
+    -group [get_clocks {*hdmiPll|altpll_component|auto_generated|pll1|clk[*]}]
 
 # Known benign warning: "Worst-case minimum pulse width slack is -5.4 ns" on
 # the 125 MHz TMDS clock at slow 100C. This is a Quartus 25.1 timing-model
