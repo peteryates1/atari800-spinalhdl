@@ -37,6 +37,7 @@ class FbPipeline(
   val mock = new MockSdram(latency = 3)
 
   // write-side stimulus
+  wr.io.enable    := True
   wr.io.pixStrobe := io.pixStrobe
   wr.io.colour    := io.colour
   wr.io.hsync     := io.hsyncIn
@@ -62,9 +63,9 @@ class FbPipeline(
   arb.io.b.readEnable  := False
   arb.io.b.addr        := wr.io.wrAddr.resized
   arb.io.b.dataIn      := wr.io.wrData
-  arb.io.b.byteAccess  := wr.io.wrByte
+  arb.io.b.byteAccess  := False
   arb.io.b.wordAccess  := False
-  arb.io.b.longwordAccess := False
+  arb.io.b.longwordAccess := wr.io.wrLong
 
   // Port C: framebuffer read
   arb.io.c.request     := rd.io.rdReq

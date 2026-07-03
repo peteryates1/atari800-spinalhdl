@@ -17,7 +17,7 @@ derive_clock_uncertainty
 set_clock_groups -asynchronous \
     -group [get_clocks {*pll_1|altpll_component|auto_generated|pll1|clk[0]}] \
     -group [get_clocks {*pll_1|altpll_component|auto_generated|pll1|clk[1] *pll_1|altpll_component|auto_generated|pll1|clk[2]}] \
-    -group [get_clocks {*sdramPll|altpll_component|auto_generated|pll1|clk[*]}] \
+    -group [get_clocks {*sdramPll|altpll_component|auto_generated|pll1|clk[*] sdram_clk_pin}] \
     -group [get_clocks {*hdmiPll|altpll_component|auto_generated|pll1|clk[*]}]
 
 # Known benign warning: "Worst-case minimum pulse width slack is -5.4 ns" on
@@ -49,3 +49,17 @@ set_false_path -from [all_clocks] -to [get_ports {sd_clk sd_cmd sd_dat_3 rm2_sck
 
 # HDMI TMDS pairs are sourced from the TMDS clock domain in DvidOut and DDR-
 # clocked via ALTDDIO_OUT — Quartus picks the IOE registers automatically.
+
+# --- SDRAM interface timing (Winbond W9825G6KH-6, 100 MHz, IOE registers) ---
+# The chip clock (sdram_clk, PLL c1) is shifted +5 ns (180deg) vs the internal
+# 100 MHz controller clock so read data (tAC<=6ns after the chip edge) arrives
+# well before the internal capture edge. STA now verifies this interface.
+create_generated_clock -name sdram_clk_pin \
+    -source [get_pins {*sdramPll|altpll_component|auto_generated|pll1|clk[1]}] \
+    [get_ports {sdram_clk}]
+set_input_delay  -clock sdram_clk_pin -max 6.3 [get_ports {sdram_dq[*]}]
+set_input_delay  -clock sdram_clk_pin -min 2.5 [get_ports {sdram_dq[*]}]
+set_output_delay -clock sdram_clk_pin -max 1.8 \
+    [get_ports {sdram_dq[*] sdram_addr[*] sdram_ba[*] sdram_dqm[*] sdram_rasn sdram_casn sdram_wen sdram_csn sdram_cke}]
+set_output_delay -clock sdram_clk_pin -min -1.0 \
+    [get_ports {sdram_dq[*] sdram_addr[*] sdram_ba[*] sdram_dqm[*] sdram_rasn sdram_casn sdram_wen sdram_csn sdram_cke}]

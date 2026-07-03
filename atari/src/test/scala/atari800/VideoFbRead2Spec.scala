@@ -56,7 +56,8 @@ class VideoFbRead2Spec extends AnyFunSuite {
   private def runScaler(idleLow: Boolean, enableAfterTicks: Int = 0,
                         latency: Int = 3, frames: Int = 1,
                         srcW: Int = 8, ha: Int = 16, srcH: Int = SRC_H,
-                        latencySpread: Int = 0): Int = {
+                        latencySpread: Int = 0,
+                        midDisableTicks: Int = 0): Int = {
     val fb32v = fb32(srcW, srcH) _
     val dutC  = if (srcH != SRC_H) compiled24x
                 else if (srcW == 8) compiledPow2 else compiledNonPow2
@@ -83,9 +84,23 @@ class VideoFbRead2Spec extends AnyFunSuite {
         dut.io.enable #= true
       }
 
+      var dropInFlight = false   // set while "console reset" holds the sys domain
+
+      if (midDisableTicks > 0) fork {
+        // Console reset mid-stream: run a while, then disable + drop whatever
+        // transaction was in flight (the arbiter forgets it), then re-enable.
+        fetchCd.waitSampling(300)
+        dut.io.enable #= false
+        dropInFlight = true
+        fetchCd.waitSampling(midDisableTicks)
+        dropInFlight = false
+        dut.io.enable #= true
+      }
+
       // SDRAM read model on the fetch clock.
       var busy = 0; var addrLatch = 0L
       fetchCd.onSamplings {
+        if (dropInFlight && busy > 0) { busy = 0; dut.io.rdComplete #= !idleLow }
         if (sys.env.contains("FB_TRACE")) {
           val ul = dut.fetch.unload.toInt
           if (ul != 0 && dut.fetch.ySnap.toInt == 4)
@@ -195,6 +210,10 @@ class VideoFbRead2Spec extends AnyFunSuite {
     // are consumed, the ring cushion never builds, and the display runs
     // chronically a row behind (measured on HW: ~half of lines wrong).
     assert(runScaler(idleLow = true, latency = 30, frames = 4, srcH = 5) == 0)
+  }
+
+  test("recovers after mid-stream disable (console reset drops in-flight read)") {
+    assert(runScaler(idleLow = true, latency = 10, frames = 6, midDisableTicks = 400) == 0)
   }
 
   test("non-power-of-two srcW (cache bank addressing, like the real 384)") {

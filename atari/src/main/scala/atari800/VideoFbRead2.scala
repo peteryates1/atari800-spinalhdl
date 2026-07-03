@@ -183,6 +183,13 @@ class VideoFbRead2(
       when(nxtHasWant && !dispHasWant) { dispBank := nxt }
     }
 
+    // Abort on disable: forget the outstanding request and all bank tags so the
+    // desync branch does a clean ring restart when enable returns.
+    when(!enSync) {
+      fetchBusy := False
+      bankOk.foreach(_ := False)
+    }
+
     // Artifact meter: any active line displayed from a bank whose tag does not
     // match the DDA's required row (curSrcY) was visibly wrong. Toggle per event.
     val lateTgl  = Reg(Bool()) init False
@@ -270,6 +277,16 @@ class VideoFbRead2(
     io.dbgFxMax := !(fx < srcW)
     val stickyRdReq = RegInit(False) setWhen rdReqR
     io.dbgStickyRdReq := stickyRdReq
+
+    // Abort on disable (e.g. console reset resets the arbiter mid-transaction:
+    // the in-flight completion never arrives and busy would strand forever).
+    // Swallow any pending request edges so re-enable starts clean.
+    val enFetch = BufferCC(io.enable, False)
+    when(!enFetch) {
+      busy := False; inFl := False; rdReqR := False; unload := 0
+      pend := False; settle := 0
+      reqPrev := reqSync
+    }
   }
   io.dbgReq := reqTgl
 }

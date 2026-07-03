@@ -31,23 +31,35 @@ class MockSdram(latency: Int = 3, memBits: Int = 13) extends Component {
 
   // capture the operation on the REQUEST cycle
   val capAddr = Reg(UInt(memBits bits)) init 0
-  val capData = Reg(Bits(8 bits)) init 0
+  val capData = Reg(Bits(32 bits)) init 0
   val capWe   = Reg(Bool()) init False
+  val capLong = Reg(Bool()) init False
   when(io.REQUEST) {
     capAddr := io.ADDRESS_IN.asUInt.resize(memBits)
-    capData := io.DATA_IN(7 downto 0)
+    capData := io.DATA_IN
     capWe   := io.WRITE_EN
+    capLong := io.LONGWORD_ACCESS
   }
 
   val pending = reqReg =/= replyReg
   val latCnt  = Reg(UInt(log2Up(latency + 1) bits)) init 0
   val dataOutReg = Reg(Bits(32 bits)) init 0
 
+  // little-endian like SdramStatemachine: byte k of DATA lives at addr+k
+  val base = Mux(capLong, capAddr & ~U(3, memBits bits), capAddr)
   when(pending) {
     when(latCnt =/= latency) { latCnt := latCnt + 1 }
       .otherwise {
-        when(capWe) { mem.write(capAddr, capData) }
-        dataOutReg := mem.readAsync(capAddr).resize(32)
+        when(capWe) {
+          mem.write(base, capData(7 downto 0))
+          when(capLong) {
+            mem.write(base | 1, capData(15 downto 8))
+            mem.write(base | 2, capData(23 downto 16))
+            mem.write(base | 3, capData(31 downto 24))
+          }
+        }
+        dataOutReg := mem.readAsync(base | 3) ## mem.readAsync(base | 2) ##
+                      mem.readAsync(base | 1) ## mem.readAsync(base)
         replyReg := reqReg
         latCnt := 0
       }

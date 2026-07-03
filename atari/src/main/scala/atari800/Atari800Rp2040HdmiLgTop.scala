@@ -142,8 +142,18 @@ class Atari800Rp2040HdmiLgTop extends Component {
   io.sdram_clk := sdramPll.c1    // dedicated 100 MHz clock to the SDRAM chip
   val pllLocked = pll.io.locked
 
-  // System reset: high when PLL locks and the console-reset button is unpressed
-  val sysResetN = pllLocked & io.consolReset
+  // System reset: high when PLL locks and the console-reset button is unpressed.
+  // The RELEASE must be synchronised to clkSys: a raw async release lets each
+  // register leave reset on a different clock edge (reset-tree routing skew),
+  // so state machines (SDRAM POR, arbiter, core) start inconsistent - boot
+  // corruption that varied per BUILD (routing) and per BUTTON PRESS (phase).
+  val sysResetRawN = pllLocked & io.consolReset
+  val rstSyncArea = new ClockingArea(ClockDomain(clkSys, config = ClockDomainConfig(resetKind = BOOT))) {
+    val r0 = RegNext(sysResetRawN) init False addTag(crossClockDomain)
+    val r1 = RegNext(r0) init False
+    val rstN = sysResetRawN & r1   // async assert, synchronous release
+  }
+  val sysResetN = rstSyncArea.rstN
   val sysDomain = ClockDomain(
     clock  = clkSys,
     reset  = sysResetN,
@@ -253,8 +263,16 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // Port B — framebuffer write: capture raw Atari video (8-bit GTIA index)
     // fbBase must be ABOVE the Atari's RAM in SDRAM (internal_ram=0 -> RAM at
     // low addresses). 0x100000 = 1 MB, well clear of the Atari's 64 KB.
-    val fbWrite = new VideoFbWrite(fbBase = 0x100000, width = 384, strideLog2 = 9, height = 288, addrWidth = 24, debugFill = true)
-    fbWrite.io.pixStrobe := colourEnable
+    val fbWrite = new VideoFbWrite(fbBase = 0x100000, width = 384, strideLog2 = 9, height = 288, addrWidth = 24, clearOnReset = true)
+    fbWrite.io.enable    := BufferCC(sdramCtrl.io.reset_client_n, False)  // SDRAM chip init COMPLETE (not just controller reset release)
+    // Sample at the Atari hi-res pixel rate (sys/8 ~ 7.2 MHz), phase-locked to
+    // each line by hsync. colourEnable (sys/2 ~ 28.8 MHz) is 4x too fast: the
+    // 384-wide buffer filled after ~96 real pixels (image squashed to the left).
+    val pixDiv    = Reg(UInt(3 bits)) init 0
+    val capHsPrev = RegNext(atari.io.VIDEO_HS) init False
+    pixDiv := pixDiv + 1
+    when(atari.io.VIDEO_HS && !capHsPrev) { pixDiv := 0 }
+    fbWrite.io.pixStrobe := pixDiv === 7
     fbWrite.io.colour    := atari.io.VIDEO_B
     fbWrite.io.hsync     := atari.io.VIDEO_HS
     fbWrite.io.vsync     := atari.io.VIDEO_VS
@@ -265,9 +283,9 @@ class Atari800Rp2040HdmiLgTop extends Component {
     arb.io.b.writeEnable    := True
     arb.io.b.addr           := fbWrite.io.wrAddr
     arb.io.b.dataIn         := fbWrite.io.wrData
-    arb.io.b.byteAccess     := fbWrite.io.wrByte
+    arb.io.b.byteAccess     := False
     arb.io.b.wordAccess     := False
-    arb.io.b.longwordAccess := False
+    arb.io.b.longwordAccess := fbWrite.io.wrLong
 
     // Port C — framebuffer read/scaler (dual-clock: fetch in sys, output at pixel)
     val fbRead = new VideoFbRead2(
@@ -278,7 +296,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     fbRead.io.clkPixel := clkPixel
     // Same ready condition as the SDRAM controller's reset: no fetch requests
     // until the arbiter + SDRAM are live (BufferCC inside fbRead syncs it).
-    fbRead.io.enable   := sysResetN & sdramPor.msb
+    fbRead.io.enable   := BufferCC(sdramCtrl.io.reset_client_n, False)   // SDRAM chip init COMPLETE
     arb.io.c.request        := fbRead.io.rdReq
     fbRead.io.rdComplete    := arb.io.c.complete
     arb.io.c.readEnable     := True
@@ -415,10 +433,10 @@ class Atari800Rp2040HdmiLgTop extends Component {
   // NOTE: LA channels 22/23 (RP2040 GPIO24/25) read garbage — GPIO25 is the
   // LA firmware's LED, GPIO24 dead (VBUS-sense on a stock Pico). Only use
   // ch10/12/13/20; ch10 carries wrReq (a known toggler) to validate itself.
-  io.rp_gpio12_out := sysArea.fbWrite.io.wrReq             // GPIO12 = LA ch10  wrReq (trigger/pin check)
+  io.rp_gpio12_out := sysArea.fbWrite.io.dbgLines(0)       // GPIO12 = LA ch10  linesPerFrame LSB
   io.rp_gpio14_out := sysArea.fbRead.io.dbgLateTgl         // GPIO14 = LA ch12  toggles per wrong-row line (artifact meter)
   io.rp_gpio15_out := sysArea.fbRead.io.dbgFrameTgl        // GPIO15 = LA ch13  toggles per frame (rate reference)
-  io.rp_gpio22_out := sysArea.fbRead.io.dbgBusy            // GPIO22 = LA ch20  fetch busy (live)
+  io.rp_gpio22_out := sysArea.fbWrite.io.dbgLines(1)       // GPIO22 = LA ch20  linesPerFrame bit 1
   io.rp_gpio24_out := sysArea.fbRead.io.dbgBusy            // GPIO24 = LA ch22  (dead channel)
   io.rp_gpio25_out := sysArea.fbRead.io.dbgBeat            // GPIO25 = LA ch23  (dead channel)
 

@@ -25,6 +25,7 @@ object VideoFbWriteSimTb extends App {
       val mem = mutable.Map[Long, Int]()          // captured framebuffer: addr -> byte
       dut.clockDomain.forkStimulus(period = 10)
 
+      dut.io.enable    #= true
       dut.io.pixStrobe #= false
       dut.io.colour    #= 0
       dut.io.hsync     #= false
@@ -40,10 +41,11 @@ object VideoFbWriteSimTb extends App {
       var busyCnt = 0
       dut.clockDomain.onSamplings {
         if (dut.io.wrReq.toBoolean && pending < 0) {
-          // accept a request: capture addr/data, go busy
+          // accept a request: capture addr/data (32-bit packed, little-endian)
           pending = dut.io.wrAddr.toLong.toInt
-          val data = dut.io.wrData.toLong.toInt & 0xFF
-          mem(dut.io.wrAddr.toLong) = data
+          val addr = dut.io.wrAddr.toLong
+          val data = dut.io.wrData.toLong
+          for (k <- 0 until 4) mem(addr + k) = ((data >> (8 * k)) & 0xFF).toInt
           busyCnt = 4
           dut.io.wrComplete #= false
         } else if (pending >= 0) {
@@ -58,7 +60,8 @@ object VideoFbWriteSimTb extends App {
         dut.io.colour    #= colour
         dut.io.pixStrobe #= true
         dut.clockDomain.waitSampling()
-        dut.io.pixStrobe #= false
+        dut.io.enable    #= true
+      dut.io.pixStrobe #= false
         dut.clockDomain.waitSampling(2)   // gap between pixel strobes
       }
       def pulse(sig: Bool): Unit = {
@@ -92,7 +95,7 @@ object VideoFbWriteSimTb extends App {
       if (blankAddrs != 0) { errors += 1; println(s"ERROR: $blankAddrs blanked pixels were written") }
 
       println(s"frames=${dut.io.frameCount.toInt} overflow=${dut.io.overflow.toBoolean} writes=${mem.size} errors=$errors")
-      if (errors == 0 && mem.size == W * H) println("FB WRITE SIM: PASS")
+      if (errors == 0 && mem.size == W * H) println("FB WRITE SIM: PASS")  // packed: mem.size counts bytes
       else { println("FB WRITE SIM: FAIL"); simFailure("framebuffer write mismatch") }
     }
 }
