@@ -16,6 +16,10 @@ lazy val atari = (project in file("atari"))
     libraryDependencies += compilerPlugin(
       "com.github.spinalhdl" %% "spinalhdl-idsl-plugin" % "1.14.0"
     ),
+    libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
     fork := true,
+    Test / fork := true,
+    Test / parallelExecution := false,
+    Test / envVars ++= Seq("FB_DEBUG", "FB_TRACE").flatMap(k => sys.env.get(k).map(k -> _)).toMap,
     Compile / run / baseDirectory := (ThisBuild / baseDirectory).value
   )

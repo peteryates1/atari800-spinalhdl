@@ -39,13 +39,25 @@ class SdramArbiter3 extends Component {
       val byteAccess = out Bool(); val wordAccess = out Bool(); val longwordAccess = out Bool()
       val refresh = out Bool()
     }
+    val dbgCPending = out Bool()
+    val dbgCActive  = out Bool()
+    // Sticky one-shot latches: boot-time single events are unobservable on the
+    // LA (17 ns pulse, capture window arrives seconds later), so latch them.
+    val dbgStickyCReq      = out Bool()   // c.request was ever high
+    val dbgStickyCComplete = out Bool()   // c.complete ever pulsed
   }
+  val stickyCReq      = RegInit(False) setWhen io.c.request
+  val stickyCComplete = RegInit(False) setWhen io.c.complete
+  io.dbgStickyCReq      := stickyCReq
+  io.dbgStickyCComplete := stickyCComplete
 
   val bActive  = RegInit(False); val bPending = RegInit(False)
   val cActive  = RegInit(False); val cPending = RegInit(False)
   val aPending = RegInit(False)
 
   val sdramCompleteReg = RegNext(io.sdram.complete) init False
+  io.dbgCPending := cPending
+  io.dbgCActive  := cActive
 
   val bReqPrev = RegNext(io.b.request) init False
   when(io.b.request && !bReqPrev) { bPending := True }
@@ -101,13 +113,16 @@ class SdramArbiter3 extends Component {
     io.a.complete := io.sdram.complete
 
     val canServe = !io.a.request && !aPending && sdramCompleteReg
-    when(bPending && canServe) {
-      io.sdram.request := True; driveB()
-      bPending := False; bActive := True
-      io.a.complete := True
-    }.elsewhen(cPending && canServe) {
+    // Port C (fb-read/display fetch) has priority over B (fb-write): the fetch is
+    // bursty and time-critical per scanline, while writes buffer in a FIFO. With
+    // B first, continuous writes starve C forever (fetch hangs) — confirmed on HW.
+    when(cPending && canServe) {
       io.sdram.request := True; driveC()
       cPending := False; cActive := True
+      io.a.complete := True
+    }.elsewhen(bPending && canServe) {
+      io.sdram.request := True; driveB()
+      bPending := False; bActive := True
       io.a.complete := True
     }
   }

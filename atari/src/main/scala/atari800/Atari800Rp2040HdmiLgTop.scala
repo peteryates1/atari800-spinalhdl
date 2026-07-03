@@ -251,7 +251,9 @@ class Atari800Rp2040HdmiLgTop extends Component {
     atari.io.SDRAM_DO               := arb.io.a.dataOut
 
     // Port B — framebuffer write: capture raw Atari video (8-bit GTIA index)
-    val fbWrite = new VideoFbWrite(fbBase = 0, width = 384, strideLog2 = 9, height = 288, addrWidth = 24)
+    // fbBase must be ABOVE the Atari's RAM in SDRAM (internal_ram=0 -> RAM at
+    // low addresses). 0x100000 = 1 MB, well clear of the Atari's 64 KB.
+    val fbWrite = new VideoFbWrite(fbBase = 0x100000, width = 384, strideLog2 = 9, height = 288, addrWidth = 24, debugFill = true)
     fbWrite.io.pixStrobe := colourEnable
     fbWrite.io.colour    := atari.io.VIDEO_B
     fbWrite.io.hsync     := atari.io.VIDEO_HS
@@ -269,21 +271,24 @@ class Atari800Rp2040HdmiLgTop extends Component {
 
     // Port C — framebuffer read/scaler (dual-clock: fetch in sys, output at pixel)
     val fbRead = new VideoFbRead2(
-      srcW = 384, srcH = 288, strideLog2 = 9, fbBase = 0,
+      srcW = 384, srcH = 288, strideLog2 = 9, fbBase = 0x100000,
       hActive = 1280, hFront = 110, hSync = 40, hBack = 220,
       vActive = 720,  vFront = 5,   vSync = 5,  vBack = 20, addrWidth = 24)
     fbRead.io.clkFetch := clkSys
     fbRead.io.clkPixel := clkPixel
+    // Same ready condition as the SDRAM controller's reset: no fetch requests
+    // until the arbiter + SDRAM are live (BufferCC inside fbRead syncs it).
+    fbRead.io.enable   := sysResetN & sdramPor.msb
     arb.io.c.request        := fbRead.io.rdReq
     fbRead.io.rdComplete    := arb.io.c.complete
     arb.io.c.readEnable     := True
     arb.io.c.writeEnable    := False
     arb.io.c.addr           := fbRead.io.rdAddr
     arb.io.c.dataIn         := B(0, 32 bits)
-    arb.io.c.byteAccess     := True
+    arb.io.c.byteAccess     := False
     arb.io.c.wordAccess     := False
-    arb.io.c.longwordAccess := False
-    fbRead.io.rdData        := arb.io.c.dataOut(7 downto 0)
+    arb.io.c.longwordAccess := True
+    fbRead.io.rdData        := arb.io.c.dataOut
 
     // Arbiter -> SdramStatemachine
     sdramCtrl.io.READ_EN         := arb.io.sdram.readEnable
@@ -354,58 +359,68 @@ class Atari800Rp2040HdmiLgTop extends Component {
   // REGISTERED RGB (as the reference does) — splits the cache-read + palette LUT
   // path from the 8b/10b encoder so both meet the 74.25 MHz pixel clock.
   val pixelArea = new ClockingArea(ClockDomain(clkPixel, config = ClockDomainConfig(resetKind = BOOT))) {
+    // Real framebuffer path: palette the scaled Atari pixel; sync/DE come from
+    // VideoFbRead2 (now active-low). One pixel-domain register so the encoder
+    // gets registered RGB, matched by de/hs/vs delays.
     val palette = new GtiaPalette
     palette.io.atariColour := sysArea.vidPix
     palette.io.pal         := True
     val r  = RegNext(palette.io.rNext)
     val g  = RegNext(palette.io.gNext)
     val b  = RegNext(palette.io.bNext)
-    val de = RegNext(sysArea.vidDe) init False   // match the +1 palette-reg latency
+    val de = RegNext(sysArea.vidDe) init False
     val hs = RegNext(sysArea.vidHs) init False
     val vs = RegNext(sysArea.vidVs) init False
+    // Power-on reset for the DVI encoder (held low ~256 pixel clocks).
+    val por = Reg(UInt(9 bits)) init 0
+    when(por =/= por.maxValue) { por := por + 1 }
+    val rstN = por.msb
   }
 
-  val dvi = new DvidOut
-  dvi.io.clkPixel := clkPixel
-  dvi.io.clkTmds  := clkTmds
-  dvi.io.red      := pixelArea.r
-  dvi.io.green    := pixelArea.g
-  dvi.io.blue     := pixelArea.b
-  dvi.io.hsync    := pixelArea.hs
-  dvi.io.vsync    := pixelArea.vs
-  dvi.io.de       := pixelArea.de
+  // Proven corecourse 720p encoder (replaces our DvidOut, which fails at 371 MHz).
+  val dvi = new DviEncoder
+  dvi.pixelclk   := clkPixel
+  dvi.pixelclk5x := clkTmds
+  dvi.rst_n      := pixelArea.rstN
+  dvi.red_din    := pixelArea.r
+  dvi.green_din  := pixelArea.g
+  dvi.blue_din   := pixelArea.b
+  dvi.hsync      := pixelArea.hs
+  dvi.vsync      := pixelArea.vs
+  dvi.de         := pixelArea.de
 
-  io.hdmi_clk_p := dvi.io.tmdsClkP
-  io.hdmi_clk_n := dvi.io.tmdsClkN
-  io.hdmi_d0_p  := dvi.io.tmdsD0P
-  io.hdmi_d0_n  := dvi.io.tmdsD0N
-  io.hdmi_d1_p  := dvi.io.tmdsD1P
-  io.hdmi_d1_n  := dvi.io.tmdsD1N
-  io.hdmi_d2_p  := dvi.io.tmdsD2P
-  io.hdmi_d2_n  := dvi.io.tmdsD2N
+  io.hdmi_clk_p := dvi.tmds_clk_p
+  io.hdmi_clk_n := dvi.tmds_clk_n
+  io.hdmi_d0_p  := dvi.tmds_data_p(0)   // blue
+  io.hdmi_d0_n  := dvi.tmds_data_n(0)
+  io.hdmi_d1_p  := dvi.tmds_data_p(1)   // green
+  io.hdmi_d1_n  := dvi.tmds_data_n(1)
+  io.hdmi_d2_p  := dvi.tmds_data_p(2)   // red
+  io.hdmi_d2_n  := dvi.tmds_data_n(2)
 
   // =========================================================================
   // RP2040 ↔ peripheral pass-throughs (direct combinational wires)
   // =========================================================================
   io.sd_clk          := io.rp_gpio10_in
   io.sd_cmd          := io.rp_gpio11_in
-  io.rp_gpio12_out   := io.sd_dat0
   io.sd_dat3         := io.rp_gpio13_in
-  io.rp_gpio14_out   := io.sd_cd
-
   io.rm2_sck         := io.rp_gpio20_in
   io.rm2_mosi        := io.rp_gpio21_in
-  io.rp_gpio22_out   := io.rm2_miso
   io.rm2_cs          := io.rp_gpio23_in
-  io.rp_gpio24_out   := io.rm2_irq_n
   io.rm2_bt_on       := io.rp_gpio4_in
   io.rm2_wifi_on     := io.rp_gpio5_in
 
-  // Spare GPIO outs — drive a heartbeat / 0 so Quartus doesn't optimise them out.
-  val heartbeat = Reg(UInt(24 bits)) init 0
-  heartbeat := heartbeat + 1
-  io.rp_gpio15_out := heartbeat.msb
-  io.rp_gpio25_out := pllLocked
+  // DEBUG: route the fb read/write SDRAM handshake onto the RP2040 GPIO for the
+  // logic analyzer. rp_gpioN -> RP2040 GPION -> LA channel (N-2, INPUT_PIN_BASE=2).
+  // NOTE: LA channels 22/23 (RP2040 GPIO24/25) read garbage — GPIO25 is the
+  // LA firmware's LED, GPIO24 dead (VBUS-sense on a stock Pico). Only use
+  // ch10/12/13/20; ch10 carries wrReq (a known toggler) to validate itself.
+  io.rp_gpio12_out := sysArea.fbWrite.io.wrReq             // GPIO12 = LA ch10  wrReq (trigger/pin check)
+  io.rp_gpio14_out := sysArea.fbRead.io.dbgLateTgl         // GPIO14 = LA ch12  toggles per wrong-row line (artifact meter)
+  io.rp_gpio15_out := sysArea.fbRead.io.dbgFrameTgl        // GPIO15 = LA ch13  toggles per frame (rate reference)
+  io.rp_gpio22_out := sysArea.fbRead.io.dbgBusy            // GPIO22 = LA ch20  fetch busy (live)
+  io.rp_gpio24_out := sysArea.fbRead.io.dbgBusy            // GPIO24 = LA ch22  (dead channel)
+  io.rp_gpio25_out := sysArea.fbRead.io.dbgBeat            // GPIO25 = LA ch23  (dead channel)
 
   // =========================================================================
   // RP2040 ↔ FPGA SPI slave (placeholder — drive MISO from heartbeat so the
@@ -424,7 +439,15 @@ class Atari800Rp2040HdmiLgTop extends Component {
   // -----------------------------------------------------------------
   // Core LED — PLL lock status
   // -----------------------------------------------------------------
-  io.led_core(0) := sysArea.dbgHb(23)   // DEBUG: blink=SDRAM init OK, steady=init failed
+  // DEBUG: heartbeat off the 371.25 MHz TMDS clock — blink => clkTmds alive.
+  val tmdsArea = new ClockingArea(ClockDomain(clkTmds, config = ClockDomainConfig(resetKind = BOOT))) {
+    val hb = Reg(UInt(30 bits)) init 0
+    hb := hb + 1
+  }
+  // DEBUG: LED = fb-write FIFO overflow (sticky). In debugFill mode writes are
+  // continuous: LED ON => port-B writes never complete (arbiter/SDRAM stuck);
+  // LED OFF => writes ARE draining, so the fault is the read/fetch side.
+  io.led_core(0) := sysArea.fbWrite.io.overflow
 }
 
 object Atari800Rp2040HdmiLgSv extends App {

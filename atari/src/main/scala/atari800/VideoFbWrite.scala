@@ -25,7 +25,9 @@ class VideoFbWrite(
     strideLog2:Int = 9,       // bytes per line = 512
     height:    Int = 288,     // max active lines captured per frame
     addrWidth: Int = 25,
-    fifoDepth: Int = 512
+    fifoDepth: Int = 512,
+    debugPattern: Boolean = false,  // write a checkerboard instead of io.colour
+    debugFill:    Boolean = false   // free-running sweep, ignore all video inputs
 ) extends Component {
   val io = new Bundle {
     // ---- video input (sys domain) ----
@@ -61,22 +63,33 @@ class VideoFbWrite(
   val fifo = StreamFifo(FbWriteReq(addrWidth), fifoDepth)
 
   val inFrame = x < width && y < height
-  val push = io.pixStrobe && !io.blank && inFrame
-  fifo.io.push.valid          := push
-  fifo.io.push.payload.addr   := (U(fbBase, addrWidth bits) + (y << strideLog2) + x).resize(addrWidth)
-  fifo.io.push.payload.data   := io.colour
-
-  // "armed" holds Y at 0 for the first line after VSYNC; later HSYNCs advance Y.
   val armed = Reg(Bool()) init True
-  when(push) {
-    when(fifo.io.push.ready) { x := x + 1 } otherwise { overflow := True }
+  val chk = Mux(x(5) ^ y(5), B(0x1A, 8 bits), B(0x86, 8 bits))
+  fifo.io.push.payload.addr := (U(fbBase, addrWidth bits) + (y << strideLog2) + x).resize(addrWidth)
+
+  if (debugFill) {
+    // Free-running sweep of the whole framebuffer, ignoring ALL video inputs —
+    // proves the SDRAM write -> read -> display path in isolation.
+    fifo.io.push.valid        := True
+    fifo.io.push.payload.data := chk
+    when(fifo.io.push.ready) {
+      when(x === (width - 1)) { x := 0; y := Mux(y === (height - 1), U(0), y + 1) }
+        .otherwise { x := x + 1 }
+    } otherwise { overflow := True }   // FIFO full => SDRAM writes not draining
+  } else {
+    val push = io.pixStrobe && !io.blank && inFrame
+    fifo.io.push.valid        := push
+    fifo.io.push.payload.data := (if (debugPattern) chk else io.colour)
+    when(push) {
+      when(fifo.io.push.ready) { x := x + 1 } otherwise { overflow := True }
+    }
+    when(hsRise) {
+      x := 0
+      when(armed) { armed := False }
+        .elsewhen(y =/= (height - 1)) { y := y + 1 }
+    }
+    when(vsRise) { x := 0; y := 0; armed := True; frameCount := frameCount + 1 }
   }
-  when(hsRise) {
-    x := 0
-    when(armed) { armed := False }
-      .elsewhen(y =/= (height - 1)) { y := y + 1 }
-  }
-  when(vsRise) { x := 0; y := 0; armed := True; frameCount := frameCount + 1 }
 
   // ---- Drain side: pop FIFO -> issue SDRAM byte writes ----
   val inFlight = Reg(Bool()) init False

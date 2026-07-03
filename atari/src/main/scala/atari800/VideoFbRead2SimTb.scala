@@ -27,13 +27,14 @@ object VideoFbRead2SimTb extends App {
       pixCd.forkStimulus(10)     // "74 MHz"
       fetchCd.forkStimulus(13)   // "57 MHz" — asynchronous ratio
 
+      dut.io.enable #= true
       dut.io.rdComplete #= true; dut.io.rdData #= 0
 
       // SDRAM read model on the fetch clock
       var busy = 0; var addrLatch = 0L
       fetchCd.onSamplings {
         if (busy == 0 && dut.io.rdReq.toBoolean) { addrLatch = dut.io.rdAddr.toLong; busy = 2; dut.io.rdComplete #= false }
-        else if (busy > 0) { busy -= 1; if (busy == 0) { dut.io.rdData #= fb(addrLatch); dut.io.rdComplete #= true } }
+        else if (busy > 0) { busy -= 1; if (busy == 0) { dut.io.rdData #= (0 until 4).map(k => fb(addrLatch + k).toLong << (8 * k)).sum; dut.io.rdComplete #= true } }
       }
 
       // capture one output frame on the pixel clock
