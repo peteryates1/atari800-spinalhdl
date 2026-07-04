@@ -99,6 +99,44 @@ static void fpga_send_keyboard(const uint8_t report[8]) {
   }
 }
 
+// ---- SDRAM loader over the SPI link ----
+// 'W' + addr[23:0] + data (quads written as they stream, little-endian).
+// 'Z' zeroes the FPGA's byte counter + checksum; a 7-byte no-op frame reads
+// back MISO status: [.., 0xA5?, frameCnt, cntL, cntH, sumL, sumH].
+static void fpga_load_status(uint16_t *cnt, uint16_t *sum) {
+  uint8_t tx[7] = {0}, rx[7];
+  fpga_spi_frame(tx, rx, sizeof tx);
+  *cnt = (uint16_t)rx[2] | ((uint16_t)rx[3] << 8);
+  *sum = (uint16_t)rx[4] | ((uint16_t)rx[5] << 8);
+}
+
+static void fpga_load_zero(void) {
+  uint8_t tx[1] = {'Z'}, rx[1];
+  fpga_spi_frame(tx, rx, 1);
+}
+
+// One 'W' frame: up to 252 data bytes (multiple of 4).
+static void fpga_load_chunk(uint32_t addr, const uint8_t *data, uint32_t len) {
+  uint8_t tx[4 + 252], rx[sizeof tx];
+  tx[0] = 'W';
+  tx[1] = (uint8_t)(addr >> 16);
+  tx[2] = (uint8_t)(addr >> 8);
+  tx[3] = (uint8_t)addr;
+  memcpy(tx + 4, data, len);
+  fpga_spi_frame(tx, rx, 4 + len);
+}
+
+static void fpga_load(uint32_t addr, const uint8_t *data, uint32_t len,
+                      uint16_t *local_cnt, uint16_t *local_sum) {
+  for (uint32_t off = 0; off < len; off += 252) {
+    uint32_t n = len - off > 252 ? 252 : len - off;
+    n &= ~3u;                       // whole quads only
+    if (n == 0) break;
+    fpga_load_chunk(addr + off, data + off, n);
+    for (uint32_t i = 0; i < n; i++) { *local_sum += data[off + i]; (*local_cnt)++; }
+  }
+}
+
 static void fpga_send_control(uint8_t bits) {
   uint8_t tx[2] = {'C', bits};
   uint8_t rx[2];
@@ -181,10 +219,64 @@ static void handle_console(void) {
       cdc_printf("sd: %d entries\r\n", n);
       break;
     }
+    case 'w': {   // SDRAM load channel self-test: 1 KB pattern @ 0x300000
+      static uint8_t pat[1024];
+      for (int i = 0; i < 1024; i++) pat[i] = (uint8_t)(i * 7 + 3);
+      fpga_load_zero();
+      uint16_t lcnt = 0, lsum = 0;
+      fpga_load(0x300000, pat, sizeof pat, &lcnt, &lsum);
+      uint16_t fcnt, fsum;
+      fpga_load_status(&fcnt, &fsum);
+      cdc_printf("loadtest: local cnt=%u sum=%04x | fpga cnt=%u sum=%04x -> %s\r\n",
+                 lcnt, lsum, fcnt, fsum,
+                 (lcnt == fcnt && lsum == fsum) ? "PASS" : "FAIL");
+      break;
+    }
+    case 'L': {   // L <hexaddr> <path>  — load a file from SD into SDRAM
+      char line[96]; int n = 0;
+      absolute_time_t dl = make_timeout_time_ms(500);
+      while (n < 95 && absolute_time_diff_us(get_absolute_time(), dl) > 0) {
+        tud_task();
+        uint8_t c;
+        if (tud_cdc_available() && tud_cdc_read(&c, 1) == 1) {
+          if (c == '\r' || c == '\n') break;
+          line[n++] = (char)c;
+          dl = make_timeout_time_ms(500);
+        }
+      }
+      line[n] = 0;
+      uint32_t addr = 0; char path[80] = {0};
+      if (sscanf(line, " %lx %79s", &addr, path) != 2) {
+        cdc_printf("usage: L <hexaddr> <path>   e.g. L 300000 /cartridge/foo.rom\r\n");
+        break;
+      }
+      static FATFS fs;
+      if (f_mount(&fs, "", 1) != FR_OK) { cdc_printf("mount failed\r\n"); break; }
+      FIL f;
+      FRESULT fr = f_open(&f, path, FA_READ);
+      if (fr != FR_OK) { cdc_printf("open '%s' failed (%d)\r\n", path, fr); break; }
+      fpga_load_zero();
+      uint16_t lcnt = 0, lsum = 0;
+      uint32_t total = 0;
+      static uint8_t buf[504];        // multiple of 4 and of 252
+      UINT rd;
+      while (f_read(&f, buf, sizeof buf, &rd) == FR_OK && rd > 0) {
+        fpga_load(addr + total, buf, rd, &lcnt, &lsum);
+        total += rd;
+        tud_task();
+      }
+      f_close(&f);
+      uint16_t fcnt, fsum;
+      fpga_load_status(&fcnt, &fsum);
+      cdc_printf("loaded '%s': %lu bytes @ %06lx | fpga cnt=%u sum=%04x local cnt=%u sum=%04x -> %s\r\n",
+                 path, total, addr, fcnt, fsum, lcnt, lsum,
+                 (lcnt == fcnt && lsum == fsum) ? "OK" : "MISMATCH");
+      break;
+    }
     case 'l': dump_logring(); break;
     case 'h':
     default:
-      cdc_printf("supervisor: r=reset 1=start 0=release s=status i=sdinfo d=sddir l=bootlog h=help\r\n");
+      cdc_printf("supervisor: r=reset 1=start 0=release s=status i=sdinfo d=sddir w=loadtest L=<addr> <path> l=bootlog h=help\r\n");
       break;
   }
 }

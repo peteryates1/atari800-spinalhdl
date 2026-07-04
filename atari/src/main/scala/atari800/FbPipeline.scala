@@ -80,6 +80,10 @@ class FbPipeline(
   rd.io.rdData         := arb.io.c.dataOut(7 downto 0)
 
   // Arbiter <-> MockSdram
+  arb.io.d.request := False; arb.io.d.readEnable := False; arb.io.d.writeEnable := False
+  arb.io.d.addr := 0; arb.io.d.dataIn := 0; arb.io.d.byteAccess := False
+  arb.io.d.wordAccess := False; arb.io.d.longwordAccess := False
+
   mock.io.REQUEST := arb.io.sdram.request; arb.io.sdram.complete := mock.io.COMPLETE
   mock.io.READ_EN := arb.io.sdram.readEnable; mock.io.WRITE_EN := arb.io.sdram.writeEnable
   mock.io.ADDRESS_IN := arb.io.sdram.addr; mock.io.DATA_IN := arb.io.sdram.dataIn

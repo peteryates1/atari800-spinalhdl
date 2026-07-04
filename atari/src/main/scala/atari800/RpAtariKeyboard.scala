@@ -17,7 +17,15 @@ import spinal.lib._
 //               committed atomically at CS rise.
 //     0x43 'C': byte 1 = control bits — 0 reset, 1 start, 2 select, 3 option
 //               (held levels; cleared by the next 'C' frame).
-//   MISO returns a status stream: 0xA5, frameCount, 0x00...
+//     0x57 'W': bytes 1..3 = SDRAM byte address (23:0, 4-aligned); bytes 4..N
+//               stream data. Each 4-byte quad is written to SDRAM (32-bit,
+//               little-endian: first byte at lowest address) via the arbiter
+//               loader port while the frame streams. Trailing partial quads
+//               are dropped (ROM images are 4-byte multiples).
+//     0x5A 'Z': zero the load byte-counter and checksum.
+//   MISO status stream: 0xA5, frameCount, ldCnt.lo, ldCnt.hi, sum.lo, sum.hi
+//   (sum = 16-bit sum of all data bytes streamed since 'Z' — lets the
+//   supervisor verify a load without a read channel).
 class RpAtariKeyboard extends Component {
   val io = new Bundle {
     // SPI slave (async inputs from the RP2040)
@@ -37,6 +45,11 @@ class RpAtariKeyboard extends Component {
     val ctrlStart  = out Bool()
     val ctrlSelect = out Bool()
     val ctrlOption = out Bool()
+    // SDRAM loader port (arbiter port D; complete idles low, pulses high)
+    val ldReq      = out Bool()
+    val ldAddr     = out Bits(24 bits)
+    val ldData     = out Bits(32 bits)
+    val ldComplete = in  Bool()
     // debug
     val frameCount = out UInt(8 bits)
   }
@@ -56,7 +69,7 @@ class RpAtariKeyboard extends Component {
   // ---- Byte deserialiser ----
   val bitCnt   = Reg(UInt(3 bits)) init 0
   val shiftIn  = Reg(Bits(8 bits)) init 0
-  val byteIdx  = Reg(UInt(4 bits)) init 0
+  val byteIdx  = Reg(UInt(12 bits)) init 0   // wide: 'W' frames stream hundreds of bytes
   val cmdReg   = Reg(Bits(8 bits)) init 0
   val byteDone = False
   val byteVal  = shiftIn(6 downto 0) ## mosi
@@ -68,6 +81,14 @@ class RpAtariKeyboard extends Component {
     when(bitCnt === 7) { byteDone := True }
   }
 
+  // ---- SDRAM loader state ----
+  val ldPtr    = Reg(UInt(24 bits)) init 0        // next quad's byte address
+  val quadBuf  = Reg(Bits(24 bits)) init 0        // bytes 0..2 of the quad
+  val wrData   = Reg(Bits(32 bits)) init 0
+  val wrValid  = Reg(Bool()) init False
+  val ldSum    = Reg(UInt(16 bits)) init 0
+  val ldCnt    = Reg(UInt(16 bits)) init 0
+
   // ---- MISO status stream (slave shifts on falling edge, mode 0) ----
   val frameCnt = Reg(UInt(8 bits)) init 0
   val shiftOut = Reg(Bits(8 bits)) init 0
@@ -75,7 +96,14 @@ class RpAtariKeyboard extends Component {
   when(csFall) { shiftOut := B(0xA5, 8 bits); outIdx := 0 }
   when(!csN && sckFall) {
     when(bitCnt === 0) {   // byte boundary: load the next status byte whole
-      shiftOut := Mux(outIdx === 0, frameCnt.asBits, B(0, 8 bits))
+      switch(outIdx) {
+        is(0) { shiftOut := frameCnt.asBits }
+        is(1) { shiftOut := ldCnt(7 downto 0).asBits }
+        is(2) { shiftOut := ldCnt(15 downto 8).asBits }
+        is(3) { shiftOut := ldSum(7 downto 0).asBits }
+        is(4) { shiftOut := ldSum(15 downto 8).asBits }
+        default { shiftOut := B(0, 8 bits) }
+      }
       outIdx := outIdx + 1
     } otherwise {
       shiftOut := shiftOut |<< 1
@@ -107,6 +135,7 @@ class RpAtariKeyboard extends Component {
   when(byteDone) {
     when(byteIdx === 0) {
       cmdReg := byteVal
+      when(byteVal === 0x5A) { ldSum := 0; ldCnt := 0 }   // 'Z'
     } otherwise {
       switch(cmdReg) {
         is(B(0x4B, 8 bits)) {              // 'K': HID boot report
@@ -134,9 +163,41 @@ class RpAtariKeyboard extends Component {
         is(B(0x43, 8 bits)) {              // 'C': control bits
           when(byteIdx === 1) { ctrlBits := byteVal(3 downto 0) }
         }
+        is(B(0x57, 8 bits)) {              // 'W': SDRAM load
+          when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt }
+          when(byteIdx === 2) { ldPtr(15 downto 8)  := byteVal.asUInt }
+          when(byteIdx === 3) { ldPtr(7 downto 0)   := byteVal.asUInt }
+          when(byteIdx >= 4) {
+            ldSum := ldSum + byteVal.asUInt.resize(16)
+            ldCnt := ldCnt + 1
+            val sub = (byteIdx - 4)(1 downto 0)
+            when(sub =/= 3) {
+              quadBuf.subdivideIn(8 bits)(sub) := byteVal
+            } otherwise {
+              wrData  := byteVal ## quadBuf   // byte 3 in [31:24], byte 0 at addr
+              wrValid := True
+            }
+          }
+        }
       }
     }
-    byteIdx := byteIdx + 1
+    when(byteIdx =/= byteIdx.maxValue) { byteIdx := byteIdx + 1 }
+  }
+
+  // ---- Loader drain: one 32-bit SDRAM write per collected quad ----
+  val ldInFlight = Reg(Bool()) init False
+  val ldBusySeen = Reg(Bool()) init False
+  io.ldReq  := wrValid && !ldInFlight
+  io.ldAddr := ldPtr.asBits
+  io.ldData := wrData
+  when(io.ldReq) { ldInFlight := True; ldBusySeen := False }
+  when(ldInFlight) {
+    when(!io.ldComplete) { ldBusySeen := True }
+    when(ldBusySeen && io.ldComplete) {
+      ldInFlight := False
+      wrValid    := False
+      ldPtr      := ldPtr + 4
+    }
   }
 
   // commit a complete keyboard frame atomically at CS rise

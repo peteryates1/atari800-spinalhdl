@@ -323,6 +323,18 @@ class Atari800Rp2040HdmiLgTop extends Component {
     arb.io.c.longwordAccess := True
     fbRead.io.rdData        := arb.io.c.dataOut
 
+    // Supervisor SDRAM loader -> arbiter port D (lowest priority)
+    arb.io.d.request        := kbd.io.ldReq
+    kbd.io.ldComplete       := arb.io.d.complete
+    arb.io.d.readEnable     := False
+    arb.io.d.writeEnable    := True
+    arb.io.d.addr           := kbd.io.ldAddr
+    arb.io.d.dataIn         := kbd.io.ldData
+    arb.io.d.byteAccess     := False
+    arb.io.d.wordAccess     := False
+    arb.io.d.longwordAccess := True
+
+
     // Arbiter -> SdramStatemachine
     sdramCtrl.io.READ_EN         := arb.io.sdram.readEnable
     sdramCtrl.io.WRITE_EN        := arb.io.sdram.writeEnable

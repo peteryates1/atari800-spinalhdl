@@ -111,6 +111,10 @@ class Arb3Harness extends Component {
   arb.io.c.addr := io.c.addr; arb.io.c.dataIn := io.c.dataIn; io.c.dataOut := arb.io.c.dataOut
   arb.io.c.byteAccess := io.c.byteAccess; arb.io.c.wordAccess := io.c.wordAccess; arb.io.c.longwordAccess := io.c.longwordAccess
 
+  arb.io.d.request := False; arb.io.d.readEnable := False; arb.io.d.writeEnable := False
+  arb.io.d.addr := 0; arb.io.d.dataIn := 0; arb.io.d.byteAccess := False
+  arb.io.d.wordAccess := False; arb.io.d.longwordAccess := False
+
   mock.io.REQUEST := arb.io.sdram.request;  arb.io.sdram.complete := mock.io.COMPLETE
   mock.io.READ_EN := arb.io.sdram.readEnable; mock.io.WRITE_EN := arb.io.sdram.writeEnable
   mock.io.ADDRESS_IN := arb.io.sdram.addr; mock.io.DATA_IN := arb.io.sdram.dataIn
