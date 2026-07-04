@@ -22,6 +22,8 @@
 #include "hardware/spi.h"
 #include "pio_usb.h"
 #include "tusb.h"
+#include "sd_spi.h"
+#include "lib/fatfs/source/ff.h"
 
 // ---- Board wiring ----
 #ifndef USE_USB2
@@ -152,10 +154,37 @@ static void handle_console(void) {
       cdc_printf("bitbang K sent; status now: %02x %02x %02x\r\n", rx[0], rx[1], rx[2]);
       break;
     }
+    case 'i': {   // SD card init + info
+      if (!sd_card_present()) { cdc_printf("sd: no card detected (CD high)\r\n"); break; }
+      int r = sd_init();
+      if (r != 0) { cdc_printf("sd: init failed (%d)\r\n", r); break; }
+      uint32_t blocks = sd_capacity_blocks();
+      cdc_printf("sd: %s, %lu blocks (%lu MB)\r\n",
+                 sd_sdhc() ? "SDHC/XC" : "SDSC", blocks, blocks / 2048);
+      break;
+    }
+    case 'd': {   // mount + list root directory
+      static FATFS fs;
+      FRESULT fr = f_mount(&fs, "", 1);
+      if (fr != FR_OK) { cdc_printf("sd: f_mount failed (%d)\r\n", fr); break; }
+      DIR dir; FILINFO fno;
+      fr = f_opendir(&dir, "/");
+      if (fr != FR_OK) { cdc_printf("sd: opendir failed (%d)\r\n", fr); break; }
+      int n = 0;
+      while (f_readdir(&dir, &fno) == FR_OK && fno.fname[0]) {
+        cdc_printf("  %s%-40s %lu\r\n", (fno.fattrib & AM_DIR) ? "/" : " ",
+                   fno.fname, (unsigned long)fno.fsize);
+        if (++n >= 64) break;
+        tud_task();
+      }
+      f_closedir(&dir);
+      cdc_printf("sd: %d entries\r\n", n);
+      break;
+    }
     case 'l': dump_logring(); break;
     case 'h':
     default:
-      cdc_printf("supervisor: r=reset 1=hold-start 0=release s=status l=bootlog h=help\r\n");
+      cdc_printf("supervisor: r=reset 1=start 0=release s=status i=sdinfo d=sddir l=bootlog h=help\r\n");
       break;
   }
 }

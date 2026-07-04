@@ -448,8 +448,8 @@ class Atari800Rp2040HdmiLgTop extends Component {
   // NOTE: LA channels 22/23 (RP2040 GPIO24/25) read garbage — GPIO25 is the
   // LA firmware's LED, GPIO24 dead (VBUS-sense on a stock Pico). Only use
   // ch10/12/13/20; ch10 carries wrReq (a known toggler) to validate itself.
-  io.rp_gpio12_out := sysArea.fbWrite.io.dbgEdgeY(0)       // GPIO12 = LA ch10  panel-edge row bit0
-  io.rp_gpio14_out := sysArea.fbRead.io.dbgLateTgl         // GPIO14 = LA ch12  toggles per wrong-row line (artifact meter)
+  io.rp_gpio12_out := io.sd_dat0                           // SD passthrough restored (MISO -> RP2040)
+  io.rp_gpio14_out := io.sd_cd                             // SD passthrough restored (card detect -> RP2040)
   io.rp_gpio15_out := sysArea.fbRead.io.dbgFrameTgl        // GPIO15 = LA ch13  toggles per frame (rate reference)
   io.rp_gpio22_out := sysArea.fbWrite.io.dbgEdgeY(1)       // GPIO22 = LA ch20  panel-edge row bit1
   io.rp_gpio24_out := sysArea.fbRead.io.dbgBusy            // GPIO24 = LA ch22  (dead channel)
