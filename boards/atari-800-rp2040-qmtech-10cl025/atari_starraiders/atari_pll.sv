@@ -32,7 +32,7 @@ module atari_pll (
         .clk2_divide_by(13),
         .clk2_duty_cycle(50),
         .clk2_multiply_by(30),
-        .clk2_phase_shift("-2000"),
+        .clk2_phase_shift("-2400"),
         .compensate_clock("CLK0"),
         .inclk0_input_frequency(20000),
         .intended_device_family("Cyclone 10 LP"),
