@@ -134,12 +134,13 @@ class Atari800Rp2040HdmiLgTop extends Component {
   val clkPixel = hdmiPll.c0     // 74.25 MHz 720p pixel clock
   val clkTmds  = hdmiPll.c1     // 371.25 MHz TMDS (5x pixel)
 
-  // Second PLL (QMTech-proven pll.v): 50 MHz -> 100 MHz for the SDRAM domain.
-  val sdramPll = new SdramPll
-  sdramPll.areset := False
-  sdramPll.inclk0 := io.clk_in
-  val clkSdram = sdramPll.c0     // 100 MHz SDRAM controller clock
-  io.sdram_clk := sdramPll.c1    // dedicated 100 MHz clock to the SDRAM chip
+  // SDRAM clocks from the SAME PLL as the Atari sys clock (2x, phase-locked):
+  // every sys<->sdram crossing in SdramStatemachine is then a TIMED path that
+  // STA must close, instead of an unverifiable async crossing. (Two separate
+  // PLLs left the whole controller CDC surface untimed - the last hiding
+  // place for the rare RAM-corruption crashes.)
+  val clkSdram = pll.io.c1       // 115.38 MHz controller clock (2x sys)
+  io.sdram_clk := pll.io.c2      // 115.38 MHz @ 180deg to the SDRAM chip
   val pllLocked = pll.io.locked
 
   // System reset: high when PLL locks and the console-reset button is unpressed.
@@ -433,10 +434,10 @@ class Atari800Rp2040HdmiLgTop extends Component {
   // NOTE: LA channels 22/23 (RP2040 GPIO24/25) read garbage — GPIO25 is the
   // LA firmware's LED, GPIO24 dead (VBUS-sense on a stock Pico). Only use
   // ch10/12/13/20; ch10 carries wrReq (a known toggler) to validate itself.
-  io.rp_gpio12_out := sysArea.fbWrite.io.dbgLines(0)       // GPIO12 = LA ch10  linesPerFrame LSB
+  io.rp_gpio12_out := sysArea.fbWrite.io.dbgEdgeY(0)       // GPIO12 = LA ch10  panel-edge row bit0
   io.rp_gpio14_out := sysArea.fbRead.io.dbgLateTgl         // GPIO14 = LA ch12  toggles per wrong-row line (artifact meter)
   io.rp_gpio15_out := sysArea.fbRead.io.dbgFrameTgl        // GPIO15 = LA ch13  toggles per frame (rate reference)
-  io.rp_gpio22_out := sysArea.fbWrite.io.dbgLines(1)       // GPIO22 = LA ch20  linesPerFrame bit 1
+  io.rp_gpio22_out := sysArea.fbWrite.io.dbgEdgeY(1)       // GPIO22 = LA ch20  panel-edge row bit1
   io.rp_gpio24_out := sysArea.fbRead.io.dbgBusy            // GPIO24 = LA ch22  (dead channel)
   io.rp_gpio25_out := sysArea.fbRead.io.dbgBeat            // GPIO25 = LA ch23  (dead channel)
 

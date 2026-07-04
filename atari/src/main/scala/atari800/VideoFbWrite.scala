@@ -53,6 +53,7 @@ class VideoFbWrite(
     val overflow   = out Bool()         // sticky: a pixel was dropped (FIFO full)
     val dbgDropTgl = out Bool()         // toggles per dropped quad (rate meter)
     val dbgLines   = out UInt(10 bits)  // hsyncs counted in the previous frame
+    val dbgEdgeY   = out UInt(11 bits)  // y of the LAST dark->bright line transition
   }
 
   // ---- Capture side: track x/y, push {addr,data} on each active pixel ----
@@ -75,6 +76,13 @@ class VideoFbWrite(
   when(hsRise) { lineCnt := lineCnt + 1 }
   when(vsRise) { linesPerFrame := lineCnt; lineCnt := 0 }
   io.dbgLines := linesPerFrame
+  // content-edge probe: fb row of the last dark->bright transition per frame
+  // (in-game: the readout panel top; starfield above it is mostly black)
+  val nzCnt      = Reg(UInt(10 bits)) init 0
+  val prevBright = Reg(Bool()) init False
+  val edgeYAcc   = Reg(UInt(11 bits)) init 0
+  val edgeY      = Reg(UInt(11 bits)) init 0
+  io.dbgEdgeY := edgeY
 
   require(width % 4 == 0, "width must be a multiple of 4 (packed 32-bit writes)")
   val fifo = StreamFifo(FbWriteReq(addrWidth), fifoDepth)
@@ -131,13 +139,21 @@ class VideoFbWrite(
           when(fifo.io.push.ready) { x := x + 1 }
             .otherwise { overflow := True; dropTgl := !dropTgl; x := x + 1 }
         }
+        when(pixData =/= 0) { nzCnt := nzCnt + 1 }
       }
       when(hsRise) {
         x := 0
         when(armed) { armed := False }
           .elsewhen(y =/= (height - 1)) { y := y + 1 }
+        val bright = nzCnt > 200
+        when(bright && !prevBright) { edgeYAcc := y }
+        prevBright := bright
+        nzCnt := 0
       }
-      when(vsRise) { x := 0; y := 0; armed := True; frameCount := frameCount + 1 }
+      when(vsRise) {
+        x := 0; y := 0; armed := True; frameCount := frameCount + 1
+        edgeY := edgeYAcc; prevBright := False
+      }
     }
   }
 

@@ -14,10 +14,10 @@ derive_clock_uncertainty
 # related — the source of intermittent SDRAM behaviour. Filter on the SpinalHDL
 # instance names (pll_1 vs sdramPll) to keep the sys<->SDRAM crossing async.
 # SdramStatemachine has 2-FF synchronisers, so the crossing is safe.
+# sys (clk0) and sdram (clk1/clk2, 2x phase-locked) come from the SAME PLL and
+# are deliberately RELATED: all controller crossings are timed by STA.
 set_clock_groups -asynchronous \
-    -group [get_clocks {*pll_1|altpll_component|auto_generated|pll1|clk[0]}] \
-    -group [get_clocks {*pll_1|altpll_component|auto_generated|pll1|clk[1] *pll_1|altpll_component|auto_generated|pll1|clk[2]}] \
-    -group [get_clocks {*sdramPll|altpll_component|auto_generated|pll1|clk[*] sdram_clk_pin}] \
+    -group [get_clocks {*u_top|pll|altpll_component|auto_generated|pll1|clk[*] sdram_clk_pin}] \
     -group [get_clocks {*hdmiPll|altpll_component|auto_generated|pll1|clk[*]}]
 
 # Known benign warning: "Worst-case minimum pulse width slack is -5.4 ns" on
@@ -51,11 +51,11 @@ set_false_path -from [all_clocks] -to [get_ports {sd_clk sd_cmd sd_dat_3 rm2_sck
 # clocked via ALTDDIO_OUT — Quartus picks the IOE registers automatically.
 
 # --- SDRAM interface timing (Winbond W9825G6KH-6, 100 MHz, IOE registers) ---
-# The chip clock (sdram_clk, PLL c1) is shifted +5 ns (180deg) vs the internal
-# 100 MHz controller clock so read data (tAC<=6ns after the chip edge) arrives
-# well before the internal capture edge. STA now verifies this interface.
+# The chip clock (sdram_clk, PLL c1) is in-phase (0deg) with the internal
+# 115.38 MHz controller clock: read data (tAC<=6.3ns after the chip edge) lands
+# centred on the next internal capture edge (window 6.3..11.2ns, edge 8.67ns).
 create_generated_clock -name sdram_clk_pin \
-    -source [get_pins {*sdramPll|altpll_component|auto_generated|pll1|clk[1]}] \
+    -source [get_pins {*u_top|pll|altpll_component|auto_generated|pll1|clk[2]}] \
     [get_ports {sdram_clk}]
 set_input_delay  -clock sdram_clk_pin -max 6.3 [get_ports {sdram_dq[*]}]
 set_input_delay  -clock sdram_clk_pin -min 2.5 [get_ports {sdram_dq[*]}]
@@ -63,3 +63,11 @@ set_output_delay -clock sdram_clk_pin -max 1.8 \
     [get_ports {sdram_dq[*] sdram_addr[*] sdram_ba[*] sdram_dqm[*] sdram_rasn sdram_casn sdram_wen sdram_csn sdram_cke}]
 set_output_delay -clock sdram_clk_pin -min -1.0 \
     [get_ports {sdram_dq[*] sdram_addr[*] sdram_ba[*] sdram_dqm[*] sdram_rasn sdram_casn sdram_wen sdram_csn sdram_cke}]
+
+# Read-capture edge selection: the chip clock leads the internal 115.38 MHz
+# clock by 1.5 ns, so the intended capture edge for read data is the SECOND
+# internal edge after the chip launch edge (10.17 ns relationship, not 1.5).
+set_multicycle_path -setup 2 -from [get_clocks {sdram_clk_pin}] \
+    -to [get_clocks {*u_top|pll|altpll_component|auto_generated|pll1|clk[1]}]
+set_multicycle_path -hold 1 -from [get_clocks {sdram_clk_pin}] \
+    -to [get_clocks {*u_top|pll|altpll_component|auto_generated|pll1|clk[1]}]
