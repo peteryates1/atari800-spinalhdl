@@ -41,7 +41,7 @@ static char logring[2048];
 static uint16_t logring_w;
 
 static void cdc_printf(const char *fmt, ...) {
-  char buf[128];
+  char buf[224];
   va_list args;
   va_start(args, fmt);
   int n = vsnprintf(buf, sizeof buf, fmt, args);
@@ -52,8 +52,14 @@ static void cdc_printf(const char *fmt, ...) {
     logring_w = (logring_w + 1) % sizeof logring;
   }
   if (tud_cdc_connected()) {
-    tud_cdc_write(buf, (uint32_t)n);
-    tud_cdc_write_flush();
+    // CDC TX FIFO is 64 bytes: pump the device task until the line is out
+    int off = 0;
+    absolute_time_t dl = make_timeout_time_ms(100);
+    while (off < n && absolute_time_diff_us(get_absolute_time(), dl) > 0) {
+      off += (int)tud_cdc_write(buf + off, (uint32_t)(n - off));
+      tud_cdc_write_flush();
+      tud_task();
+    }
   }
 }
 
@@ -370,14 +376,17 @@ int main(void) {
       int mounted = 0;
       for (uint8_t a = 1; a <= CFG_TUH_DEVICE_MAX; a++) if (tuh_mounted(a)) mounted++;
       // re-arm HID polling in case a request was dropped
-      int armed = 0;
       for (uint8_t a = 1; a <= CFG_TUH_DEVICE_MAX; a++) {
         for (uint8_t i = 0; i < 4; i++) {
-          if (tuh_hid_mounted(a, i) && tuh_hid_receive_report(a, i)) armed++;
+          if (tuh_hid_mounted(a, i)) tuh_hid_receive_report(a, i);
         }
       }
-      cdc_printf("beat: usb_port=%s devices=%d rearmed=%d\r\n",
-                 (USE_USB2 ? "USB2(gp8/9)" : "USB1(gp7/6)"), mounted, armed);
+      static int last_mounted = -1;
+      if (mounted != last_mounted) {
+        last_mounted = mounted;
+        cdc_printf("usb: %d device(s) on %s\r\n", mounted,
+                   (USE_USB2 ? "USB2(gp8/9)" : "USB1(gp7/6)"));
+      }
     }
   }
 }
