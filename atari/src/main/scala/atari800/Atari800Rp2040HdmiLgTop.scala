@@ -148,11 +148,19 @@ class Atari800Rp2040HdmiLgTop extends Component {
   // register leave reset on a different clock edge (reset-tree routing skew),
   // so state machines (SDRAM POR, arbiter, core) start inconsistent - boot
   // corruption that varied per BUILD (routing) and per BUTTON PRESS (phase).
+  val rpResetReq = Bool()   // supervisor reset request (assigned in sysArea)
   val sysResetRawN = pllLocked & io.consolReset
   val rstSyncArea = new ClockingArea(ClockDomain(clkSys, config = ClockDomainConfig(resetKind = BOOT))) {
     val r0 = RegNext(sysResetRawN) init False addTag(crossClockDomain)
     val r1 = RegNext(r0) init False
-    val rstN = sysResetRawN & r1   // async assert, synchronous release
+    // Supervisor reset: the request register lives in the sys domain and is
+    // cleared by the very reset it triggers, so stretch it here (~1.1 ms,
+    // like a button press) in the un-resettable BOOT domain.
+    val rpReq  = BufferCC(rpResetReq, False)
+    val rpHold = Reg(UInt(17 bits)) init 0
+    when(rpReq) { rpHold := U(0x1FFFF) }
+      .elsewhen(rpHold =/= 0) { rpHold := rpHold - 1 }
+    val rstN = sysResetRawN & r1 & (rpHold === 0)   // async assert, sync release
   }
   val sysResetN = rstSyncArea.rstN
   val sysDomain = ClockDomain(
@@ -211,15 +219,21 @@ class Atari800Rp2040HdmiLgTop extends Component {
     atari.io.PADDLE7 := S(0, 8 bits)
 
     // Keyboard: not connected yet — will be driven by the RP2040 supervisor.
-    // KEYBOARD_RESPONSE is the 2-bit POKEY scan reply; report "no key pressed"
+    // Keyboard from the RP2040 supervisor: raw HID boot reports over the
+    // dedicated SPI link; mapping + response generation in RpAtariKeyboard.
     // so the Atari core doesn't see phantom inputs.
-    atari.io.KEYBOARD_RESPONSE := B"11"
+    val kbd = new RpAtariKeyboard
+    kbd.io.spiSck  := io.rp_sck
+    kbd.io.spiMosi := io.rp_mosi
+    kbd.io.spiCsN  := io.rp_csn
+    kbd.io.keyboardScan := atari.io.KEYBOARD_SCAN
+    atari.io.KEYBOARD_RESPONSE := kbd.io.keyboardResponse
 
     atari.io.SIO_RXD := True
 
-    atari.io.CONSOL_OPTION := ~io.consolOption
-    atari.io.CONSOL_SELECT := ~io.consolSelect
-    atari.io.CONSOL_START  := ~io.consolStart
+    atari.io.CONSOL_OPTION := ~io.consolOption | kbd.io.consolOption | kbd.io.ctrlOption
+    atari.io.CONSOL_SELECT := ~io.consolSelect | kbd.io.consolSelect | kbd.io.ctrlSelect
+    atari.io.CONSOL_START  := ~io.consolStart  | kbd.io.consolStart  | kbd.io.ctrlStart
 
     atari.io.DMA_FETCH              := False
     atari.io.DMA_READ_ENABLE        := False
@@ -442,12 +456,10 @@ class Atari800Rp2040HdmiLgTop extends Component {
   io.rp_gpio25_out := sysArea.fbRead.io.dbgBeat            // GPIO25 = LA ch23  (dead channel)
 
   // =========================================================================
-  // RP2040 ↔ FPGA SPI slave (placeholder — drive MISO from heartbeat so the
-  // pin doesn't get pruned; real SPI bridge will replace this).
+  // RP2040 ↔ FPGA SPI slave: keyboard/control bridge (RpAtariKeyboard).
   // =========================================================================
-  val rpMisoFf = Reg(Bool()) init False
-  rpMisoFf := io.rp_mosi & io.rp_sck & ~io.rp_csn
-  io.rp_miso := rpMisoFf
+  io.rp_miso := sysArea.kbd.io.spiMiso
+  rpResetReq := sysArea.kbd.io.ctrlReset
 
   // -----------------------------------------------------------------
   // Audio out

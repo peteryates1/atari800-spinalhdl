@@ -1,3 +1,6 @@
 [submodule "jop-spinalhdl"]
 	path = jop-spinalhdl
 	url = git@github.com:peteryates1/jop-spinalhdl.git
+[submodule "firmware/supervisor/lib/Pico-PIO-USB"]
+	path = firmware/supervisor/lib/Pico-PIO-USB
+	url = https://github.com/sekigon-gonnoc/Pico-PIO-USB.git
