@@ -47,6 +47,8 @@ class VideoFbWrite(
     val wrData     = out Bits(32 bits)
     val wrReq      = out Bool()
     val wrLong     = out Bool()         // 32-bit access (4 packed pixels)
+    val wrWide     = out Bool()         // 256-bit access (8 sequential quads)
+    val wrWideData = out Bits(256 bits)
     val wrComplete = in  Bool()
     // ---- status ----
     val frameCount = out UInt(16 bits)
@@ -164,19 +166,77 @@ class VideoFbWrite(
     x := 0; y := 0
   }
 
-  // ---- Drain side: pop FIFO -> issue 32-bit SDRAM writes ----
-  val inFlight = Reg(Bool()) init False
-  val busySeen = Reg(Bool()) init False
+  // ---- Drain side: batch 8 sequential quads -> one 256-bit SDRAM write ----
+  // Quads within a line are strictly sequential and lines are 32-byte
+  // aligned (stride 512), so full batches are the norm: 12 wide writes per
+  // line instead of 96 singles. Discontinuities (dropped quads, frame edges)
+  // or an idle FIFO flush the partial batch as single writes - correct, and
+  // rare enough that speed is irrelevant there.
+  val inFlight  = Reg(Bool()) init False
+  val busySeen  = Reg(Bool()) init False
+  val wideFly   = Reg(Bool()) init False        // in-flight txn is wide
+  val batch     = Reg(Vec(Bits(32 bits), 8))
+  val batchCnt  = Reg(UInt(4 bits)) init 0
+  val batchBase = Reg(UInt(addrWidth bits)) init 0
+  val flushing  = Reg(Bool()) init False
+  val flushIdx  = Reg(UInt(3 bits)) init 0
+  val idleCnt   = Reg(UInt(7 bits)) init 0
 
-  io.wrReq  := fifo.io.pop.valid && !inFlight && io.enable
-  io.wrLong := True
-  io.wrAddr := fifo.io.pop.payload.addr.asBits
-  io.wrData := fifo.io.pop.payload.data
+  val popAddr  = fifo.io.pop.payload.addr
+  val expAddr  = batchBase + (batchCnt << 2)
+  val aligned  = popAddr(4 downto 0) === 0
 
-  when(io.wrReq) { inFlight := True; busySeen := False }
+  fifo.io.pop.ready := False
+  io.wrReq      := False
+  io.wrWide     := False
+  io.wrLong     := True
+  io.wrAddr     := (batchBase + (flushIdx << 2)).asBits
+  io.wrData     := batch(flushIdx)
+  io.wrWideData := batch.asBits                 // batch(0) = lowest address
+
+  when(io.enable && !inFlight) {
+    when(flushing) {
+      io.wrReq  := True                         // single write from the batch
+      io.wrAddr := (batchBase + (flushIdx << 2)).asBits
+    } elsewhen(batchCnt === 8) {
+      io.wrReq  := True                         // full batch: one wide write
+      io.wrWide := True
+      io.wrAddr := batchBase.asBits
+    } elsewhen(fifo.io.pop.valid) {
+      idleCnt := 0
+      when(batchCnt === 0) {
+        batchBase := popAddr
+        batch(0)  := fifo.io.pop.payload.data
+        fifo.io.pop.ready := True
+        batchCnt := 1
+        when(!aligned) { flushing := True; flushIdx := 0 }  // lone unaligned quad
+      } elsewhen(popAddr === expAddr) {
+        batch(batchCnt(2 downto 0)) := fifo.io.pop.payload.data
+        fifo.io.pop.ready := True
+        batchCnt := batchCnt + 1
+      } otherwise {
+        flushing := True; flushIdx := 0         // gap: flush partial as singles
+      }
+    } otherwise {
+      when(batchCnt =/= 0) {
+        idleCnt := idleCnt + 1
+        when(idleCnt === idleCnt.maxValue) { flushing := True; flushIdx := 0 }
+      }
+    }
+  }
+
+  when(io.wrReq) { inFlight := True; busySeen := False; wideFly := io.wrWide }
   when(inFlight) {
     when(!io.wrComplete) { busySeen := True }
+    when(busySeen && io.wrComplete) {
+      inFlight := False
+      when(wideFly) {
+        batchCnt := 0
+      } otherwise {                             // flushed single completed
+        when(flushIdx === (batchCnt - 1).resize(3)) {
+          flushing := False; batchCnt := 0; flushIdx := 0
+        } otherwise { flushIdx := flushIdx + 1 }
+      }
+    }
   }
-  fifo.io.pop.ready := inFlight && busySeen && io.wrComplete
-  when(fifo.io.pop.ready) { inFlight := False }
 }

@@ -282,11 +282,14 @@ class SdramTestArbTop extends Component {
     ctrl.io.REFRESH    := True   // continuous suggest - the main design's cadence
 
     val arb = new SdramArbiter3
-    for (p <- Seq(arb.io.b, arb.io.c)) {
-      p.request := False; p.readEnable := False; p.writeEnable := False
-      p.addr := 0; p.dataIn := 0
-      p.byteAccess := False; p.wordAccess := False; p.longwordAccess := False
-    }
+    arb.io.b.request := False; arb.io.b.readEnable := False; arb.io.b.writeEnable := False
+    arb.io.b.addr := 0; arb.io.b.dataIn := 0
+    arb.io.b.byteAccess := False; arb.io.b.wordAccess := False; arb.io.b.longwordAccess := False
+    arb.io.b.wideAccess := False; arb.io.b.wideIn := 0
+    arb.io.c.request := False; arb.io.c.readEnable := False; arb.io.c.writeEnable := False
+    arb.io.c.addr := 0; arb.io.c.dataIn := 0
+    arb.io.c.byteAccess := False; arb.io.c.wordAccess := False; arb.io.c.longwordAccess := False
+    arb.io.c.wideAccess := False
     arb.io.a.refresh := False
 
     // ANTIC mimic on port A: HALT pauses only the 6502 - ANTIC DMA runs
@@ -326,6 +329,9 @@ class SdramTestArbTop extends Component {
     ctrl.io.LONGWORD_ACCESS := arb.io.sdram.longwordAccess
     arb.io.sdram.complete := ctrl.io.COMPLETE
     arb.io.sdram.dataOut  := ctrl.io.DATA_OUT
+    ctrl.io.WIDE_ACCESS   := arb.io.sdram.wideAccess
+    ctrl.io.WIDE_IN       := arb.io.sdram.wideIn
+    arb.io.sdram.wideOut  := ctrl.io.WIDE_OUT
 
     // Arbiter client ports carry 24-bit byte addresses (16 MB): size the
     // walk and sweeps to fit or the test self-aliases at the truncation.

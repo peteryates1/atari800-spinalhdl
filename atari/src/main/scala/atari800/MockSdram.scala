@@ -20,6 +20,9 @@ class MockSdram(latency: Int = 3, memBits: Int = 13) extends Component {
     val BYTE_ACCESS     = in  Bool()
     val WORD_ACCESS     = in  Bool()
     val LONGWORD_ACCESS = in  Bool()
+    val WIDE_ACCESS     = in  Bool() default(False)
+    val WIDE_IN         = in  Bits(256 bits) default(B(0, 256 bits))
+    val WIDE_OUT        = out Bits(256 bits)
     val REFRESH         = in  Bool()
   }
 
@@ -32,13 +35,17 @@ class MockSdram(latency: Int = 3, memBits: Int = 13) extends Component {
   // capture the operation on the REQUEST cycle
   val capAddr = Reg(UInt(memBits bits)) init 0
   val capData = Reg(Bits(32 bits)) init 0
+  val capWide = Reg(Bits(256 bits)) init 0
   val capWe   = Reg(Bool()) init False
   val capLong = Reg(Bool()) init False
+  val capIsWide = Reg(Bool()) init False
   when(io.REQUEST) {
     capAddr := io.ADDRESS_IN.asUInt.resize(memBits)
     capData := io.DATA_IN
+    capWide := io.WIDE_IN
     capWe   := io.WRITE_EN
     capLong := io.LONGWORD_ACCESS
+    capIsWide := io.WIDE_ACCESS
   }
 
   val pending = reqReg =/= replyReg
@@ -47,23 +54,33 @@ class MockSdram(latency: Int = 3, memBits: Int = 13) extends Component {
 
   // little-endian like SdramStatemachine: byte k of DATA lives at addr+k
   val base = Mux(capLong, capAddr & ~U(3, memBits bits), capAddr)
+  val wbase = capAddr & ~U(31, memBits bits)
+  val wideOutReg = Reg(Bits(256 bits)) init 0
   when(pending) {
     when(latCnt =/= latency) { latCnt := latCnt + 1 }
       .otherwise {
-        when(capWe) {
-          mem.write(base, capData(7 downto 0))
-          when(capLong) {
-            mem.write(base | 1, capData(15 downto 8))
-            mem.write(base | 2, capData(23 downto 16))
-            mem.write(base | 3, capData(31 downto 24))
+        when(capIsWide) {
+          when(capWe) {
+            for (k <- 0 until 32) { mem.write(wbase | k, capWide(k * 8 + 7 downto k * 8)) }
           }
+          wideOutReg := Cat((31 downto 0).map(k => mem.readAsync(wbase | k)))
+        } otherwise {
+          when(capWe) {
+            mem.write(base, capData(7 downto 0))
+            when(capLong) {
+              mem.write(base | 1, capData(15 downto 8))
+              mem.write(base | 2, capData(23 downto 16))
+              mem.write(base | 3, capData(31 downto 24))
+            }
+          }
+          dataOutReg := mem.readAsync(base | 3) ## mem.readAsync(base | 2) ##
+                        mem.readAsync(base | 1) ## mem.readAsync(base)
         }
-        dataOutReg := mem.readAsync(base | 3) ## mem.readAsync(base | 2) ##
-                      mem.readAsync(base | 1) ## mem.readAsync(base)
         replyReg := reqReg
         latCnt := 0
       }
   }
+  io.WIDE_OUT := wideOutReg
 
   io.COMPLETE  := (replyReg === reqReg) & ~io.REQUEST
   io.DATA_OUT  := dataOutReg
@@ -101,6 +118,8 @@ class Arb3Harness extends Component {
   arb.io.a.byteAccess := io.a.byteAccess; arb.io.a.wordAccess := io.a.wordAccess; arb.io.a.longwordAccess := io.a.longwordAccess
   arb.io.a.refresh := False
 
+  arb.io.b.wideAccess := False; arb.io.b.wideIn := 0
+  arb.io.c.wideAccess := False
   arb.io.b.request := io.b.request; io.b.complete := arb.io.b.complete
   arb.io.b.readEnable := io.b.readEnable; arb.io.b.writeEnable := io.b.writeEnable
   arb.io.b.addr := io.b.addr; arb.io.b.dataIn := io.b.dataIn; io.b.dataOut := arb.io.b.dataOut
@@ -121,4 +140,6 @@ class Arb3Harness extends Component {
   arb.io.sdram.dataOut := mock.io.DATA_OUT
   mock.io.BYTE_ACCESS := arb.io.sdram.byteAccess; mock.io.WORD_ACCESS := arb.io.sdram.wordAccess
   mock.io.LONGWORD_ACCESS := arb.io.sdram.longwordAccess; mock.io.REFRESH := arb.io.sdram.refresh
+  mock.io.WIDE_ACCESS := arb.io.sdram.wideAccess; mock.io.WIDE_IN := arb.io.sdram.wideIn
+  arb.io.sdram.wideOut := mock.io.WIDE_OUT
 }

@@ -310,7 +310,9 @@ class Atari800Rp2040HdmiLgTop extends Component {
     arb.io.b.dataIn         := fbWrite.io.wrData
     arb.io.b.byteAccess     := False
     arb.io.b.wordAccess     := False
-    arb.io.b.longwordAccess := fbWrite.io.wrLong
+    arb.io.b.longwordAccess := fbWrite.io.wrLong && !fbWrite.io.wrWide
+    arb.io.b.wideAccess     := fbWrite.io.wrWide
+    arb.io.b.wideIn         := fbWrite.io.wrWideData
 
     // Port C — framebuffer read/scaler (dual-clock: fetch in sys, output at pixel)
     val fbRead = new VideoFbRead2(
@@ -330,8 +332,9 @@ class Atari800Rp2040HdmiLgTop extends Component {
     arb.io.c.dataIn         := B(0, 32 bits)
     arb.io.c.byteAccess     := False
     arb.io.c.wordAccess     := False
-    arb.io.c.longwordAccess := True
-    fbRead.io.rdData        := arb.io.c.dataOut
+    arb.io.c.longwordAccess := !fbRead.io.rdWide
+    arb.io.c.wideAccess     := fbRead.io.rdWide
+    fbRead.io.rdData        := arb.io.c.wideOut
 
     // Sticky probe: has the Atari (port A) ever addressed the upper SDRAM
     // regions (bit 22 set = OS/cart windows at 0x50xxxx/0x70xxxx)?
@@ -378,6 +381,9 @@ class Atari800Rp2040HdmiLgTop extends Component {
     sdramCtrl.io.LONGWORD_ACCESS := arb.io.sdram.longwordAccess
     sdramCtrl.io.REFRESH         := arb.io.sdram.refresh
     sdramCtrl.io.ADDRESS_IN      := arb.io.sdram.addr
+    sdramCtrl.io.WIDE_ACCESS     := arb.io.sdram.wideAccess
+    sdramCtrl.io.WIDE_IN         := arb.io.sdram.wideIn
+    arb.io.sdram.wideOut         := sdramCtrl.io.WIDE_OUT
     sdramCtrl.io.DATA_IN         := arb.io.sdram.dataIn
     arb.io.sdram.complete := sdramCtrl.io.COMPLETE
     arb.io.sdram.dataOut  := sdramCtrl.io.DATA_OUT

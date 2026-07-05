@@ -25,12 +25,14 @@ class SdramArbiter3 extends Component {
       val readEnable = in Bool();  val writeEnable = in Bool()
       val addr = in Bits(24 bits); val dataIn = in Bits(32 bits); val dataOut = out Bits(32 bits)
       val byteAccess = in Bool();  val wordAccess = in Bool();  val longwordAccess = in Bool()
+      val wideAccess = in Bool();  val wideIn = in Bits(256 bits)   // 256-bit write
     }
     val c = new Bundle {             // fb-read (queued)
       val request  = in  Bool();  val complete = out Bool()
       val readEnable = in Bool();  val writeEnable = in Bool()
       val addr = in Bits(24 bits); val dataIn = in Bits(32 bits); val dataOut = out Bits(32 bits)
       val byteAccess = in Bool();  val wordAccess = in Bool();  val longwordAccess = in Bool()
+      val wideAccess = in Bool();  val wideOut = out Bits(256 bits)  // 256-bit read
     }
     val d = new Bundle {             // supervisor SDRAM loader (queued, lowest priority)
       val request  = in  Bool();  val complete = out Bool()
@@ -43,6 +45,7 @@ class SdramArbiter3 extends Component {
       val readEnable = out Bool(); val writeEnable = out Bool()
       val addr = out Bits(25 bits); val dataIn = out Bits(32 bits); val dataOut = in Bits(32 bits)
       val byteAccess = out Bool(); val wordAccess = out Bool(); val longwordAccess = out Bool()
+      val wideAccess = out Bool(); val wideIn = out Bits(256 bits); val wideOut = in Bits(256 bits)
       val refresh = out Bool()
     }
     val dbgCPending = out Bool()
@@ -77,6 +80,7 @@ class SdramArbiter3 extends Component {
   io.b.dataOut := io.sdram.dataOut
   io.c.dataOut := io.sdram.dataOut
   io.d.dataOut := io.sdram.dataOut
+  io.c.wideOut := io.sdram.wideOut
 
   io.sdram.refresh := True
 
@@ -89,6 +93,8 @@ class SdramArbiter3 extends Component {
   io.sdram.byteAccess     := io.a.byteAccess
   io.sdram.wordAccess     := io.a.wordAccess
   io.sdram.longwordAccess := io.a.longwordAccess
+  io.sdram.wideAccess     := False
+  io.sdram.wideIn         := io.b.wideIn
 
   io.a.complete := !aPending & !io.a.request
   io.b.complete := False
@@ -100,12 +106,14 @@ class SdramArbiter3 extends Component {
     io.sdram.readEnable := io.b.readEnable; io.sdram.writeEnable := io.b.writeEnable
     io.sdram.byteAccess := io.b.byteAccess; io.sdram.wordAccess := io.b.wordAccess
     io.sdram.longwordAccess := io.b.longwordAccess
+    io.sdram.wideAccess := io.b.wideAccess; io.sdram.wideIn := io.b.wideIn
   }
   def driveC(): Unit = {
     io.sdram.addr := B"0" ## io.c.addr; io.sdram.dataIn := io.c.dataIn
     io.sdram.readEnable := io.c.readEnable; io.sdram.writeEnable := io.c.writeEnable
     io.sdram.byteAccess := io.c.byteAccess; io.sdram.wordAccess := io.c.wordAccess
     io.sdram.longwordAccess := io.c.longwordAccess
+    io.sdram.wideAccess := io.c.wideAccess
   }
   def driveD(): Unit = {
     io.sdram.addr := B"0" ## io.d.addr; io.sdram.dataIn := io.d.dataIn

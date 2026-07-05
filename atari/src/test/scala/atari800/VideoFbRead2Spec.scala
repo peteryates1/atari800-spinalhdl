@@ -18,12 +18,13 @@ class VideoFbRead2Spec extends AnyFunSuite {
   val SRC_H = 4; val STRIDE_LOG2 = 9; val FB_BASE = 0x400
   val VA = 12
 
-  private def compile(srcW: Int, ha: Int, srcH: Int = SRC_H) =
+  private def compile(srcW: Int, ha: Int, srcH: Int = SRC_H, fetchBytes: Int = 4) =
     SimConfig.withConfig(SpinalConfig()).compile(
       new VideoFbRead2(
         srcW = srcW, srcH = srcH, strideLog2 = STRIDE_LOG2, fbBase = FB_BASE,
         hActive = ha, hFront = 2, hSync = 4, hBack = 48,
-        vActive = VA, vFront = 2, vSync = 2, vBack = 4, addrWidth = 25))
+        vActive = VA, vFront = 2, vSync = 2, vBack = 4, addrWidth = 25,
+        fetchBytes = fetchBytes))
 
   // srcW=8: power-of-two width. srcW=12: non-power-of-two, like the real
   // 384-wide framebuffer — catches cache addressing that only works for
@@ -33,6 +34,8 @@ class VideoFbRead2Spec extends AnyFunSuite {
   // 2.4x vertical (srcH=5, VA=12): alternating span-2/span-3 rows, like the
   // real 288->720 (2.5x). Span-2 rows leave no slack for a once-per-line kick.
   private lazy val compiled24x     = compile(srcW = 8,  ha = 16, srcH = 5)
+  // the real configuration: 256-bit wide fetches (srcW multiple of 32)
+  private lazy val compiledWide    = compile(srcW = 32, ha = 64, fetchBytes = 32)
 
   private def fb(srcW: Int, srcH: Int)(addr: Long): Int = {
     val rel = (addr - FB_BASE).toInt
@@ -57,9 +60,15 @@ class VideoFbRead2Spec extends AnyFunSuite {
                         latency: Int = 3, frames: Int = 1,
                         srcW: Int = 8, ha: Int = 16, srcH: Int = SRC_H,
                         latencySpread: Int = 0,
-                        midDisableTicks: Int = 0): Int = {
+                        midDisableTicks: Int = 0,
+                        wide: Boolean = false): Int = {
     val fb32v = fb32(srcW, srcH) _
-    val dutC  = if (srcH != SRC_H) compiled24x
+    val fbv   = fb(srcW, srcH) _
+    def fbWide(addr: Long): BigInt =
+      (0 until 32).map(k => BigInt(fbv(addr + k)) << (8 * k)).sum
+    def serve(addr: Long): BigInt = if (wide) fbWide(addr) else BigInt(fb32v(addr))
+    val dutC  = if (wide) compiledWide
+                else if (srcH != SRC_H) compiled24x
                 else if (srcW == 8) compiledPow2 else compiledNonPow2
     val rng   = new scala.util.Random(42)
     def lat() = if (latencySpread == 0) latency else latency + rng.nextInt(latencySpread)
@@ -112,12 +121,12 @@ class VideoFbRead2Spec extends AnyFunSuite {
           // idle LOW, pulse HIGH one cycle on completion (arbiter port C behaviour)
           if (busy == 0 && dut.io.rdReq.toBoolean) { addrLatch = dut.io.rdAddr.toLong; busy = lat(); dut.io.rdComplete #= false }
           else if (busy > 1) { busy -= 1; dut.io.rdComplete #= false }
-          else if (busy == 1) { busy = 0; dut.io.rdData #= fb32v(addrLatch); dut.io.rdComplete #= true }
+          else if (busy == 1) { busy = 0; dut.io.rdData #= serve(addrLatch); dut.io.rdComplete #= true }
           else { dut.io.rdComplete #= false }
         } else {
           // idle HIGH, drop during the transaction (original mock)
           if (busy == 0 && dut.io.rdReq.toBoolean) { addrLatch = dut.io.rdAddr.toLong; busy = lat(); dut.io.rdComplete #= false }
-          else if (busy > 0) { busy -= 1; if (busy == 0) { dut.io.rdData #= fb32v(addrLatch); dut.io.rdComplete #= true } }
+          else if (busy > 0) { busy -= 1; if (busy == 0) { dut.io.rdData #= serve(addrLatch); dut.io.rdComplete #= true } }
         }
       }
 
@@ -214,6 +223,11 @@ class VideoFbRead2Spec extends AnyFunSuite {
 
   test("recovers after mid-stream disable (console reset drops in-flight read)") {
     assert(runScaler(idleLow = true, latency = 10, frames = 6, midDisableTicks = 400) == 0)
+  }
+
+  test("256-bit wide fetches (the real hardware configuration)") {
+    assert(runScaler(idleLow = true, latency = 6, frames = 2,
+                     srcW = 32, ha = 64, wide = true) == 0)
   }
 
   test("non-power-of-two srcW (cache bank addressing, like the real 384)") {

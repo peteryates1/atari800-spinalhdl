@@ -75,6 +75,8 @@ class Atari800ArbBootHarness extends Component {
     p.addr := 0; p.dataIn := 0
     p.byteAccess := False; p.wordAccess := False; p.longwordAccess := False
   }
+  arb.io.b.wideAccess := False; arb.io.b.wideIn := 0
+  arb.io.c.wideAccess := False
 
   mock.io.REQUEST := arb.io.sdram.request;  arb.io.sdram.complete := mock.io.COMPLETE
   mock.io.READ_EN := arb.io.sdram.readEnable; mock.io.WRITE_EN := arb.io.sdram.writeEnable
@@ -82,6 +84,8 @@ class Atari800ArbBootHarness extends Component {
   arb.io.sdram.dataOut := mock.io.DATA_OUT
   mock.io.BYTE_ACCESS := arb.io.sdram.byteAccess; mock.io.WORD_ACCESS := arb.io.sdram.wordAccess
   mock.io.LONGWORD_ACCESS := arb.io.sdram.longwordAccess; mock.io.REFRESH := arb.io.sdram.refresh
+  mock.io.WIDE_ACCESS := arb.io.sdram.wideAccess; mock.io.WIDE_IN := arb.io.sdram.wideIn
+  arb.io.sdram.wideOut := mock.io.WIDE_OUT
 
   io.videoVs := atari.io.VIDEO_VS
   io.osReadSeen := RegInit(False) setWhen (atari.io.SDRAM_REQUEST && atari.io.SDRAM_ADDR(20))

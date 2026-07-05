@@ -17,8 +17,10 @@ class VideoFbRead2(
     srcW: Int = 320, srcH: Int = 240, strideLog2: Int = 9, fbBase: Int = 0,
     hActive: Int = 1280, hFront: Int = 110, hSync: Int = 40, hBack: Int = 220,
     vActive: Int = 720,  vFront: Int = 5,   vSync: Int = 5,  vBack: Int = 20,
-    addrWidth: Int = 25
+    addrWidth: Int = 25,
+    fetchBytes: Int = 32   // 32 = 256-bit wide SDRAM reads; 4 = legacy single-beat
 ) extends Component {
+  require(fetchBytes == 4 || fetchBytes == 32)
   val hTotal = hActive + hFront + hSync + hBack
   val vTotal = vActive + vFront + vSync + vBack
 
@@ -36,12 +38,14 @@ class VideoFbRead2(
     val hs  = out Bool()
     val vs  = out Bool()
     val pix = out Bits(8 bits)
-    // SDRAM read-request port (fetch domain). Reads are 32-bit (the controller
-    // always bursts 2x16 anyway): 4 pixels per transaction, addr 4-aligned.
+    // SDRAM read-request port (fetch domain). Reads are 256-bit wide
+    // transactions: 32 pixels per request, addr 32-aligned - a source line
+    // is exactly srcW/32 requests (12 for 384).
     val rdAddr     = out Bits(addrWidth bits)
     val rdReq      = out Bool()
+    val rdWide     = out Bool()
     val rdComplete = in  Bool()
-    val rdData     = in  Bits(32 bits)
+    val rdData     = in  Bits(256 bits)
     val dbgBeat    = out Bool()   // toggles/blinks while reads are completing
     val dbgBusy    = out Bool()   // fetch state-machine busy
     val dbgReq     = out Bool()   // pixel->fetch request toggle (reqTgl)
@@ -223,15 +227,15 @@ class VideoFbRead2(
     Seq(ySnap, bSnap).foreach(_.simPublic())
     val beat   = Reg(UInt(24 bits)) init 0   // read-completion counter (debug)
 
-    // Registered read-request FSM, 32-bit reads: issue (1-cycle rdReq pulse) ->
-    // wait complete -> unload the 4 pixels into the cache -> next. rdReq is
-    // registered so it is a clean one-cycle pulse per transaction.
-    require(srcW % 4 == 0, "srcW must be a multiple of 4 (32-bit fetches)")
+    // Registered read-request FSM, 256-bit reads: issue (1-cycle rdReq pulse)
+    // -> wait complete -> unload 32 pixels into the cache -> next.
+    require(srcW % fetchBytes == 0, s"srcW must be a multiple of $fetchBytes")
     val rdReqR = Reg(Bool()) init False
-    val dataR  = Reg(Bits(32 bits)) init 0
-    val unload = Reg(UInt(3 bits)) init 0
+    val dataR  = Reg(Bits(256 bits)) init 0
+    val unload = Reg(UInt(log2Up(fetchBytes) + 1 bits)) init 0
     unload.simPublic(); dataR.simPublic(); fx.simPublic()   // 1..4 = writing byte (unload-1), 0 = idle
     io.rdReq  := rdReqR
+    io.rdWide := Bool(fetchBytes == 32)
     io.rdAddr := (U(fbBase, addrWidth bits) + (ySnap << strideLog2) + fx).asBits.resize(addrWidth)
     // wantSrcY/wantBank change on the SAME pixel cycle as the reqTgl toggle, so
     // when the synchronised edge is first seen the synchronised bus may still be
@@ -260,13 +264,13 @@ class VideoFbRead2(
         }
       }
       when(unload =/= 0) {
-        val byteIdx = (unload - 1).resize(2)
+        val byteIdx = (unload - 1).resize(log2Up(fetchBytes))
         cache.write((bSnap ## (fx + byteIdx).resize(log2Up(srcW))).asUInt,
-                    dataR.subdivideIn(8 bits)(byteIdx))
-        when(unload === 4) {
+                    dataR.subdivideIn(8 bits)(byteIdx.resize(5)))
+        when(unload === fetchBytes) {
           unload := 0
-          when(fx + 4 >= srcW) { busy := False; ackR := !ackR }
-            .otherwise { fx := fx + 4; rdReqR := True }
+          when(fx + fetchBytes >= srcW) { busy := False; ackR := !ackR }
+            .otherwise { fx := fx + fetchBytes; rdReqR := True }
         } otherwise { unload := unload + 1 }
       }
     }
