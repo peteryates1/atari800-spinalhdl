@@ -338,22 +338,15 @@ class Atari800Rp2040HdmiLgTop extends Component {
     val osRegion = arb.io.a.addr(20) && arb.io.a.addr(18)   // 0x14xxxx window
     val dbgStickyOsFetch = RegInit(False) setWhen (arb.io.a.request && osRegion)
 
-    // First OS-region fetch after reset: latch address and the data byte the
-    // CPU received - the reset-vector fetch, seen from inside.
-    val osProbeArmed = Reg(Bool()) init False
-    val osProbeIdx   = Reg(UInt(2 bits)) init 0     // capture first two fetches
-    val osAddrLatch  = Vec(Reg(Bits(24 bits)) init 0, 2)
-    val osDataLatch  = Vec(Reg(Bits(8 bits)) init 0, 2)
-    when(osProbeIdx < 2 && !osProbeArmed && arb.io.a.request && osRegion && arb.io.a.readEnable) {
-      osAddrLatch(osProbeIdx(0 downto 0)) := arb.io.a.addr
-      osProbeArmed := True
-    }
-    when(osProbeArmed && arb.io.a.complete) {
-      osDataLatch(osProbeIdx(0 downto 0)) := arb.io.a.dataOut(7 downto 0)
-      osProbeArmed := False
-      osProbeIdx   := osProbeIdx + 1
-    }
-    kbd.io.dbgBytes := osAddrLatch(0) ## osDataLatch(0) ## osAddrLatch(1) ## osDataLatch(1)
+    // Starvation meters, armed a moment after reset so boot transients don't
+    // count: latch any fb-read late event / fb-write drop since arming.
+    val meterArm = Reg(UInt(26 bits)) init 0
+    when(meterArm =/= meterArm.maxValue) { meterArm := meterArm + 1 }
+    val latePrev = RegNext(fbRead.io.dbgLateTgl)  init False
+    val dropPrev = RegNext(fbWrite.io.dbgDropTgl) init False
+    val dbgStickyLate = RegInit(False) setWhen (meterArm.msb && (fbRead.io.dbgLateTgl ^ latePrev))
+    val dbgStickyDrop = RegInit(False) setWhen (meterArm.msb && (fbWrite.io.dbgDropTgl ^ dropPrev))
+
 
     // Supervisor SDRAM loader -> arbiter port D (lowest priority)
     arb.io.d.request        := kbd.io.ldReq
@@ -384,7 +377,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // Hold the Atari CPU halted until SDRAM init completes so its first RAM
     // accesses (page zero / stack / OS RAM clear) don't hit uninitialised SDRAM.
     val sdramReady = BufferCC(sdramCtrl.io.reset_client_n, False)
-    atari.io.HALT := ~sdramReady
+    atari.io.HALT := ~sdramReady | kbd.io.ctrlHalt   // supervisor halts the 6502 during SDRAM loads
 
     // DEBUG: heartbeat that only ticks once SDRAM init completes.
     //   blink  => reset_client_n asserted (SDRAM init OK, Atari released)
@@ -495,8 +488,8 @@ class Atari800Rp2040HdmiLgTop extends Component {
   // ch10/12/13/20; ch10 carries wrReq (a known toggler) to validate itself.
   io.rp_gpio12_out := io.sd_dat0                           // SD passthrough restored (MISO -> RP2040)
   io.rp_gpio14_out := io.sd_cd                             // SD passthrough restored (card detect -> RP2040)
-  io.rp_gpio15_out := sysArea.fbRead.io.dbgFrameTgl        // GPIO15 = LA ch13  toggles per frame (rate reference)
-  io.rp_gpio22_out := sysArea.dbgStickyOsFetch             // GPIO22 = LA ch20  sticky: CPU ever fetched 0x4xxxxx+ (OS region)
+  io.rp_gpio15_out := sysArea.dbgStickyLate                // GPIO15: sticky - fb READ prefetch ran late (cache underrun)
+  io.rp_gpio22_out := sysArea.dbgStickyDrop                // GPIO22: sticky - fb WRITE dropped a quad
   io.rp_gpio24_out := sysArea.fbRead.io.dbgBusy            // GPIO24 = LA ch22  (dead channel)
   io.rp_gpio25_out := sysArea.fbRead.io.dbgBeat            // GPIO25 = LA ch23  (dead channel)
 

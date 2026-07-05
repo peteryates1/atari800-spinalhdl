@@ -143,6 +143,27 @@ static void fpga_load(uint32_t addr, const uint8_t *data, uint32_t len,
   }
 }
 
+// 'V' frame: FPGA reads len bytes at addr (byte mode - the CPU's view) and
+// sums them; poll status bytes 6..8 for the result. Returns true on match.
+static bool fpga_verify_content(uint32_t addr, uint32_t len, uint16_t want) {
+  uint8_t tx[8] = { 0x56,
+    (uint8_t)(addr >> 16), (uint8_t)(addr >> 8), (uint8_t)addr,
+    (uint8_t)(len >> 16),  (uint8_t)(len >> 8),  (uint8_t)len, 0 };
+  uint8_t rx[10];
+  fpga_spi_frame(tx, rx, sizeof tx);
+  uint8_t st[10] = {0};
+  for (int i = 0; i < 400; i++) {          // 8 KB at ~1 us/byte: well under 100 ms
+    sleep_ms(5);
+    uint8_t z[10] = {0};
+    fpga_spi_frame(z, st, sizeof z);
+    if ((st[8] & 1) == 0) break;
+  }
+  uint16_t got = st[6] | (st[7] << 8);
+  cdc_printf("verify %06lx+%lu: content sum %04x %s %04x\r\n",
+             addr, len, got, got == want ? "==" : "!=", want);
+  return got == want;
+}
+
 static void fpga_send_control(uint8_t bits) {
   uint8_t tx[2] = {'C', bits};
   uint8_t rx[2];
@@ -230,10 +251,11 @@ static void handle_console(void) {
       static FATFS fs;
       if (f_mount(&fs, "", 1) != FR_OK) { cdc_printf("boot: SD mount failed\r\n"); fpga_send_control(0x00); break; }
       struct { const char *path; uint32_t addr; } items[] = {
-        { "/os/atarios2.rom", 0x141800 },   // $D800-$DFFF (2 KB), OS window @0x384000
+        { "/os/atarios2.rom", 0x141800 },   // $D800-$DFFF (2 KB), OS window @0x140000
         { "/os/atariosb.rom", 0x142000 },   // $E000-$FFFF (8 KB)
       };
       bool ok = true;
+      fpga_send_control(0x10);              // HALT the 6502: quiet SDRAM during load
       for (unsigned it = 0; it < 2 && ok; it++) {
         FIL f;
         if (f_open(&f, items[it].path, FA_READ) != FR_OK) {
@@ -249,9 +271,11 @@ static void handle_console(void) {
         f_close(&f);
         uint16_t fcnt, fsum; fpga_load_status(&fcnt, &fsum);
         bool match = (lcnt == fcnt && lsum == fsum);
-        cdc_printf("boot: %s -> %06lx (%lu bytes) %s\r\n", items[it].path,
+        cdc_printf("boot: %s -> %06lx (%lu bytes) stream %s\r\n", items[it].path,
                    items[it].addr, total, match ? "ok" : "CHECKSUM MISMATCH");
         ok = ok && match;
+        // and now the part no stream checksum can fake: what the SDRAM holds
+        ok = fpga_verify_content(items[it].addr, total, lsum) && ok;
       }
       // The supervisor "reset" is a stretched ~1.1 ms pulse (the control
       // register lives in the reset domain), so there is no true hold: the
@@ -259,9 +283,10 @@ static void handle_console(void) {
       // while we load. The reset that matters is the one AFTER the load.
       if (ok) {
         cdc_printf("boot: OS loaded+verified, resetting Atari\r\n");
-        fpga_send_control(0x01);
+        fpga_send_control(0x11);            // release halt via reset
         fpga_send_control(0x00);
       } else {
+        fpga_send_control(0x00);            // release halt, no reset
         cdc_printf("boot: load errors - not resetting\r\n");
       }
       break;
@@ -354,8 +379,9 @@ static void handle_console(void) {
       gpio_init(15); gpio_set_dir(15, GPIO_IN);
       int t0 = gpio_get(15);
       sleep_ms(50);
-      cdc_printf("gpio22 (sticky OS fetch) = %d, gpio15 (frameTgl) %s\r\n",
-                 gpio_get(22), gpio_get(15) != t0 ? "toggling" : "static");
+      (void)t0;
+      cdc_printf("fb meters: read-late=%d write-drop=%d (sticky since boot)\r\n",
+                 gpio_get(15), gpio_get(22));
       break;
     }
     case 'm': case 'M': {  // SDRAM BIST status (sdram_test bitstream); 'M' restarts

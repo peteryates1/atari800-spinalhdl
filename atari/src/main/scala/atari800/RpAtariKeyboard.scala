@@ -15,7 +15,8 @@ import spinal.lib._
 //   byte 0 = command
 //     0x4B 'K': bytes 1..8 = HID boot report (mods, reserved, key1..key6);
 //               committed atomically at CS rise.
-//     0x43 'C': byte 1 = control bits — 0 reset, 1 start, 2 select, 3 option
+//     0x43 'C': byte 1 = control bits — 0 reset, 1 start, 2 select, 3 option,
+//               4 halt (6502 HALT while the supervisor loads/verifies SDRAM)
 //               (held levels; cleared by the next 'C' frame).
 //     0x57 'W': bytes 1..3 = SDRAM byte address (23:0, 4-aligned); bytes 4..N
 //               stream data. Each 4-byte quad is written to SDRAM (32-bit,
@@ -23,6 +24,11 @@ import spinal.lib._
 //               loader port while the frame streams. Trailing partial quads
 //               are dropped (ROM images are 4-byte multiples).
 //     0x5A 'Z': zero the load byte-counter and checksum.
+//     0x56 'V': bytes 1..3 = SDRAM byte address, bytes 4..6 = length; on CS
+//               rise the FPGA reads length bytes through the loader port
+//               (byte mode - the CPU's exact view) summing them; vBusy and
+//               the 16-bit content sum appear in the status stream. Immune
+//               to MISO pacing: reads are clocked by SDRAM completes.
 //     0x52 'R': bytes 1..3 = SDRAM byte address; every further byte clocked
 //               returns (on MISO, 2-byte pipeline delay) successive SDRAM
 //               bytes read through the same port/byte-access mode the CPU
@@ -49,6 +55,7 @@ class RpAtariKeyboard extends Component {
     val ctrlStart  = out Bool()
     val ctrlSelect = out Bool()
     val ctrlOption = out Bool()
+    val ctrlHalt   = out Bool()
     // SDRAM loader port (arbiter port D; complete idles low, pulses high)
     val ldReq      = out Bool()
     val ldAddr     = out Bits(24 bits)
@@ -58,7 +65,6 @@ class RpAtariKeyboard extends Component {
     val ldComplete = in  Bool()
     // debug
     val frameCount = out UInt(8 bits)
-    val dbgBytes   = in  Bits(64 bits)   // surfaced as MISO status bytes 6..13
   }
 
   // ---- Input synchronisers (SPI clock << sys clock; 3-stage) ----
@@ -97,6 +103,9 @@ class RpAtariKeyboard extends Component {
   val ldCnt    = Reg(UInt(16 bits)) init 0
   val ldIsRead = Reg(Bool()) init False
   val rdByte   = Reg(Bits(8 bits)) init 0
+  val vBusy    = Reg(Bool()) init False
+  val vLen     = Reg(UInt(24 bits)) init 0
+  val vSum     = Reg(UInt(16 bits)) init 0
 
   // ---- MISO status stream (slave shifts on falling edge, mode 0) ----
   val frameCnt = Reg(UInt(8 bits)) init 0
@@ -114,14 +123,9 @@ class RpAtariKeyboard extends Component {
           is(2) { shiftOut := ldCnt(15 downto 8).asBits }
           is(3) { shiftOut := ldSum(7 downto 0).asBits }
           is(4) { shiftOut := ldSum(15 downto 8).asBits }
-          is(5)  { shiftOut := io.dbgBytes(63 downto 56) }
-          is(6)  { shiftOut := io.dbgBytes(55 downto 48) }
-          is(7)  { shiftOut := io.dbgBytes(47 downto 40) }
-          is(8)  { shiftOut := io.dbgBytes(39 downto 32) }
-          is(9)  { shiftOut := io.dbgBytes(31 downto 24) }
-          is(10) { shiftOut := io.dbgBytes(23 downto 16) }
-          is(11) { shiftOut := io.dbgBytes(15 downto 8) }
-          is(12) { shiftOut := io.dbgBytes(7 downto 0) }
+          is(5)  { shiftOut := vSum(7 downto 0).asBits }
+          is(6)  { shiftOut := vSum(15 downto 8).asBits }
+          is(7)  { shiftOut := B(0, 7 bits) ## vBusy }
           default { shiftOut := B(0, 8 bits) }
         }
       }
@@ -149,7 +153,7 @@ class RpAtariKeyboard extends Component {
   val nextSelect = Reg(Bool()) init False
   val nextOption = Reg(Bool()) init False
 
-  val ctrlBits = Reg(Bits(4 bits)) init 0
+  val ctrlBits = Reg(Bits(5 bits)) init 0
 
   val hidMap = Mem(Bits(7 bits), AtariHidMap.table.map(v => B(v, 7 bits)))
 
@@ -182,7 +186,7 @@ class RpAtariKeyboard extends Component {
           }
         }
         is(B(0x43, 8 bits)) {              // 'C': control bits
-          when(byteIdx === 1) { ctrlBits := byteVal(3 downto 0) }
+          when(byteIdx === 1) { ctrlBits := byteVal(4 downto 0) }
         }
         is(B(0x52, 8 bits)) {              // 'R': SDRAM read-back
           when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt; ldIsRead := True }
@@ -191,6 +195,14 @@ class RpAtariKeyboard extends Component {
             when(byteIdx === 3) { ldPtr(7 downto 0) := byteVal.asUInt }
             wrValid := True                // issue a READ at ldPtr per byte
           }
+        }
+        is(B(0x56, 8 bits)) {              // 'V': content checksum
+          when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt; ldIsRead := True }
+          when(byteIdx === 2) { ldPtr(15 downto 8)  := byteVal.asUInt }
+          when(byteIdx === 3) { ldPtr(7 downto 0)   := byteVal.asUInt }
+          when(byteIdx === 4) { vLen(23 downto 16)  := byteVal.asUInt }
+          when(byteIdx === 5) { vLen(15 downto 8)   := byteVal.asUInt }
+          when(byteIdx === 6) { vLen(7 downto 0)    := byteVal.asUInt }
         }
         is(B(0x57, 8 bits)) {              // 'W': SDRAM load
           when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt; ldIsRead := False }
@@ -215,7 +227,7 @@ class RpAtariKeyboard extends Component {
   // ---- Loader drain: one 32-bit SDRAM write per collected quad ----
   val ldInFlight = Reg(Bool()) init False
   val ldBusySeen = Reg(Bool()) init False
-  io.ldReq  := wrValid && !ldInFlight
+  io.ldReq  := (wrValid || vBusy) && !ldInFlight
   io.ldAddr := ldPtr.asBits
   io.ldData := wrData
   when(io.ldReq) { ldInFlight := True; ldBusySeen := False }
@@ -226,9 +238,20 @@ class RpAtariKeyboard extends Component {
       wrValid    := False
       ldPtr      := ldPtr + 1
       when(ldIsRead) { rdByte := io.ldRdData(7 downto 0) }
+      when(vBusy) {
+        vSum := vSum + io.ldRdData(7 downto 0).asUInt.resize(16)
+        vLen := vLen - 1
+        when(vLen === 1) { vBusy := False }
+      }
     }
   }
   io.ldWrite := !ldIsRead
+
+  // start the verify sweep once the whole V frame has arrived
+  when(csRise && cmdReg === 0x56 && byteIdx >= 7 && vLen =/= 0) {
+    vBusy := True
+    vSum  := 0
+  }
 
   // commit a complete keyboard frame atomically at CS rise
   when(csRise && cmdReg === 0x4B && byteIdx >= 9) {
@@ -249,6 +272,7 @@ class RpAtariKeyboard extends Component {
   io.ctrlStart    := ctrlBits(1)
   io.ctrlSelect   := ctrlBits(2)
   io.ctrlOption   := ctrlBits(3)
+  io.ctrlHalt     := ctrlBits(4)
   io.frameCount   := frameCnt
 
   // ---- KEYBOARD_RESPONSE generation (matches Ch376UsbKeyboard) ----

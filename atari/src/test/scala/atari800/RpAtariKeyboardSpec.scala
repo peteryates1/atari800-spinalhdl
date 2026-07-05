@@ -44,7 +44,6 @@ class RpAtariKeyboardSpec extends AnyFunSuite {
       dut.io.keyboardScan #= 0
       dut.io.ldComplete #= false
       dut.io.ldRdData #= 0
-      dut.io.dbgBytes #= 0
       dut.clockDomain.waitSampling(10)
       body(dut)
     }
@@ -196,6 +195,50 @@ class RpAtariKeyboardSpec extends AnyFunSuite {
       val errs = (0 until 120).count(i => mem.getOrElse(0x300000L + i, -1) != data(i))
       assert(errs == 0, s"$errs/120 bytes wrong; first bytes: " +
              (0 until 12).map(i => mem.getOrElse(0x300000L + i, -1).toHexString).mkString(" "))
+    }
+  }
+
+  test("C frame bit 4 drives the HALT override") {
+    withDut { dut =>
+      spiFrame(dut, Seq(0x43, 0x10))
+      dut.clockDomain.waitSampling(4)
+      assert(dut.io.ctrlHalt.toBoolean && !dut.io.ctrlReset.toBoolean)
+      spiFrame(dut, Seq(0x43, 0x00))
+      dut.clockDomain.waitSampling(4)
+      assert(!dut.io.ctrlHalt.toBoolean)
+    }
+  }
+
+  test("V frame sums SDRAM content and reports over status bytes") {
+    withDut { dut =>
+      // port-D mock: byte at addr reads back as (addr*7+3)&0xFF
+      fork { while (true) { dut.clockDomain.waitSampling()
+        if (dut.io.ldReq.toBoolean) {
+          assert(!dut.io.ldWrite.toBoolean, "V must issue reads")
+          dut.io.ldRdData #= ((dut.io.ldAddr.toLong * 7 + 3) & 0xFF)
+          dut.clockDomain.waitSampling(3); dut.io.ldComplete #= true
+          dut.clockDomain.waitSampling(); dut.io.ldComplete #= false } } }
+      spiFrame(dut, Seq(0x56, 0x30, 0x00, 0x00, 0x00, 0x00, 0x20))  // 0x300000, 32 bytes
+      dut.clockDomain.waitSampling(600)
+      val expected = (0 until 32).map(i => ((0x300000L + i) * 7 + 3) & 0xFF).sum & 0xFFFF
+      // read the status frame and pick out vSum (MISO bytes 6,7) + vBusy (8)
+      val cd = dut.clockDomain
+      val miso = scala.collection.mutable.ArrayBuffer[Int]()
+      dut.io.spiCsN #= false; cd.waitSampling(8)
+      for (_ <- 0 until 10) {
+        var acc = 0
+        for (bit <- 7 to 0 by -1) {
+          dut.io.spiMosi #= false
+          cd.waitSampling(8)
+          acc = (acc << 1) | (if (dut.io.spiMiso.toBoolean) 1 else 0)
+          dut.io.spiSck #= true; cd.waitSampling(8); dut.io.spiSck #= false
+        }
+        miso += acc
+      }
+      cd.waitSampling(8); dut.io.spiCsN #= true; cd.waitSampling(8)
+      assert((miso(8) & 1) == 0, s"vBusy should be clear: $miso")
+      assert((miso(6) | (miso(7) << 8)) == expected,
+             s"vSum ${miso(6) | (miso(7) << 8)} != expected $expected; miso=$miso")
     }
   }
 
