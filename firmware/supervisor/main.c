@@ -183,6 +183,7 @@ static void handle_console(void) {
   if (tud_cdc_read(&ch, 1) != 1) return;
   switch (ch) {
     case 'r': cdc_printf("reset pulse\r\n"); fpga_send_control(0x01); fpga_send_control(0x00); break;
+    case 'R': cdc_printf("reset HELD (0 to release)\r\n"); fpga_send_control(0x01); break;
     case '1': cdc_printf("start held\r\n");  fpga_send_control(0x02); break;
     case '0': cdc_printf("controls released\r\n"); fpga_send_control(0x00); break;
     case 's': {
@@ -225,12 +226,53 @@ static void handle_console(void) {
       cdc_printf("sd: %d entries\r\n", n);
       break;
     }
+    case 'B': {   // boot: hold reset, load OS from SD to SDRAM, release
+      static FATFS fs;
+      if (f_mount(&fs, "", 1) != FR_OK) { cdc_printf("boot: SD mount failed\r\n"); fpga_send_control(0x00); break; }
+      struct { const char *path; uint32_t addr; } items[] = {
+        { "/os/atarios2.rom", 0x141800 },   // $D800-$DFFF (2 KB), OS window @0x384000
+        { "/os/atariosb.rom", 0x142000 },   // $E000-$FFFF (8 KB)
+      };
+      bool ok = true;
+      for (unsigned it = 0; it < 2 && ok; it++) {
+        FIL f;
+        if (f_open(&f, items[it].path, FA_READ) != FR_OK) {
+          cdc_printf("boot: open %s failed\r\n", items[it].path); ok = false; break;
+        }
+        fpga_load_zero();
+        uint16_t lcnt = 0, lsum = 0; uint32_t total = 0;
+        static uint8_t buf[504]; UINT rd;
+        while (f_read(&f, buf, sizeof buf, &rd) == FR_OK && rd > 0) {
+          fpga_load(items[it].addr + total, buf, rd, &lcnt, &lsum);
+          total += rd; tud_task();
+        }
+        f_close(&f);
+        uint16_t fcnt, fsum; fpga_load_status(&fcnt, &fsum);
+        bool match = (lcnt == fcnt && lsum == fsum);
+        cdc_printf("boot: %s -> %06lx (%lu bytes) %s\r\n", items[it].path,
+                   items[it].addr, total, match ? "ok" : "CHECKSUM MISMATCH");
+        ok = ok && match;
+      }
+      // The supervisor "reset" is a stretched ~1.1 ms pulse (the control
+      // register lives in the reset domain), so there is no true hold: the
+      // Atari runs (crashed, harmlessly - ROM regions reject 6502 writes)
+      // while we load. The reset that matters is the one AFTER the load.
+      if (ok) {
+        cdc_printf("boot: OS loaded+verified, resetting Atari\r\n");
+        fpga_send_control(0x01);
+        fpga_send_control(0x00);
+      } else {
+        cdc_printf("boot: load errors - not resetting\r\n");
+      }
+      break;
+    }
     case 'w': {   // SDRAM load channel self-test: 1 KB pattern @ 0x300000
       static uint8_t pat[1024];
       for (int i = 0; i < 1024; i++) pat[i] = (uint8_t)(i * 7 + 3);
       fpga_load_zero();
       uint16_t lcnt = 0, lsum = 0;
-      fpga_load(0x300000, pat, sizeof pat, &lcnt, &lsum);
+      // covers the OS vector area: 0x387FFC = pat[0x3FC] = 0xE7, FFFD -> 0xEE
+      fpga_load(0x387C00, pat, sizeof pat, &lcnt, &lsum);
       uint16_t fcnt, fsum;
       fpga_load_status(&fcnt, &fsum);
       cdc_printf("loadtest: local cnt=%u sum=%04x | fpga cnt=%u sum=%04x -> %s\r\n",
@@ -279,10 +321,47 @@ static void handle_console(void) {
                  (lcnt == fcnt && lsum == fsum) ? "OK" : "MISMATCH");
       break;
     }
+    case 'x': {   // x <hexaddr> : dump 16 SDRAM bytes (as the CPU sees them)
+      char line[32]; int n = 0;
+      absolute_time_t dl = make_timeout_time_ms(500);
+      while (n < 31 && absolute_time_diff_us(get_absolute_time(), dl) > 0) {
+        tud_task(); uint8_t c;
+        if (tud_cdc_available() && tud_cdc_read(&c, 1) == 1) {
+          if (c == '\r' || c == '\n') break;
+          line[n++] = (char)c; dl = make_timeout_time_ms(500);
+        }
+      }
+      line[n] = 0;
+      uint32_t addr = 0;
+      if (sscanf(line, " %lx", &addr) != 1) { cdc_printf("usage: x <hexaddr>\r\n"); break; }
+      uint8_t tx[4 + 20] = {'R', (uint8_t)(addr >> 16), (uint8_t)(addr >> 8), (uint8_t)addr};
+      uint8_t rx[sizeof tx];
+      fpga_spi_frame(tx, rx, sizeof tx);
+      cdc_printf("%06lx:", addr);
+      for (int i = 6; i < 22; i++) cdc_printf(" %02x", rx[i]);   // pipeline skip
+      cdc_printf("\r\n");
+      break;
+    }
+    case 'v': {   // vector-fetch probe: first two OS-region fetches
+      uint8_t tx[15] = {0}, rx[15];
+      fpga_spi_frame(tx, rx, sizeof tx);
+      cdc_printf("OS fetch 1: addr=%02x%02x%02x data=%02x | fetch 2: addr=%02x%02x%02x data=%02x\r\n",
+                 rx[6], rx[7], rx[8], rx[9], rx[10], rx[11], rx[12], rx[13]);
+      break;
+    }
+    case 'g': {   // read FPGA debug GPIOs (22 = sticky OS-region fetch)
+      gpio_init(22); gpio_set_dir(22, GPIO_IN);
+      gpio_init(15); gpio_set_dir(15, GPIO_IN);
+      int t0 = gpio_get(15);
+      sleep_ms(50);
+      cdc_printf("gpio22 (sticky OS fetch) = %d, gpio15 (frameTgl) %s\r\n",
+                 gpio_get(22), gpio_get(15) != t0 ? "toggling" : "static");
+      break;
+    }
     case 'l': dump_logring(); break;
     case 'h':
     default:
-      cdc_printf("supervisor: r=reset 1=start 0=release s=status i=sdinfo d=sddir w=loadtest L=<addr> <path> l=bootlog h=help\r\n");
+      cdc_printf("supervisor: B=boot-os r=reset 1=start 0=release s=status i=sdinfo d=sddir w=loadtest L=<addr> <path> l=bootlog h=help\r\n");
       break;
   }
 }

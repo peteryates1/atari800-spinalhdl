@@ -23,6 +23,10 @@ import spinal.lib._
 //               loader port while the frame streams. Trailing partial quads
 //               are dropped (ROM images are 4-byte multiples).
 //     0x5A 'Z': zero the load byte-counter and checksum.
+//     0x52 'R': bytes 1..3 = SDRAM byte address; every further byte clocked
+//               returns (on MISO, 2-byte pipeline delay) successive SDRAM
+//               bytes read through the same port/byte-access mode the CPU
+//               uses - the ground-truth view of memory.
 //   MISO status stream: 0xA5, frameCount, ldCnt.lo, ldCnt.hi, sum.lo, sum.hi
 //   (sum = 16-bit sum of all data bytes streamed since 'Z' — lets the
 //   supervisor verify a load without a read channel).
@@ -49,9 +53,12 @@ class RpAtariKeyboard extends Component {
     val ldReq      = out Bool()
     val ldAddr     = out Bits(24 bits)
     val ldData     = out Bits(32 bits)
+    val ldWrite    = out Bool()          // high: write (W); low: read (R)
+    val ldRdData   = in  Bits(32 bits)   // arbiter port D dataOut
     val ldComplete = in  Bool()
     // debug
     val frameCount = out UInt(8 bits)
+    val dbgBytes   = in  Bits(64 bits)   // surfaced as MISO status bytes 6..13
   }
 
   // ---- Input synchronisers (SPI clock << sys clock; 3-stage) ----
@@ -88,6 +95,8 @@ class RpAtariKeyboard extends Component {
   val wrValid  = Reg(Bool()) init False
   val ldSum    = Reg(UInt(16 bits)) init 0
   val ldCnt    = Reg(UInt(16 bits)) init 0
+  val ldIsRead = Reg(Bool()) init False
+  val rdByte   = Reg(Bits(8 bits)) init 0
 
   // ---- MISO status stream (slave shifts on falling edge, mode 0) ----
   val frameCnt = Reg(UInt(8 bits)) init 0
@@ -96,13 +105,25 @@ class RpAtariKeyboard extends Component {
   when(csFall) { shiftOut := B(0xA5, 8 bits); outIdx := 0 }
   when(!csN && sckFall) {
     when(bitCnt === 0) {   // byte boundary: load the next status byte whole
-      switch(outIdx) {
-        is(0) { shiftOut := frameCnt.asBits }
-        is(1) { shiftOut := ldCnt(7 downto 0).asBits }
-        is(2) { shiftOut := ldCnt(15 downto 8).asBits }
-        is(3) { shiftOut := ldSum(7 downto 0).asBits }
-        is(4) { shiftOut := ldSum(15 downto 8).asBits }
-        default { shiftOut := B(0, 8 bits) }
+      when(cmdReg === 0x52) {
+        shiftOut := rdByte                 // 'R': stream SDRAM bytes
+      } otherwise {
+        switch(outIdx) {
+          is(0) { shiftOut := frameCnt.asBits }
+          is(1) { shiftOut := ldCnt(7 downto 0).asBits }
+          is(2) { shiftOut := ldCnt(15 downto 8).asBits }
+          is(3) { shiftOut := ldSum(7 downto 0).asBits }
+          is(4) { shiftOut := ldSum(15 downto 8).asBits }
+          is(5)  { shiftOut := io.dbgBytes(63 downto 56) }
+          is(6)  { shiftOut := io.dbgBytes(55 downto 48) }
+          is(7)  { shiftOut := io.dbgBytes(47 downto 40) }
+          is(8)  { shiftOut := io.dbgBytes(39 downto 32) }
+          is(9)  { shiftOut := io.dbgBytes(31 downto 24) }
+          is(10) { shiftOut := io.dbgBytes(23 downto 16) }
+          is(11) { shiftOut := io.dbgBytes(15 downto 8) }
+          is(12) { shiftOut := io.dbgBytes(7 downto 0) }
+          default { shiftOut := B(0, 8 bits) }
+        }
       }
       outIdx := outIdx + 1
     } otherwise {
@@ -163,20 +184,27 @@ class RpAtariKeyboard extends Component {
         is(B(0x43, 8 bits)) {              // 'C': control bits
           when(byteIdx === 1) { ctrlBits := byteVal(3 downto 0) }
         }
+        is(B(0x52, 8 bits)) {              // 'R': SDRAM read-back
+          when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt; ldIsRead := True }
+          when(byteIdx === 2) { ldPtr(15 downto 8)  := byteVal.asUInt }
+          when(byteIdx >= 3)  {
+            when(byteIdx === 3) { ldPtr(7 downto 0) := byteVal.asUInt }
+            wrValid := True                // issue a READ at ldPtr per byte
+          }
+        }
         is(B(0x57, 8 bits)) {              // 'W': SDRAM load
-          when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt }
+          when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt; ldIsRead := False }
           when(byteIdx === 2) { ldPtr(15 downto 8)  := byteVal.asUInt }
           when(byteIdx === 3) { ldPtr(7 downto 0)   := byteVal.asUInt }
           when(byteIdx >= 4) {
             ldSum := ldSum + byteVal.asUInt.resize(16)
             ldCnt := ldCnt + 1
-            val sub = (byteIdx - 4)(1 downto 0)
-            when(sub =/= 3) {
-              quadBuf.subdivideIn(8 bits)(sub) := byteVal
-            } otherwise {
-              wrData  := byteVal ## quadBuf   // byte 3 in [31:24], byte 0 at addr
-              wrValid := True
-            }
+            // BYTE writes (not packed longwords): the CPU reads ROMs bytewise,
+            // and byte-write -> byte-read is the one path proven end-to-end
+            // (all of Atari RAM). Plenty fast: SPI delivers a byte every 8 us,
+            // an SDRAM byte write takes ~1 us.
+            wrData  := byteVal ## byteVal ## byteVal ## byteVal
+            wrValid := True
           }
         }
       }
@@ -196,9 +224,11 @@ class RpAtariKeyboard extends Component {
     when(ldBusySeen && io.ldComplete) {
       ldInFlight := False
       wrValid    := False
-      ldPtr      := ldPtr + 4
+      ldPtr      := ldPtr + 1
+      when(ldIsRead) { rdByte := io.ldRdData(7 downto 0) }
     }
   }
+  io.ldWrite := !ldIsRead
 
   // commit a complete keyboard frame atomically at CS rise
   when(csRise && cmdReg === 0x4B && byteIdx >= 9) {

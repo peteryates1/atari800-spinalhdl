@@ -508,8 +508,10 @@ class AddressDecoder(
     sdramFreezerRamAddr := B"100100" ## freezerAccessAddress
     sdramFreezerRomAddr := B"1001010" ## freezerAccessAddress(15 downto 0)
     sdramCartAddr       := B(1, 1 bits) ## emuCartAddress(20) ## ~emuCartAddress(20) ## emuCartAddress(19 downto 0)
-    sdramBasicRomAddr   := B"111" ## B"000000" ## B(0, 14 bits)
-    sdramOsRomAddr      := B"111" ## B"000001" ## B(0, 14 bits)
+    // Relocated below 4 MB (row-address bit 12 unproven on this board's
+    // SDRAM path; original map put BASIC/OS at 0x700000/0x704000).
+    sdramBasicRomAddr   := B"001" ## B"001111" ## B(0, 14 bits)   // 0x13C000
+    sdramOsRomAddr      := B"001" ## B"010000" ## B(0, 14 bits)   // 0x140000
   } else if (LOW_MEMORY == 1) {
     sdramCartAddr       := B"0000" ## B(1, 1 bits) ## emuCartAddress(17 downto 0)
     sdramBasicRomAddr   := B"000" ## B"01101000000000000000"

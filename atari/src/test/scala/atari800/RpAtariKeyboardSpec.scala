@@ -43,6 +43,8 @@ class RpAtariKeyboardSpec extends AnyFunSuite {
       dut.io.spiSck #= false; dut.io.spiMosi #= false; dut.io.spiCsN #= true
       dut.io.keyboardScan #= 0
       dut.io.ldComplete #= false
+      dut.io.ldRdData #= 0
+      dut.io.dbgBytes #= 0
       dut.clockDomain.waitSampling(10)
       body(dut)
     }
@@ -112,8 +114,9 @@ class RpAtariKeyboardSpec extends AnyFunSuite {
       spiFrame(dut, Seq(0x5A))                              // zero counters
       spiFrame(dut, Seq(0x57, 0x20, 0x00, 0x00,             // 'W' @ 0x200000
                         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88))
-      dut.clockDomain.waitSampling(20)
-      assert(writes.toList == List((0x200000L, 0x44332211L), (0x200004L, 0x88776655L)),
+      dut.clockDomain.waitSampling(60)
+      assert(writes.map(w => (w._1, w._2 & 0xFF)).toList ==
+             (0 until 8).map(i => (0x200000L + i, Seq(0x11L,0x22L,0x33L,0x44L,0x55L,0x66L,0x77L,0x88L)(i))).toList,
              s"got $writes")
       // verify checksum/count via a status frame readback
       spiFrame(dut, Seq(0x5A))                              // Z also reads back status
@@ -135,6 +138,64 @@ class RpAtariKeyboardSpec extends AnyFunSuite {
       // read status via MISO: send an 8-byte dummy frame and capture... covered
       // implicitly by the firmware; here we just ensure no lockup
       assert(true)
+    }
+  }
+
+  test("R frame streams SDRAM bytes back over MISO") {
+    withDut { dut =>
+      // port-D read mock: data = addr low byte + 0x40
+      fork { while (true) { dut.clockDomain.waitSampling()
+        if (dut.io.ldReq.toBoolean) {
+          assert(!dut.io.ldWrite.toBoolean, "R must issue reads")
+          dut.io.ldRdData #= ((dut.io.ldAddr.toLong + 0x40) & 0xFF)
+          dut.clockDomain.waitSampling(3); dut.io.ldComplete #= true
+          dut.clockDomain.waitSampling(); dut.io.ldComplete #= false } } }
+      // capture MISO during the frame
+      val misoBytes = scala.collection.mutable.ArrayBuffer[Int]()
+      val frame = Seq(0x52, 0x70, 0x00, 0x10) ++ Seq.fill(6)(0)
+      // drive SPI manually to sample MISO
+      val cd = dut.clockDomain
+      dut.io.spiCsN #= false; cd.waitSampling(8)
+      for (b <- frame) {
+        var acc = 0
+        for (bit <- 7 to 0 by -1) {
+          dut.io.spiMosi #= ((b >> bit) & 1) == 1
+          cd.waitSampling(8)
+          acc = (acc << 1) | (if (dut.io.spiMiso.toBoolean) 1 else 0)
+          dut.io.spiSck #= true
+          cd.waitSampling(8)
+          dut.io.spiSck #= false
+        }
+        misoBytes += acc
+      }
+      cd.waitSampling(8); dut.io.spiCsN #= true; cd.waitSampling(8)
+      // bytes read at 0x700010,11,12... appear with pipeline delay
+      val expected = (0 to 3).map(i => (0x10 + i + 0x40) & 0xFF)
+      assert(misoBytes.containsSlice(expected),
+             s"MISO $misoBytes should contain $expected")
+    }
+  }
+
+  test("chunked W frames land every byte under slow SDRAM completion") {
+    withDut { dut =>
+      val mem = scala.collection.mutable.Map[Long, Int]()
+      var lat = 0
+      fork { while (true) { dut.clockDomain.waitSampling()
+        if (dut.io.ldReq.toBoolean) {
+          val a = dut.io.ldAddr.toLong; val d = (dut.io.ldData.toLong & 0xFF).toInt
+          lat = 5 + (a % 37).toInt          // variable completion latency, up to ~42 cycles
+          dut.clockDomain.waitSampling(lat)
+          if (dut.io.ldWrite.toBoolean) mem(a) = d
+          dut.io.ldComplete #= true
+          dut.clockDomain.waitSampling(); dut.io.ldComplete #= false } } }
+      val data = (0 until 120).map(i => (i * 11 + 5) & 0xFF)
+      // two chunked frames like the firmware sends
+      spiFrame(dut, Seq(0x57, 0x30, 0x00, 0x00) ++ data.slice(0, 60))
+      spiFrame(dut, Seq(0x57, 0x30, 0x00, 0x3C) ++ data.slice(60, 120))
+      dut.clockDomain.waitSampling(400)
+      val errs = (0 until 120).count(i => mem.getOrElse(0x300000L + i, -1) != data(i))
+      assert(errs == 0, s"$errs/120 bytes wrong; first bytes: " +
+             (0 until 12).map(i => mem.getOrElse(0x300000L + i, -1).toHexString).mkString(" "))
     }
   }
 

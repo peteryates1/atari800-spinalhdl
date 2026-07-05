@@ -8,7 +8,7 @@ import spinal.lib._
 // - No Analog inout signals
 // - Uses internal RAM (no SDRAM controller needed)
 // - Behavioral SDRAM model driven from testbench via simple interface
-class Atari800CoreSim(cartridge_rom: String = "", internal_ram: Int = 0) extends Component {
+class Atari800CoreSim(cartridge_rom: String = "", internal_ram: Int = 0, internal_rom: Int = 3) extends Component {
   val io = new Bundle {
     // VGA output
     val vga_r     = out Bits(4 bits)
@@ -87,7 +87,7 @@ class Atari800CoreSim(cartridge_rom: String = "", internal_ram: Int = 0) extends
     cycle_length  = 32,
     video_bits    = 8,
     palette       = 0,
-    internal_rom   = 3,        // Atari 800 OS (atarios2 + atariosb)
+    internal_rom   = internal_rom,
     internal_ram   = internal_ram,
     low_memory     = 0,
     stereo         = 1,
