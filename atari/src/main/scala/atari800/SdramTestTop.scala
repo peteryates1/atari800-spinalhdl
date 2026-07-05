@@ -228,3 +228,152 @@ object SdramTest115TopSv extends App {
   SpinalConfig(mode = SystemVerilog, targetDirectory = "generated")
     .generate(new SdramTest115Top)
 }
+
+// BIST through SdramArbiter3 port D (the supervisor loader's port) on the
+// main clock tree - ports A/B/C idle. This is the exact topology of a
+// quiesced supervisor load, the configuration that still corrupts on the
+// Atari build even though the controller-direct BIST passes: if the
+// arbiter/controller seam (e.g. serve-into-refresh) drops or mangles
+// transactions, THIS fails and names the first bad address.
+class SdramTestArbTop extends Component {
+  val io = new Bundle {
+    val clk_in     = in  Bool()
+    val sdram_clk  = out Bool()
+    val sdram_cke  = out Bool()
+    val sdram_csn  = out Bool()
+    val sdram_rasn = out Bool()
+    val sdram_casn = out Bool()
+    val sdram_wen  = out Bool()
+    val sdram_ba   = out Bits(2 bits)
+    val sdram_addr = out Bits(13 bits)
+    val sdram_dqm  = out Bits(2 bits)
+    val sdram_dq   = inout(Analog(Bits(16 bits)))
+    val rp_sck     = in  Bool()
+    val rp_mosi    = in  Bool()
+    val rp_csn     = in  Bool()
+    val rp_miso    = out Bool()
+    val led_core   = out Bits(1 bits)
+  }
+  noIoPrefix()
+
+  val pll = new AtariPll
+  pll.io.areset := False
+  pll.io.inclk0 := io.clk_in
+  io.sdram_clk := pll.io.c2
+
+  val sysDomain = ClockDomain(pll.io.c0, config = ClockDomainConfig(resetKind = BOOT))
+
+  val area = new ClockingArea(sysDomain) {
+    val porCnt = Reg(UInt(16 bits)) init 0
+    when(porCnt =/= porCnt.maxValue) { porCnt := porCnt + 1 }
+    val resetN = porCnt.msb
+
+    val ctrl = new SdramStatemachine(
+      ADDRESS_WIDTH = 24, ROW_WIDTH = 13, COLUMN_WIDTH = 9, AP_BIT = 10
+    )
+    ctrl.io.CLK_SYSTEM := pll.io.c0
+    ctrl.io.CLK_SDRAM  := pll.io.c1
+    ctrl.io.RESET_N    := resetN
+    ctrl.io.REFRESH    := True   // continuous suggest - the main design's cadence
+
+    val arb = new SdramArbiter3
+    for (p <- Seq(arb.io.b, arb.io.c)) {
+      p.request := False; p.readEnable := False; p.writeEnable := False
+      p.addr := 0; p.dataIn := 0
+      p.byteAccess := False; p.wordAccess := False; p.longwordAccess := False
+    }
+    arb.io.a.refresh := False
+
+    // ANTIC mimic on port A: HALT pauses only the 6502 - ANTIC DMA runs
+    // through every supervisor load, so the real quiesced-load condition is
+    // port-D writes interleaved with port-A reads. Pulse-request protocol,
+    // one byte read every 64 cycles (~1.1 us at 57.69 MHz - ANTIC-dense).
+    val aTick   = Reg(UInt(6 bits)) init 0
+    val aBusy   = RegInit(False)
+    val aSeen   = RegInit(False)
+    val aAddr   = Reg(UInt(11 bits)) init 0
+    aTick := aTick + 1
+    arb.io.a.request        := False
+    arb.io.a.readEnable     := True
+    arb.io.a.writeEnable    := False
+    arb.io.a.addr           := aAddr.asBits.resized
+    arb.io.a.dataIn         := 0
+    arb.io.a.byteAccess     := True
+    arb.io.a.wordAccess     := False
+    arb.io.a.longwordAccess := False
+    when(!aBusy && aTick === 0) {
+      arb.io.a.request := True
+      aBusy := True; aSeen := False
+      aAddr := aAddr + 1
+    }
+    when(aBusy && !arb.io.a.request) {
+      when(!arb.io.a.complete) { aSeen := True }
+      when(aSeen && arb.io.a.complete) { aBusy := False }
+    }
+
+    ctrl.io.REQUEST         := arb.io.sdram.request
+    ctrl.io.READ_EN         := arb.io.sdram.readEnable
+    ctrl.io.WRITE_EN        := arb.io.sdram.writeEnable
+    ctrl.io.ADDRESS_IN      := arb.io.sdram.addr
+    ctrl.io.DATA_IN         := arb.io.sdram.dataIn
+    ctrl.io.BYTE_ACCESS     := arb.io.sdram.byteAccess
+    ctrl.io.WORD_ACCESS     := arb.io.sdram.wordAccess
+    ctrl.io.LONGWORD_ACCESS := arb.io.sdram.longwordAccess
+    arb.io.sdram.complete := ctrl.io.COMPLETE
+    arb.io.sdram.dataOut  := ctrl.io.DATA_OUT
+
+    // Arbiter client ports carry 24-bit byte addresses (16 MB): size the
+    // walk and sweeps to fit or the test self-aliases at the truncation.
+    // BYTE mode: the loader's transaction mix (longword mode passed clean)
+    val bist = new SdramBistEngine(addrWidth = 24, walkMax = 23,
+                                   sweepWords = BigInt(1) << 22, retWaitBits = 26,
+                                   byteMode = true)
+    bist.io.ready := ctrl.io.reset_client_n
+    arb.io.d.request        := bist.io.request
+    arb.io.d.readEnable     := bist.io.readEn
+    arb.io.d.writeEnable    := bist.io.writeEn
+    arb.io.d.addr           := bist.io.addr(23 downto 0)
+    arb.io.d.dataIn         := bist.io.dataOut
+    arb.io.d.byteAccess     := True
+    arb.io.d.wordAccess     := False
+    arb.io.d.longwordAccess := False
+    bist.io.dataIn   := arb.io.d.dataOut
+    // port D complete PULSES (idles low) - synthesize the level protocol the
+    // engine expects: busy from request until the pulse
+    val dBusy = RegInit(False) setWhen (bist.io.request) clearWhen (arb.io.d.complete)
+    bist.io.complete := !dBusy || arb.io.d.complete
+
+    val rpt = new BistSpiReporter
+    rpt.io.spiSck  := io.rp_sck
+    rpt.io.spiMosi := io.rp_mosi
+    rpt.io.spiCsN  := io.rp_csn
+    io.rp_miso     := rpt.io.spiMiso
+    rpt.io.state := bist.io.state; rpt.io.phase := bist.io.phase
+    rpt.io.progress := bist.io.progress; rpt.io.errCnt := bist.io.errCnt
+    rpt.io.firstAddr := bist.io.firstAddr; rpt.io.firstGot := bist.io.firstGot
+    rpt.io.firstExp := bist.io.firstExp; rpt.io.firstPhase := bist.io.firstPhase
+    bist.io.restart := rpt.io.restart
+
+    val hb = Reg(UInt(27 bits)) init 0
+    hb := hb + 1
+    val done = bist.io.state =/= 0
+    val fail = bist.io.state === 2
+    io.led_core(0) := Mux(done, Mux(fail, hb(25), hb(23)), False)
+
+    io.sdram_addr := ctrl.io.SDRAM_ADDR
+    io.sdram_ba   := ctrl.io.SDRAM_BA1 ## ctrl.io.SDRAM_BA0
+    io.sdram_cke  := ctrl.io.SDRAM_CKE
+    io.sdram_csn  := ctrl.io.SDRAM_CS_N
+    io.sdram_rasn := ctrl.io.SDRAM_RAS_N
+    io.sdram_casn := ctrl.io.SDRAM_CAS_N
+    io.sdram_wen  := ctrl.io.SDRAM_WE_N
+    io.sdram_dqm  := ctrl.io.SDRAM_udqm ## ctrl.io.SDRAM_ldqm
+    ctrl.io.SDRAM_DQ_IN := io.sdram_dq
+    when(ctrl.io.SDRAM_DQ_OE) { io.sdram_dq := ctrl.io.SDRAM_DQ_OUT }
+  }
+}
+
+object SdramTestArbTopSv extends App {
+  SpinalConfig(mode = SystemVerilog, targetDirectory = "generated")
+    .generate(new SdramTestArbTop)
+}

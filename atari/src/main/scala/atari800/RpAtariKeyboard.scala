@@ -95,7 +95,17 @@ class RpAtariKeyboard extends Component {
   }
 
   // ---- SDRAM loader state ----
-  val ldPtr    = Reg(UInt(24 bits)) init 0        // next quad's byte address
+  // W bytes are queued as (address, data) pairs: the SPI stream never stalls,
+  // and a starving arbiter port D (lowest priority, under live video traffic)
+  // just deepens the queue instead of silently clobbering a single buffer -
+  // the failure mode that corrupted every ROM load until the 'V' content
+  // check caught it. 512 deep = ~4 ms of absorbed starvation at 1 MHz SPI.
+  val wq = StreamFifo(Bits(32 bits), 512)
+  val pushPtr  = Reg(UInt(24 bits)) init 0        // W push-side address
+  val wqOvf    = RegInit(False)                   // sticky: a push was ever lost
+  wq.io.push.valid   := False
+  wq.io.push.payload := pushPtr.asBits ## B(0, 8 bits)
+  val ldPtr    = Reg(UInt(24 bits)) init 0        // R/V drain-side byte address
   val quadBuf  = Reg(Bits(24 bits)) init 0        // bytes 0..2 of the quad
   val wrData   = Reg(Bits(32 bits)) init 0
   val wrValid  = Reg(Bool()) init False
@@ -103,6 +113,7 @@ class RpAtariKeyboard extends Component {
   val ldCnt    = Reg(UInt(16 bits)) init 0
   val ldIsRead = Reg(Bool()) init False
   val rdByte   = Reg(Bits(8 bits)) init 0
+  val drainCnt = Reg(UInt(16 bits)) init 0        // completed queue writes
   val vBusy    = Reg(Bool()) init False
   val vLen     = Reg(UInt(24 bits)) init 0
   val vSum     = Reg(UInt(16 bits)) init 0
@@ -125,7 +136,9 @@ class RpAtariKeyboard extends Component {
           is(4) { shiftOut := ldSum(15 downto 8).asBits }
           is(5)  { shiftOut := vSum(7 downto 0).asBits }
           is(6)  { shiftOut := vSum(15 downto 8).asBits }
-          is(7)  { shiftOut := B(0, 7 bits) ## vBusy }
+          is(7)  { shiftOut := B(0, 6 bits) ## wqOvf ## vBusy }
+          is(8)  { shiftOut := drainCnt(7 downto 0).asBits }
+          is(9)  { shiftOut := drainCnt(15 downto 8).asBits }
           default { shiftOut := B(0, 8 bits) }
         }
       }
@@ -160,7 +173,7 @@ class RpAtariKeyboard extends Component {
   when(byteDone) {
     when(byteIdx === 0) {
       cmdReg := byteVal
-      when(byteVal === 0x5A) { ldSum := 0; ldCnt := 0 }   // 'Z'
+      when(byteVal === 0x5A) { ldSum := 0; ldCnt := 0; drainCnt := 0 }   // 'Z'
     } otherwise {
       switch(cmdReg) {
         is(B(0x4B, 8 bits)) {              // 'K': HID boot report
@@ -205,18 +218,16 @@ class RpAtariKeyboard extends Component {
           when(byteIdx === 6) { vLen(7 downto 0)    := byteVal.asUInt }
         }
         is(B(0x57, 8 bits)) {              // 'W': SDRAM load
-          when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt; ldIsRead := False }
-          when(byteIdx === 2) { ldPtr(15 downto 8)  := byteVal.asUInt }
-          when(byteIdx === 3) { ldPtr(7 downto 0)   := byteVal.asUInt }
+          when(byteIdx === 1) { pushPtr(23 downto 16) := byteVal.asUInt }
+          when(byteIdx === 2) { pushPtr(15 downto 8)  := byteVal.asUInt }
+          when(byteIdx === 3) { pushPtr(7 downto 0)   := byteVal.asUInt }
           when(byteIdx >= 4) {
             ldSum := ldSum + byteVal.asUInt.resize(16)
             ldCnt := ldCnt + 1
-            // BYTE writes (not packed longwords): the CPU reads ROMs bytewise,
-            // and byte-write -> byte-read is the one path proven end-to-end
-            // (all of Atari RAM). Plenty fast: SPI delivers a byte every 8 us,
-            // an SDRAM byte write takes ~1 us.
-            wrData  := byteVal ## byteVal ## byteVal ## byteVal
-            wrValid := True
+            wq.io.push.valid   := True
+            wq.io.push.payload := pushPtr.asBits ## byteVal
+            when(!wq.io.push.ready) { wqOvf := True }
+            pushPtr := pushPtr + 1
           }
         }
       }
@@ -224,28 +235,40 @@ class RpAtariKeyboard extends Component {
     when(byteIdx =/= byteIdx.maxValue) { byteIdx := byteIdx + 1 }
   }
 
-  // ---- Loader drain: one 32-bit SDRAM write per collected quad ----
+  // ---- Loader drain: writes from the queue; V/R reads via ldPtr ----
   val ldInFlight = Reg(Bool()) init False
   val ldBusySeen = Reg(Bool()) init False
-  io.ldReq  := (wrValid || vBusy) && !ldInFlight
+  val servingWq  = Reg(Bool()) init False
+  val vGo = vBusy && !wq.io.pop.valid            // reads wait out queued writes
+  io.ldReq := (wq.io.pop.valid || wrValid || vGo) && !ldInFlight
   io.ldAddr := ldPtr.asBits
   io.ldData := wrData
-  when(io.ldReq) { ldInFlight := True; ldBusySeen := False }
+  wq.io.pop.ready := False
+  when(wq.io.pop.valid) {
+    io.ldAddr := wq.io.pop.payload(31 downto 8)
+    io.ldData := wq.io.pop.payload(7 downto 0) #* 4
+  }
+  when(io.ldReq) { ldInFlight := True; ldBusySeen := False; servingWq := wq.io.pop.valid }
   when(ldInFlight) {
     when(!io.ldComplete) { ldBusySeen := True }
     when(ldBusySeen && io.ldComplete) {
       ldInFlight := False
-      wrValid    := False
-      ldPtr      := ldPtr + 1
-      when(ldIsRead) { rdByte := io.ldRdData(7 downto 0) }
-      when(vBusy) {
-        vSum := vSum + io.ldRdData(7 downto 0).asUInt.resize(16)
-        vLen := vLen - 1
-        when(vLen === 1) { vBusy := False }
+      when(servingWq) {
+        wq.io.pop.ready := True                  // consume the entry we just wrote
+        drainCnt := drainCnt + 1
+      } otherwise {
+        wrValid := False
+        ldPtr   := ldPtr + 1
+        when(ldIsRead) { rdByte := io.ldRdData(7 downto 0) }
+        when(vBusy) {
+          vSum := vSum + io.ldRdData(7 downto 0).asUInt.resize(16)
+          vLen := vLen - 1
+          when(vLen === 1) { vBusy := False }
+        }
       }
     }
   }
-  io.ldWrite := !ldIsRead
+  io.ldWrite := servingWq || !ldIsRead
 
   // start the verify sweep once the whole V frame has arrived
   when(csRise && cmdReg === 0x56 && byteIdx >= 7 && vLen =/= 0) {

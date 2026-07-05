@@ -22,7 +22,9 @@ class SdramBistEngine(
   addrWidth   : Int    = 26,        // width of the controller's ADDRESS_IN
   walkMax     : Int    = 24,        // highest byte-address bit walked
   sweepWords  : BigInt = BigInt(1) << 23,  // 32-bit words per sweep (8M = 32 MB)
-  retWaitBits : Int    = 27         // 2^27 cycles @ 100 MHz = 1.34 s
+  retWaitBits : Int    = 27,        // 2^27 cycles @ 100 MHz = 1.34 s
+  byteMode    : Boolean = false     // byte accesses, data replicated x4 - the
+                                    // supervisor loader's exact transaction mix
 ) extends Component {
   val io = new Bundle {
     val ready    = in  Bool()                 // controller reset_client_n
@@ -67,7 +69,7 @@ class SdramBistEngine(
   when(idx =/= 0) {
     walkAddr := (U(1, 25 bits) |<< (idx(4 downto 0) + 1)).resized
   }
-  val sweepAddr = (idx << 2).resize(25)
+  val sweepAddr = (if (byteMode) idx else (idx << 2)).resize(25)
   val byteAddr  = UInt(25 bits)
   byteAddr := Mux(phase === 1, walkAddr, sweepAddr)
 
@@ -83,12 +85,20 @@ class SdramBistEngine(
   lastIdx := (sweepWords - 1)
   when(phase === 1) { lastIdx := walkSlots }
 
+  // byte mode: 8-bit address-hash payload, replicated on all lanes like the
+  // loader; compare only the addressed byte on readback
+  // phase 4 re-reads what phase 3 wrote - hash with the WRITING phase
+  val hashPhase = Mux(phase === 4, U(3, 3 bits), phase)
+  val expByte = (byteAddr(7 downto 0) ^ byteAddr(15 downto 8) ^
+                 byteAddr(22 downto 16).resize(8) ^
+                 (hashPhase.resize(8) |<< 5)).asBits
+
   val issueReq = False
   io.request := issueReq
   io.writeEn := !reading && phase =/= 4
   io.readEn  := reading || phase === 4
   io.addr    := byteAddr.asBits.resize(addrWidth)
-  io.dataOut := expData
+  io.dataOut := (if (byteMode) expByte ## expByte ## expByte ## expByte else expData)
 
   val fsm = new StateMachine {
     val Wait     = new State with EntryPoint  // controller not ready yet
@@ -108,12 +118,13 @@ class SdramBistEngine(
     Complete.whenIsActive {
       when(!io.complete) { busySeen := True }
       when(busySeen && io.complete) {
-        when((reading || phase === 4) && io.dataIn =/= expData) {
+        when((reading || phase === 4) &&
+             (if (byteMode) io.dataIn(7 downto 0) =/= expByte else io.dataIn =/= expData)) {
           when(errCnt =/= errCnt.maxValue) { errCnt := errCnt + 1 }
           when(errCnt === 0) {
             firstAddr  := byteAddr.asBits
             firstGot   := io.dataIn
-            firstExp   := expData
+            firstExp   := (if (byteMode) expByte.resize(32) else expData)
             firstPhase := phase
           }
         }

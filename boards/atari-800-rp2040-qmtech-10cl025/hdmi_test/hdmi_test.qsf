@@ -1,0 +1,28 @@
+# Quartus project: 10CL025 minimal HDMI bring-up (640x480 colour bars).
+set_global_assignment -name DEVICE 10CL025YU256I7G
+set_global_assignment -name FAMILY "Cyclone 10 LP"
+set_global_assignment -name TOP_LEVEL_ENTITY hdmi_test
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
+set_global_assignment -name SYSTEMVERILOG_FILE hdmi_test.sv
+set_global_assignment -name SYSTEMVERILOG_FILE dvid.sv
+set_global_assignment -name SYSTEMVERILOG_FILE atari_pll.sv
+set_global_assignment -name SDC_FILE hdmi_test.sdc
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+
+# Clock + LED
+set_location_assignment PIN_E2 -to clk_in
+set_location_assignment PIN_N9 -to led_core[0]
+
+# HDMI (4x pseudo-differential TMDS pairs, 3.3-V LVCMOS) — matches ../pins.tcl
+set_location_assignment PIN_R11 -to hdmi_clk_p
+set_location_assignment PIN_T11 -to hdmi_clk_n
+set_location_assignment PIN_R12 -to hdmi_d0_p
+set_location_assignment PIN_T12 -to hdmi_d0_n
+set_location_assignment PIN_R13 -to hdmi_d1_p
+set_location_assignment PIN_T13 -to hdmi_d1_n
+set_location_assignment PIN_T14 -to hdmi_d2_p
+set_location_assignment PIN_T15 -to hdmi_d2_n
+
+set_global_assignment -name LAST_QUARTUS_VERSION "25.1std.0 Lite Edition"

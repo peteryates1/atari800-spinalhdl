@@ -151,16 +151,17 @@ static bool fpga_verify_content(uint32_t addr, uint32_t len, uint16_t want) {
     (uint8_t)(len >> 16),  (uint8_t)(len >> 8),  (uint8_t)len, 0 };
   uint8_t rx[10];
   fpga_spi_frame(tx, rx, sizeof tx);
-  uint8_t st[10] = {0};
+  uint8_t st[12] = {0};
   for (int i = 0; i < 400; i++) {          // 8 KB at ~1 us/byte: well under 100 ms
     sleep_ms(5);
-    uint8_t z[10] = {0};
+    uint8_t z[12] = {0};
     fpga_spi_frame(z, st, sizeof z);
     if ((st[8] & 1) == 0) break;
   }
   uint16_t got = st[6] | (st[7] << 8);
-  cdc_printf("verify %06lx+%lu: content sum %04x %s %04x\r\n",
-             addr, len, got, got == want ? "==" : "!=", want);
+  cdc_printf("verify %06lx+%lu: content sum %04x %s %04x | drained %u ovf %u\r\n",
+             addr, len, got, got == want ? "==" : "!=", want,
+             st[9] | (st[10] << 8), (st[8] >> 1) & 1);
   return got == want;
 }
 
@@ -257,25 +258,29 @@ static void handle_console(void) {
       bool ok = true;
       fpga_send_control(0x10);              // HALT the 6502: quiet SDRAM during load
       for (unsigned it = 0; it < 2 && ok; it++) {
-        FIL f;
-        if (f_open(&f, items[it].path, FA_READ) != FR_OK) {
-          cdc_printf("boot: open %s failed\r\n", items[it].path); ok = false; break;
+        bool fileOk = false;
+        for (int attempt = 0; attempt < 3 && !fileOk; attempt++) {
+          FIL f;
+          if (f_open(&f, items[it].path, FA_READ) != FR_OK) {
+            cdc_printf("boot: open %s failed\r\n", items[it].path); break;
+          }
+          fpga_load_zero();
+          uint16_t lcnt = 0, lsum = 0; uint32_t total = 0;
+          static uint8_t buf[504]; UINT rd;
+          while (f_read(&f, buf, sizeof buf, &rd) == FR_OK && rd > 0) {
+            fpga_load(items[it].addr + total, buf, rd, &lcnt, &lsum);
+            total += rd; tud_task();
+          }
+          f_close(&f);
+          uint16_t fcnt, fsum; fpga_load_status(&fcnt, &fsum);
+          bool match = (lcnt == fcnt && lsum == fsum);
+          cdc_printf("boot: %s -> %06lx (%lu bytes) stream %s\r\n", items[it].path,
+                     items[it].addr, total, match ? "ok" : "CHECKSUM MISMATCH");
+          // and now the part no stream checksum can fake: what the SDRAM holds
+          fileOk = fpga_verify_content(items[it].addr, total, lsum) && match;
+          if (!fileOk) cdc_printf("boot: retrying %s\r\n", items[it].path);
         }
-        fpga_load_zero();
-        uint16_t lcnt = 0, lsum = 0; uint32_t total = 0;
-        static uint8_t buf[504]; UINT rd;
-        while (f_read(&f, buf, sizeof buf, &rd) == FR_OK && rd > 0) {
-          fpga_load(items[it].addr + total, buf, rd, &lcnt, &lsum);
-          total += rd; tud_task();
-        }
-        f_close(&f);
-        uint16_t fcnt, fsum; fpga_load_status(&fcnt, &fsum);
-        bool match = (lcnt == fcnt && lsum == fsum);
-        cdc_printf("boot: %s -> %06lx (%lu bytes) stream %s\r\n", items[it].path,
-                   items[it].addr, total, match ? "ok" : "CHECKSUM MISMATCH");
-        ok = ok && match;
-        // and now the part no stream checksum can fake: what the SDRAM holds
-        ok = fpga_verify_content(items[it].addr, total, lsum) && ok;
+        ok = ok && fileOk;
       }
       // The supervisor "reset" is a stretched ~1.1 ms pulse (the control
       // register lives in the reset domain), so there is no true hold: the
@@ -367,13 +372,6 @@ static void handle_console(void) {
       cdc_printf("\r\n");
       break;
     }
-    case 'v': {   // vector-fetch probe: first two OS-region fetches
-      uint8_t tx[15] = {0}, rx[15];
-      fpga_spi_frame(tx, rx, sizeof tx);
-      cdc_printf("OS fetch 1: addr=%02x%02x%02x data=%02x | fetch 2: addr=%02x%02x%02x data=%02x\r\n",
-                 rx[6], rx[7], rx[8], rx[9], rx[10], rx[11], rx[12], rx[13]);
-      break;
-    }
     case 'g': {   // read FPGA debug GPIOs (22 = sticky OS-region fetch)
       gpio_init(22); gpio_set_dir(22, GPIO_IN);
       gpio_init(15); gpio_set_dir(15, GPIO_IN);
@@ -414,6 +412,34 @@ static void handle_console(void) {
         }
         if (ch == 'm') break;                   // single poll for lowercase
         sleep_ms(500);
+      }
+      break;
+    }
+    case 'v': {   // re-verify loaded os2 twice + dump first 32 bytes vs file
+      fpga_send_control(0x10);
+      fpga_verify_content(0x141800, 2048, 0x11e1);
+      fpga_verify_content(0x141800, 2048, 0x11e1);
+      uint8_t mem[32];
+      for (int i = 0; i < 32; i++) {   // V len=1 = single-byte peek
+        uint8_t tx[8] = { 0x56, 0x14, 0x18, (uint8_t)i, 0, 0, 1, 0 };
+        uint8_t rx[10];
+        fpga_spi_frame(tx, rx, sizeof tx);
+        sleep_ms(2);
+        uint8_t z[10] = {0}, st[10];
+        fpga_spi_frame(z, st, sizeof z);
+        mem[i] = st[6];
+      }
+      fpga_send_control(0x00);
+      static FATFS fs; FIL f; UINT rd; uint8_t fb2[32] = {0};
+      if (f_mount(&fs, "", 1) == FR_OK && f_open(&f, "/os/atarios2.rom", FA_READ) == FR_OK) {
+        f_read(&f, fb2, 32, &rd); f_close(&f);
+      }
+      for (int r = 0; r < 2; r++) {
+        cdc_printf("sdram %06x:", 0x141800 + r * 16);
+        for (int i = 0; i < 16; i++) cdc_printf(" %02x", mem[r * 16 + i]);
+        cdc_printf("\r\n  file %06x:", r * 16);
+        for (int i = 0; i < 16; i++) cdc_printf(" %02x", fb2[r * 16 + i]);
+        cdc_printf("\r\n");
       }
       break;
     }

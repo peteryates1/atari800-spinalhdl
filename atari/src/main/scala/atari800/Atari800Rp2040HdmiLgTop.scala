@@ -289,7 +289,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // fbBase must be ABOVE the Atari's RAM in SDRAM (internal_ram=0 -> RAM at
     // low addresses). 0x100000 = 1 MB, well clear of the Atari's 64 KB.
     val fbWrite = new VideoFbWrite(fbBase = 0x100000, width = 384, strideLog2 = 9, height = 288, addrWidth = 24, clearOnReset = true)
-    fbWrite.io.enable    := BufferCC(sdramCtrl.io.reset_client_n, False)  // SDRAM chip init COMPLETE (not just controller reset release)
+    fbWrite.io.enable    := BufferCC(sdramCtrl.io.reset_client_n, False)  // SDRAM chip init COMPLETE (not just controller reset release) && !kbd.io.ctrlHalt   // quiesce during supervisor loads
     // Sample at the Atari hi-res pixel rate (sys/8 ~ 7.2 MHz), phase-locked to
     // each line by hsync. colourEnable (sys/2 ~ 28.8 MHz) is 4x too fast: the
     // 384-wide buffer filled after ~96 real pixels (image squashed to the left).
@@ -321,7 +321,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     fbRead.io.clkPixel := clkPixel
     // Same ready condition as the SDRAM controller's reset: no fetch requests
     // until the arbiter + SDRAM are live (BufferCC inside fbRead syncs it).
-    fbRead.io.enable   := BufferCC(sdramCtrl.io.reset_client_n, False)   // SDRAM chip init COMPLETE
+    fbRead.io.enable   := BufferCC(sdramCtrl.io.reset_client_n, False)   // SDRAM chip init COMPLETE && !kbd.io.ctrlHalt
     arb.io.c.request        := fbRead.io.rdReq
     fbRead.io.rdComplete    := arb.io.c.complete
     arb.io.c.readEnable     := True
@@ -342,10 +342,12 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // count: latch any fb-read late event / fb-write drop since arming.
     val meterArm = Reg(UInt(26 bits)) init 0
     when(meterArm =/= meterArm.maxValue) { meterArm := meterArm + 1 }
-    val latePrev = RegNext(fbRead.io.dbgLateTgl)  init False
-    val dropPrev = RegNext(fbWrite.io.dbgDropTgl) init False
-    val dbgStickyLate = RegInit(False) setWhen (meterArm.msb && (fbRead.io.dbgLateTgl ^ latePrev))
-    val dbgStickyDrop = RegInit(False) setWhen (meterArm.msb && (fbWrite.io.dbgDropTgl ^ dropPrev))
+    val lateSync = BufferCC(fbRead.io.dbgLateTgl, False)   // pixel -> sys domain
+    val dropSync = BufferCC(fbWrite.io.dbgDropTgl, False)
+    val latePrev = RegNext(lateSync) init False
+    val dropPrev = RegNext(dropSync) init False
+    val dbgStickyLate = RegInit(False) setWhen (meterArm.msb && (lateSync ^ latePrev))
+    val dbgStickyDrop = RegInit(False) setWhen (meterArm.msb && (dropSync ^ dropPrev))
 
 
     // Supervisor SDRAM loader -> arbiter port D (lowest priority)

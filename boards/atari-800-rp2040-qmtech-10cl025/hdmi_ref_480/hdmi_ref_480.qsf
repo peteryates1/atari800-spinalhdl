@@ -1,0 +1,34 @@
+# Quartus project: corecourse c23_hdmi_color (720p) ported to this board.
+set_global_assignment -name DEVICE 10CL025YU256I7G
+set_global_assignment -name FAMILY "Cyclone 10 LP"
+set_global_assignment -name TOP_LEVEL_ENTITY hdmi_ref_top
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
+
+set_global_assignment -name VERILOG_FILE hdmi_ref_top.v
+set_global_assignment -name VERILOG_FILE rtl/hdmi_color.v
+set_global_assignment -name VERILOG_FILE rtl/dvi_encoder.v
+set_global_assignment -name VERILOG_FILE rtl/color_bar.v
+set_global_assignment -name VERILOG_FILE rtl/vga/disp_driver.v
+set_global_assignment -name VERILOG_FILE atari_pll.sv
+set_global_assignment -name SEARCH_PATH rtl/vga
+set_global_assignment -name SDC_FILE hdmi_ref_480.sdc
+
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+
+# Clock + LED
+set_location_assignment PIN_E2 -to clk_in
+set_location_assignment PIN_N9 -to led_core[0]
+
+# HDMI pairs — this board's diff-capable pins (p→connector+, matches ../pins.tcl)
+set_location_assignment PIN_R11 -to tmds_clk_p
+set_location_assignment PIN_T11 -to tmds_clk_n
+set_location_assignment PIN_R12 -to tmds_data_p[0]
+set_location_assignment PIN_T12 -to tmds_data_n[0]
+set_location_assignment PIN_R13 -to tmds_data_p[1]
+set_location_assignment PIN_T13 -to tmds_data_n[1]
+set_location_assignment PIN_T14 -to tmds_data_p[2]
+set_location_assignment PIN_T15 -to tmds_data_n[2]
+
+set_global_assignment -name LAST_QUARTUS_VERSION "25.1std.0 Lite Edition"
