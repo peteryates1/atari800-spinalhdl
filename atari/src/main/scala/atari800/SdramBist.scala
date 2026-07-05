@@ -23,8 +23,10 @@ class SdramBistEngine(
   walkMax     : Int    = 24,        // highest byte-address bit walked
   sweepWords  : BigInt = BigInt(1) << 23,  // 32-bit words per sweep (8M = 32 MB)
   retWaitBits : Int    = 27,        // 2^27 cycles @ 100 MHz = 1.34 s
-  byteMode    : Boolean = false     // byte accesses, data replicated x4 - the
+  byteMode    : Boolean = false,    // byte accesses, data replicated x4 - the
                                     // supervisor loader's exact transaction mix
+  wideMode    : Boolean = false     // 256-bit sweeps (walk stays single-beat:
+                                    // proves wide/single mixing like the fb+CPU mix)
 ) extends Component {
   val io = new Bundle {
     val ready    = in  Bool()                 // controller reset_client_n
@@ -34,6 +36,9 @@ class SdramBistEngine(
     val addr     = out Bits(addrWidth bits)   // byte address
     val dataOut  = out Bits(32 bits)
     val dataIn   = in  Bits(32 bits)
+    val wideOut  = out Bits(256 bits)
+    val wideIn   = in  Bits(256 bits) default(B(0, 256 bits))
+    val wideAcc  = out Bool()                 // this transaction is wide
     val complete = in  Bool()
     // status
     val state     = out Bits(2 bits)          // 0 running, 1 pass, 2 fail
@@ -69,7 +74,9 @@ class SdramBistEngine(
   when(idx =/= 0) {
     walkAddr := (U(1, 25 bits) |<< (idx(4 downto 0) + 1)).resized
   }
-  val sweepAddr = (if (byteMode) idx else (idx << 2)).resize(25)
+  val sweepAddr = (if (byteMode) idx
+                   else if (wideMode) (idx << 5)
+                   else (idx << 2)).resize(25)
   val byteAddr  = UInt(25 bits)
   byteAddr := Mux(phase === 1, walkAddr, sweepAddr)
 
@@ -93,12 +100,25 @@ class SdramBistEngine(
                  byteAddr(22 downto 16).resize(8) ^
                  (hashPhase.resize(8) |<< 5)).asBits
 
+  // wide mode: 8 longwords per transaction, each word addr-derived
+  val expWide = Bits(256 bits)
+  for (k <- 0 until 8) {
+    val wordAddr = (byteAddr + k * 4).asBits.resize(32)
+    val const = Bits(32 bits)
+    const := B(0x55555555L, 32 bits)
+    when(phase === 3 || phase === 4) { const := B(0xAAAAAAAAL, 32 bits) }
+    when(phase === 1) { const := B(0xB1570000L, 32 bits) }
+    expWide(k * 32 + 31 downto k * 32) := (wordAddr ^ const)
+  }
+
   val issueReq = False
   io.request := issueReq
   io.writeEn := !reading && phase =/= 4
   io.readEn  := reading || phase === 4
   io.addr    := byteAddr.asBits.resize(addrWidth)
   io.dataOut := (if (byteMode) expByte ## expByte ## expByte ## expByte else expData)
+  io.wideOut := expWide
+  io.wideAcc := (if (wideMode) Bool(true) && phase =/= 1 else False)
 
   val fsm = new StateMachine {
     val Wait     = new State with EntryPoint  // controller not ready yet
@@ -118,13 +138,18 @@ class SdramBistEngine(
     Complete.whenIsActive {
       when(!io.complete) { busySeen := True }
       when(busySeen && io.complete) {
-        when((reading || phase === 4) &&
-             (if (byteMode) io.dataIn(7 downto 0) =/= expByte else io.dataIn =/= expData)) {
+        val mismatch =
+          if (byteMode) io.dataIn(7 downto 0) =/= expByte
+          else if (wideMode) Mux(phase === 1, io.dataIn =/= expData, io.wideIn =/= expWide)
+          else io.dataIn =/= expData
+        when((reading || phase === 4) && mismatch) {
           when(errCnt =/= errCnt.maxValue) { errCnt := errCnt + 1 }
           when(errCnt === 0) {
             firstAddr  := byteAddr.asBits
-            firstGot   := io.dataIn
-            firstExp   := (if (byteMode) expByte.resize(32) else expData)
+            firstGot   := (if (wideMode) Mux(phase === 1, io.dataIn, io.wideIn(31 downto 0)) else io.dataIn)
+            firstExp   := (if (byteMode) expByte.resize(32)
+                           else if (wideMode) Mux(phase === 1, expData, expWide(31 downto 0))
+                           else expData)
             firstPhase := phase
           }
         }

@@ -65,6 +65,8 @@ class RpAtariKeyboard extends Component {
     val ldComplete = in  Bool()
     // debug
     val frameCount = out UInt(8 bits)
+    val meterLate  = in UInt(16 bits)   // fb-read late-line count (status 10,11)
+    val meterDrop  = in UInt(16 bits)   // fb-write dropped-quad count (12,13)
   }
 
   // ---- Input synchronisers (SPI clock << sys clock; 3-stage) ----
@@ -139,6 +141,10 @@ class RpAtariKeyboard extends Component {
           is(7)  { shiftOut := B(0, 6 bits) ## wqOvf ## vBusy }
           is(8)  { shiftOut := drainCnt(7 downto 0).asBits }
           is(9)  { shiftOut := drainCnt(15 downto 8).asBits }
+          is(10) { shiftOut := io.meterLate(7 downto 0).asBits }
+          is(11) { shiftOut := io.meterLate(15 downto 8).asBits }
+          is(12) { shiftOut := io.meterDrop(7 downto 0).asBits }
+          is(13) { shiftOut := io.meterDrop(15 downto 8).asBits }
           default { shiftOut := B(0, 8 bits) }
         }
       }

@@ -176,16 +176,21 @@ class SdramTest115Top extends Component {
     ctrl.io.REFRESH    := False
 
     val bist = new SdramBistEngine(addrWidth = ctrl.io.ADDRESS_IN.getWidth,
-                                   retWaitBits = 26)   // 1.16 s @ 57.69 MHz
+                                   sweepWords = BigInt(1) << 19,  // x32 bytes = 16 MB
+                                   retWaitBits = 26,   // 1.16 s @ 57.69 MHz
+                                   wideMode = true)
     bist.io.ready := ctrl.io.reset_client_n
     ctrl.io.REQUEST         := bist.io.request
     ctrl.io.WRITE_EN        := bist.io.writeEn
     ctrl.io.READ_EN         := bist.io.readEn
     ctrl.io.ADDRESS_IN      := bist.io.addr
     ctrl.io.DATA_IN         := bist.io.dataOut
-    ctrl.io.LONGWORD_ACCESS := True
+    ctrl.io.LONGWORD_ACCESS := !bist.io.wideAcc
     ctrl.io.WORD_ACCESS     := False
     ctrl.io.BYTE_ACCESS     := False
+    ctrl.io.WIDE_ACCESS     := bist.io.wideAcc
+    ctrl.io.WIDE_IN         := bist.io.wideOut
+    bist.io.wideIn   := ctrl.io.WIDE_OUT
     bist.io.dataIn   := ctrl.io.DATA_OUT
     bist.io.complete := ctrl.io.COMPLETE
 

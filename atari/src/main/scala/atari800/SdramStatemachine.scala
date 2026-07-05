@@ -21,6 +21,13 @@ class SdramStatemachine(
     val BYTE_ACCESS     = in  Bool()
     val WORD_ACCESS     = in  Bool()
     val LONGWORD_ACCESS = in  Bool()
+    // 256-bit access: 8 sequential longwords (32-byte aligned) in ONE
+    // transaction - one ACTIVATE, 8 back-to-back BL2 CAS bursts in the open
+    // row, auto-precharge on the last. Same toggle handshake as every other
+    // access; data crosses the domains as one wide snapshot.
+    val WIDE_ACCESS     = in  Bool()   default(False)
+    val WIDE_IN         = in  Bits(256 bits) default(B(0, 256 bits))
+    val WIDE_OUT        = out Bits(256 bits)
     val REFRESH         = in  Bool()
 
     val COMPLETE        = out Bool()
@@ -62,13 +69,15 @@ class SdramStatemachine(
   val sdram_command_refresh          = B"0001"
 
   // SDRAM states
-  val sdram_state_powerup        = B"000"
-  val sdram_state_init           = B"001"
-  val sdram_state_idle           = B"010"
-  val sdram_state_refresh        = B"011"
-  val sdram_state_read           = B"100"
-  val sdram_state_write          = B"101"
-  val sdram_state_init_precharge = B"110"
+  val sdram_state_powerup        = B"0000"
+  val sdram_state_init           = B"0001"
+  val sdram_state_idle           = B"0010"
+  val sdram_state_refresh        = B"0011"
+  val sdram_state_read           = B"0100"
+  val sdram_state_write          = B"0101"
+  val sdram_state_init_precharge = B"0110"
+  val sdram_state_wide_read      = B"0111"
+  val sdram_state_wide_write     = B"1000"
 
   // ---- SDRAM clock domain ----
   val sdramClockDomain = ClockDomain(
@@ -94,8 +103,8 @@ class SdramStatemachine(
 
   // Signals between domains
   val command_next           = Bits(4 bits)
-  val sdram_state_next       = Bits(3 bits)
-  val sdram_state_reg        = Bits(3 bits)
+  val sdram_state_next       = Bits(4 bits)
+  val sdram_state_reg        = Bits(4 bits)
   val delay_next             = Bits(16 bits)
   val delay_reg              = Bits(16 bits)
   val cycles_since_refresh_next = Bits(11 bits)
@@ -115,6 +124,10 @@ class SdramStatemachine(
   // Capture inputs
   val DATA_IN_snext        = Bits(32 bits)
   val DATA_IN_sreg         = Bits(32 bits)
+  val WIDE_IN_snext        = Bits(256 bits)
+  val WIDE_IN_sreg         = Bits(256 bits)
+  val WIDE_ACCESS_snext    = Bool()
+  val WIDE_ACCESS_sreg     = Bool()
   val ADDRESS_IN_snext     = Bits(ADDRESS_WIDTH bits)
   val ADDRESS_IN_sreg      = Bits(ADDRESS_WIDTH bits)
   val READ_EN_snext        = Bool()
@@ -131,6 +144,10 @@ class SdramStatemachine(
   // Slow clock output regs
   val DATA_OUT_snext       = Bits(32 bits)
   val DATA_OUT_sreg        = Bits(32 bits)
+  val WIDE_OUT_snext       = Bits(256 bits)
+  val WIDE_OUT_sreg        = Bits(256 bits)
+  val wide_out_next        = Bits(256 bits)
+  val wide_out_reg         = Bits(256 bits)
   val reply_snext          = Bool()
   val reply_sreg           = Bool()
 
@@ -169,11 +186,12 @@ class SdramStatemachine(
   // ---- SDRAM clock domain registers ----
   val sdramArea = new ClockingArea(sdramClockDomain) {
     val r_dq_in_reg       = Reg(Bits(16 bits)) init 0
-    val r_sdram_state_reg = Reg(Bits(3 bits)) init sdram_state_init addTag(crossClockDomain)
+    val r_sdram_state_reg = Reg(Bits(4 bits)) init sdram_state_init addTag(crossClockDomain)
     val r_delay_reg       = Reg(Bits(16 bits)) init 0
     val r_refresh_pending_reg = Reg(Bits(12 bits)) init 0
     val r_cycles_since_refresh_reg = Reg(Bits(11 bits)) init 0
     val r_data_out_reg    = Reg(Bits(32 bits)) init 0 addTag(crossClockDomain)
+    val r_wide_out_reg    = Reg(Bits(256 bits)) init 0 addTag(crossClockDomain)
     val r_reply_reg       = Reg(Bool()) init False addTag(crossClockDomain)
 
     val r_addr_reg        = Reg(Bits(ROW_WIDTH bits)) init 0
@@ -194,6 +212,7 @@ class SdramStatemachine(
     r_refresh_pending_reg := refresh_pending_next
     r_cycles_since_refresh_reg := cycles_since_refresh_next
     r_data_out_reg    := data_out_next
+    r_wide_out_reg    := wide_out_next
     r_reply_reg       := reply_next
 
     r_addr_reg        := addr_next
@@ -215,6 +234,7 @@ class SdramStatemachine(
     refresh_pending_reg      := r_refresh_pending_reg
     cycles_since_refresh_reg := r_cycles_since_refresh_reg
     data_out_reg             := r_data_out_reg
+    wide_out_reg             := r_wide_out_reg
     reply_reg                := r_reply_reg
     addr_reg                 := r_addr_reg
     dq_out_reg               := r_dq_out_reg
@@ -232,6 +252,8 @@ class SdramStatemachine(
   // ---- System clock domain registers ----
   val systemArea = new ClockingArea(systemClockDomain) {
     val r_data_in_sreg    = Reg(Bits(32 bits)) init 0 addTag(crossClockDomain)
+    val r_wide_in_sreg    = Reg(Bits(256 bits)) init 0 addTag(crossClockDomain)
+    val r_wide_acc_sreg   = Reg(Bool()) init False addTag(crossClockDomain)
     val r_address_in_sreg = Reg(Bits(ADDRESS_WIDTH bits)) init 0 addTag(crossClockDomain)
     val r_read_en_sreg    = Reg(Bool()) init False addTag(crossClockDomain)
     val r_write_en_sreg   = Reg(Bool()) init False addTag(crossClockDomain)
@@ -240,12 +262,15 @@ class SdramStatemachine(
     val r_refresh_sreg    = Reg(Bool()) init False addTag(crossClockDomain)
 
     val r_data_out_sreg   = Reg(Bits(32 bits)) init 0 addTag(crossClockDomain)
+    val r_wide_out_sreg   = Reg(Bits(256 bits)) init 0 addTag(crossClockDomain)
     val r_reply_sreg      = Reg(Bool()) init False addTag(crossClockDomain)
 
     val r_sdram_request_reg = Reg(Bool()) init False
     val r_reset_client_n_reg = Reg(Bool()) init False
 
     r_data_in_sreg      := DATA_IN_snext
+    r_wide_in_sreg      := WIDE_IN_snext
+    r_wide_acc_sreg     := WIDE_ACCESS_snext
     r_address_in_sreg   := ADDRESS_IN_snext
     r_read_en_sreg      := READ_EN_snext
     r_write_en_sreg     := WRITE_EN_snext
@@ -254,12 +279,15 @@ class SdramStatemachine(
     r_refresh_sreg      := refresh_snext
 
     r_data_out_sreg     := DATA_OUT_snext
+    r_wide_out_sreg     := WIDE_OUT_snext
     r_reply_sreg        := reply_snext
 
     r_sdram_request_reg := sdram_request_next
     r_reset_client_n_reg := reset_client_n_next
 
     DATA_IN_sreg        := r_data_in_sreg
+    WIDE_IN_sreg        := r_wide_in_sreg
+    WIDE_ACCESS_sreg    := r_wide_acc_sreg
     ADDRESS_IN_sreg     := r_address_in_sreg
     READ_EN_sreg        := r_read_en_sreg
     WRITE_EN_sreg       := r_write_en_sreg
@@ -268,6 +296,7 @@ class SdramStatemachine(
     refresh_sreg        := r_refresh_sreg
 
     DATA_OUT_sreg       := r_data_out_sreg
+    WIDE_OUT_sreg       := r_wide_out_sreg
     reply_sreg          := r_reply_sreg
 
     sdram_request_reg   := r_sdram_request_reg
@@ -276,6 +305,8 @@ class SdramStatemachine(
 
   // ---- Inputs: snap inputs on new request ----
   DATA_IN_snext      := DATA_IN_sreg
+  WIDE_IN_snext      := WIDE_IN_sreg
+  WIDE_ACCESS_snext  := WIDE_ACCESS_sreg
   ADDRESS_IN_snext   := ADDRESS_IN_sreg
   READ_EN_snext      := READ_EN_sreg
   WRITE_EN_snext     := WRITE_EN_sreg
@@ -285,6 +316,8 @@ class SdramStatemachine(
 
   when((sdram_request_next ^ request_sreg) === True) {
     DATA_IN_snext      := io.DATA_IN
+    WIDE_IN_snext      := io.WIDE_IN
+    WIDE_ACCESS_snext  := io.WIDE_ACCESS
     ADDRESS_IN_snext   := io.ADDRESS_IN(ADDRESS_WIDTH downto 1)
     READ_EN_snext      := io.READ_EN
     WRITE_EN_snext     := io.WRITE_EN
@@ -293,7 +326,10 @@ class SdramStatemachine(
     dqm_mask_snext(0)  := (io.BYTE_ACCESS | io.WORD_ACCESS) & io.ADDRESS_IN(0)
     dqm_mask_snext(1)  := io.BYTE_ACCESS & ~io.ADDRESS_IN(0)
     dqm_mask_snext(2)  := io.BYTE_ACCESS | (io.WORD_ACCESS & ~io.ADDRESS_IN(0))
-    dqm_mask_snext(3)  := ~io.LONGWORD_ACCESS
+    dqm_mask_snext(3)  := ~(io.LONGWORD_ACCESS | io.WIDE_ACCESS)
+    when(io.WIDE_ACCESS) {
+      dqm_mask_snext := B"0000"
+    }
   }
 
   // ---- Refresh counters ----
@@ -334,6 +370,7 @@ class SdramStatemachine(
   command_next     := sdram_command_no_operation
   delay_next       := (delay_reg.asUInt + 1).asBits.resized
   data_out_next    := data_out_reg
+  wide_out_next    := wide_out_reg
   reply_next       := reply_reg
 
   // Defaults for NOP
@@ -390,9 +427,11 @@ class SdramStatemachine(
         }
         is(B"1010", B"1011") {
           sdram_state_next := sdram_state_write
+          when(WIDE_ACCESS_sreg) { sdram_state_next := sdram_state_wide_write }   // 4-bit state
         }
         is(B"1001") {
           sdram_state_next := sdram_state_read
+          when(WIDE_ACCESS_sreg) { sdram_state_next := sdram_state_wide_read }
         }
       }
     }
@@ -467,6 +506,64 @@ class SdramStatemachine(
         }
       }
     }
+    is(sdram_state_wide_read) {
+      // 8 pipelined BL2 READ bursts in one open row: ACTIVATE @0, CAS @2,4,
+      // ..,16 (auto-precharge on the last), 16 data words captured @7..22
+      // (same CAS->capture offset the proven single-beat read uses).
+      val d = delay_reg(4 downto 0).asUInt
+      when(d === 0) {
+        command_next := sdram_command_bank_activate
+        ba_next := ADDRESS_IN_sreg(ADDRESS_WIDTH - 1 downto ADDRESS_WIDTH - 2)
+        addr_next := ADDRESS_IN_sreg(ADDRESS_WIDTH - 3 downto ADDRESS_WIDTH - 3 - ROW_WIDTH + 1)
+      }
+      when(d >= 2 && d <= 16 && d(0) === False) {
+        command_next := sdram_command_read
+        ba_next := ADDRESS_IN_sreg(ADDRESS_WIDTH - 1 downto ADDRESS_WIDTH - 2)
+        addr_next(COLUMN_WIDTH - 1 downto 0) := ADDRESS_IN_sreg(ADDRESS_WIDTH - 3 - ROW_WIDTH downto 0)
+        addr_next(3 downto 0) := (d - 2).asBits.resize(4)     // 32-byte aligned base
+        when(d === 16) { addr_next(AP_BIT) := True }          // close row on last burst
+      }
+      when(d >= 3 && d <= 18) { ldqm_next := False; udqm_next := False }
+      when(d >= 7 && d <= 22) {
+        val k = (d - 7).resize(4)
+        wide_out_next.subdivideIn(16 slices)(k) := dq_in_reg
+      }
+      when(d === 23) {
+        reply_next := request_sreg
+        delay_next := B(0, 16 bits)
+        sdram_state_next := sdram_state_idle
+      }
+    }
+    is(sdram_state_wide_write) {
+      // ACTIVATE @0, 8 pipelined BL2 WRITE bursts @2,4,..,16 (AP on last),
+      // data words driven continuously @2..17 (cmd+data alignment identical
+      // to the single-beat write's x3/x4 pattern).
+      val d = delay_reg(4 downto 0).asUInt
+      when(d === 0) {
+        command_next := sdram_command_bank_activate
+        ba_next := ADDRESS_IN_sreg(ADDRESS_WIDTH - 1 downto ADDRESS_WIDTH - 2)
+        addr_next := ADDRESS_IN_sreg(ADDRESS_WIDTH - 3 downto ADDRESS_WIDTH - 3 - ROW_WIDTH + 1)
+      }
+      when(d >= 2 && d <= 16 && d(0) === False) {
+        command_next := sdram_command_write
+        ba_next := ADDRESS_IN_sreg(ADDRESS_WIDTH - 1 downto ADDRESS_WIDTH - 2)
+        addr_next(COLUMN_WIDTH - 1 downto 0) := ADDRESS_IN_sreg(ADDRESS_WIDTH - 3 - ROW_WIDTH downto 0)
+        addr_next(3 downto 0) := (d - 2).asBits.resize(4)
+        when(d === 16) { addr_next(AP_BIT) := True }
+      }
+      when(d >= 2 && d <= 17) {
+        val k = (d - 2).resize(4)
+        dq_output_next := True
+        dq_out_next := WIDE_IN_sreg.subdivideIn(16 slices)(k)
+        ldqm_next := False
+        udqm_next := False
+      }
+      when(d === 19) {
+        reply_next := request_sreg
+        delay_next := B(0, 16 bits)
+        sdram_state_next := sdram_state_idle
+      }
+    }
     is(sdram_state_refresh) {
       switch(delay_reg(3 downto 0)) {
         is(B"x0") {
@@ -511,9 +608,11 @@ class SdramStatemachine(
   // Back to slower clock
   reply_snext    := reply_reg
   DATA_OUT_snext := data_out_reg
+  WIDE_OUT_snext := wide_out_reg
 
   // Outputs to rest of system
   io.DATA_OUT := DATA_OUT_sreg
+  io.WIDE_OUT := WIDE_OUT_sreg
   io.COMPLETE := (~(reply_sreg ^ sdram_request_reg)) & ~io.REQUEST
   sdram_request_next := sdram_request_reg ^ io.REQUEST
   io.reset_client_n := reset_client_n_reg

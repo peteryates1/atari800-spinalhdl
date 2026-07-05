@@ -346,8 +346,14 @@ class Atari800Rp2040HdmiLgTop extends Component {
     val dropSync = BufferCC(fbWrite.io.dbgDropTgl, False)
     val latePrev = RegNext(lateSync) init False
     val dropPrev = RegNext(dropSync) init False
-    val dbgStickyLate = RegInit(False) setWhen (meterArm.msb && (lateSync ^ latePrev))
-    val dbgStickyDrop = RegInit(False) setWhen (meterArm.msb && (dropSync ^ dropPrev))
+    val lateCnt  = Reg(UInt(16 bits)) init 0
+    val dropCnt  = Reg(UInt(16 bits)) init 0
+    when(meterArm.msb && (lateSync ^ latePrev) && lateCnt =/= lateCnt.maxValue) { lateCnt := lateCnt + 1 }
+    when(meterArm.msb && (dropSync ^ dropPrev) && dropCnt =/= dropCnt.maxValue) { dropCnt := dropCnt + 1 }
+    val dbgStickyLate = lateCnt =/= 0
+    val dbgStickyDrop = dropCnt =/= 0
+    kbd.io.meterLate := lateCnt
+    kbd.io.meterDrop := dropCnt
 
 
     // Supervisor SDRAM loader -> arbiter port D (lowest priority)
