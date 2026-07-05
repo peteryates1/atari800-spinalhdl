@@ -521,7 +521,11 @@ class SdramStatemachine(
         ba_next := ADDRESS_IN_sreg(ADDRESS_WIDTH - 1 downto ADDRESS_WIDTH - 2)
         addr_next(COLUMN_WIDTH - 1 downto 0) := ADDRESS_IN_sreg(ADDRESS_WIDTH - 3 - ROW_WIDTH downto 0)
         addr_next(3 downto 0) := (d - 2).asBits.resize(4)     // 32-byte aligned base
-        when(d === 16) { addr_next(AP_BIT) := True }          // close row on last burst
+        // the addr_next default is ALL-ONES incl. bit 10 = auto-precharge:
+        // it MUST be cleared on every CAS but the last, or the row closes
+        // after the first pair and beats 1-7 hit a closed row (JEDEC-illegal;
+        // manifested as only word 0 of each group landing on hardware)
+        addr_next(AP_BIT) := (d === 16)
       }
       when(d >= 3 && d <= 18) { ldqm_next := False; udqm_next := False }
       when(d >= 7 && d <= 22) {
@@ -549,7 +553,7 @@ class SdramStatemachine(
         ba_next := ADDRESS_IN_sreg(ADDRESS_WIDTH - 1 downto ADDRESS_WIDTH - 2)
         addr_next(COLUMN_WIDTH - 1 downto 0) := ADDRESS_IN_sreg(ADDRESS_WIDTH - 3 - ROW_WIDTH downto 0)
         addr_next(3 downto 0) := (d - 2).asBits.resize(4)
-        when(d === 16) { addr_next(AP_BIT) := True }
+        addr_next(AP_BIT) := (d === 16)                       // see wide-read note
       }
       when(d >= 2 && d <= 17) {
         val k = (d - 2).resize(4)

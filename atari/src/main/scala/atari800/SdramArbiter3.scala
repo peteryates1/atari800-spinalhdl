@@ -26,6 +26,7 @@ class SdramArbiter3 extends Component {
       val addr = in Bits(24 bits); val dataIn = in Bits(32 bits); val dataOut = out Bits(32 bits)
       val byteAccess = in Bool();  val wordAccess = in Bool();  val longwordAccess = in Bool()
       val wideAccess = in Bool();  val wideIn = in Bits(256 bits)   // 256-bit write
+      val wideOut = out Bits(256 bits)
     }
     val c = new Bundle {             // fb-read (queued)
       val request  = in  Bool();  val complete = out Bool()
@@ -81,6 +82,7 @@ class SdramArbiter3 extends Component {
   io.c.dataOut := io.sdram.dataOut
   io.d.dataOut := io.sdram.dataOut
   io.c.wideOut := io.sdram.wideOut
+  io.b.wideOut := io.sdram.wideOut
 
   io.sdram.refresh := True
 

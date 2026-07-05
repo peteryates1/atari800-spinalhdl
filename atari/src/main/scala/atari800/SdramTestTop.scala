@@ -282,10 +282,6 @@ class SdramTestArbTop extends Component {
     ctrl.io.REFRESH    := True   // continuous suggest - the main design's cadence
 
     val arb = new SdramArbiter3
-    arb.io.b.request := False; arb.io.b.readEnable := False; arb.io.b.writeEnable := False
-    arb.io.b.addr := 0; arb.io.b.dataIn := 0
-    arb.io.b.byteAccess := False; arb.io.b.wordAccess := False; arb.io.b.longwordAccess := False
-    arb.io.b.wideAccess := False; arb.io.b.wideIn := 0
     arb.io.c.request := False; arb.io.c.readEnable := False; arb.io.c.writeEnable := False
     arb.io.c.addr := 0; arb.io.c.dataIn := 0
     arb.io.c.byteAccess := False; arb.io.c.wordAccess := False; arb.io.c.longwordAccess := False
@@ -335,24 +331,32 @@ class SdramTestArbTop extends Component {
 
     // Arbiter client ports carry 24-bit byte addresses (16 MB): size the
     // walk and sweeps to fit or the test self-aliases at the truncation.
-    // BYTE mode: the loader's transaction mix (longword mode passed clean)
+    // WIDE mode on port B: the framebuffer write path's exact transaction mix,
+    // under concurrent ANTIC-cadence port-A traffic. (Direct-controller wide
+    // BIST passed; the main design corrupts words 1-7 of each group - this
+    // testbed isolates the arbiter/interleave/timing difference.)
+    arb.io.d.request := False; arb.io.d.readEnable := False; arb.io.d.writeEnable := False
+    arb.io.d.addr := 0; arb.io.d.dataIn := 0
+    arb.io.d.byteAccess := False; arb.io.d.wordAccess := False; arb.io.d.longwordAccess := False
+
     val bist = new SdramBistEngine(addrWidth = 24, walkMax = 23,
-                                   sweepWords = BigInt(1) << 22, retWaitBits = 26,
-                                   byteMode = true)
+                                   sweepWords = BigInt(1) << 19, retWaitBits = 26,
+                                   wideMode = true)
     bist.io.ready := ctrl.io.reset_client_n
-    arb.io.d.request        := bist.io.request
-    arb.io.d.readEnable     := bist.io.readEn
-    arb.io.d.writeEnable    := bist.io.writeEn
-    arb.io.d.addr           := bist.io.addr(23 downto 0)
-    arb.io.d.dataIn         := bist.io.dataOut
-    arb.io.d.byteAccess     := True
-    arb.io.d.wordAccess     := False
-    arb.io.d.longwordAccess := False
-    bist.io.dataIn   := arb.io.d.dataOut
-    // port D complete PULSES (idles low) - synthesize the level protocol the
-    // engine expects: busy from request until the pulse
-    val dBusy = RegInit(False) setWhen (bist.io.request) clearWhen (arb.io.d.complete)
-    bist.io.complete := !dBusy || arb.io.d.complete
+    arb.io.b.request        := bist.io.request
+    arb.io.b.readEnable     := bist.io.readEn
+    arb.io.b.writeEnable    := bist.io.writeEn
+    arb.io.b.addr           := bist.io.addr(23 downto 0)
+    arb.io.b.dataIn         := bist.io.dataOut
+    arb.io.b.byteAccess     := False
+    arb.io.b.wordAccess     := False
+    arb.io.b.longwordAccess := !bist.io.wideAcc
+    arb.io.b.wideAccess     := bist.io.wideAcc
+    arb.io.b.wideIn         := bist.io.wideOut
+    bist.io.dataIn := arb.io.b.dataOut
+    bist.io.wideIn := arb.io.b.wideOut
+    val dBusy = RegInit(False) setWhen (bist.io.request) clearWhen (arb.io.b.complete)
+    bist.io.complete := !dBusy || arb.io.b.complete
 
     val rpt = new BistSpiReporter
     rpt.io.spiSck  := io.rp_sck

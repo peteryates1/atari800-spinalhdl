@@ -63,7 +63,8 @@ class MockSdram(latency: Int = 3, memBits: Int = 13) extends Component {
           when(capWe) {
             for (k <- 0 until 32) { mem.write(wbase | k, capWide(k * 8 + 7 downto k * 8)) }
           }
-          wideOutReg := Cat((31 downto 0).map(k => mem.readAsync(wbase | k)))
+          // Cat(Seq) puts the FIRST element at the LSB: index ascending = byte 0 low
+          wideOutReg := Cat((0 until 32).map(k => mem.readAsync(wbase | k)))
         } otherwise {
           when(capWe) {
             mem.write(base, capData(7 downto 0))

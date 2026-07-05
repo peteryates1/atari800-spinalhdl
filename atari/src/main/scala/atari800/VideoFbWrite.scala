@@ -194,6 +194,16 @@ class VideoFbWrite(
   io.wrData     := batch(flushIdx)
   io.wrWideData := batch.asBits                 // batch(0) = lowest address
 
+  // The arbiter serves port B cycles AFTER the request pulse, and the
+  // controller snapshots the access flags at SERVE time - so wrWide (and
+  // addr/data, which are held via regs) must stay valid for the whole
+  // transaction, not just the request cycle. A pulse-shaped wrWide made the
+  // controller run a single-beat write of word 0 only (all other words of
+  // every batch silently unwritten; found via fb residue dumps on HW).
+  when(inFlight) {
+    io.wrWide := wideFly
+    when(wideFly) { io.wrAddr := batchBase.asBits }
+  }
   when(io.enable && !inFlight) {
     when(flushing) {
       io.wrReq  := True                         // single write from the batch

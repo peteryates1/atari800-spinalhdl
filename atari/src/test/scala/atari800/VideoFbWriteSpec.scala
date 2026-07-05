@@ -18,11 +18,15 @@ class VideoFbWriteSpec extends AnyFunSuite {
       dut.io.blank #= false; dut.io.colour #= 0
       dut.io.wrComplete #= false
 
-      // SDRAM mock: applies wide and single writes to a byte map
+      // SDRAM mock with ARBITER-STYLE deferred sampling: the flags/addr/data
+      // are read N cycles after the request pulse, at "serve" time - exactly
+      // when the real controller snapshots them. A client that only asserts
+      // its flags during the request pulse fails here (as it did on HW).
       val mem = scala.collection.mutable.Map[Long, Int]()
       var wides = 0; var singles = 0
       fork { while (true) { dut.clockDomain.waitSampling()
         if (dut.io.wrReq.toBoolean) {
+          dut.clockDomain.waitSampling(3)       // arbiter serve delay
           val addr = dut.io.wrAddr.toLong
           if (dut.io.wrWide.toBoolean) {
             val v = dut.io.wrWideData.toBigInt
