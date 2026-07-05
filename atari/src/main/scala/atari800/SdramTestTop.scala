@@ -2,7 +2,6 @@ package atari800
 
 import spinal.core._
 import spinal.lib._
-import spinal.lib.fsm._
 
 // QMTech-proven SDRAM PLL (pll.v): 50 MHz in -> c0 = c1 = 100 MHz, phase 0.
 class SdramPll extends BlackBox {
@@ -13,18 +12,18 @@ class SdramPll extends BlackBox {
   val c1     = out Bool()
 }
 
-// Standalone SDRAM bring-up test for the QMTech 10CL025 (RP2040-HDMI board).
+// Standalone FULL-RANGE SDRAM test for the QMTech 10CL025 (RP2040-HDMI board).
 //
-// Exercises OUR SdramStatemachine controller (the block Stages 1-2 reuse) against
-// the on-module SDRAM at 100 MHz — the vendor-proven QMTech clocking. It writes a
-// unique pattern to a range of word addresses, reads them all back, and reports on
-// led_core (PIN_N9) by BLINK RATE (rate is polarity-independent):
-//   fast blink (~6 Hz)   = PASS  (every word read back correct)
-//   slow blink (~1.5 Hz) = FAIL  (at least one mismatch)
-//   steady               = still running / stuck before reset_client_n
+// The original Stage-0 test only covered the first 32 KB - which let a
+// full-range addressing fault hide for weeks. This version runs SdramBistEngine
+// (address-bit walk + two full 32 MB sweeps with address-unique data + a
+// refresh-retention pass) against OUR SdramStatemachine, configured with the
+// QMTech Test04 reference geometry (13-bit rows, 10-bit columns, 2 bank bits).
 //
-// Self-contained and non-destructive to the rest of the system — safe to reload
-// any time to re-verify SDRAM.
+// Reporting:
+//   led_core: steady = running, fast blink (~6 Hz) = PASS, slow (~1.5 Hz) = FAIL
+//   RP2040 SPI (rp_sck/mosi/miso/csn): any frame returns the status block
+//   (see BistSpiReporter); supervisor 'm' polls it, 0xA0 restarts.
 class SdramTestTop extends Component {
   val io = new Bundle {
     val clk_in     = in  Bool()
@@ -38,6 +37,10 @@ class SdramTestTop extends Component {
     val sdram_addr = out Bits(13 bits)
     val sdram_dqm  = out Bits(2 bits)
     val sdram_dq   = inout(Analog(Bits(16 bits)))
+    val rp_sck     = in  Bool()
+    val rp_mosi    = in  Bool()
+    val rp_csn     = in  Bool()
+    val rp_miso    = out Bool()
     val led_core   = out Bits(1 bits)
   }
   noIoPrefix()
@@ -55,8 +58,11 @@ class SdramTestTop extends Component {
     // Power-on reset: hold controller reset low ~330 us for SDRAM power-up.
     val porCnt = Reg(UInt(16 bits)) init 0
     when(porCnt =/= porCnt.maxValue) { porCnt := porCnt + 1 }
-    val resetN = porCnt.msb   // low for first 32768 cycles
+    val resetN = porCnt.msb
 
+    // BIST run 1 (10-bit columns) failed instantly: write 0x400 clobbered 0
+    // - the chip ignores column A9, so it's a 9-bit-column (32 MB) part and
+    // the QMTech Test04 COLSIZE=10 does not describe this module.
     val ctrl = new SdramStatemachine(
       ADDRESS_WIDTH = 24, ROW_WIDTH = 13, COLUMN_WIDTH = 9, AP_BIT = 10
     )
@@ -65,59 +71,39 @@ class SdramTestTop extends Component {
     ctrl.io.RESET_N    := resetN
     ctrl.io.REFRESH    := False   // SdramStatemachine auto-refreshes internally
 
-    val N        = 16384                        // words to test
-    val addr     = Reg(UInt(15 bits)) init 0
-    val fail     = Reg(Bool()) init False
-    val done     = Reg(Bool()) init False
-    val busySeen = Reg(Bool()) init False
-
-    def pattern(i: UInt): Bits = (i.asBits.resize(16) ^ B"16'x5A5A")
-
-    ctrl.io.WORD_ACCESS     := True
+    val bist = new SdramBistEngine(addrWidth = ctrl.io.ADDRESS_IN.getWidth)
+    bist.io.ready := ctrl.io.reset_client_n
+    ctrl.io.REQUEST         := bist.io.request
+    ctrl.io.WRITE_EN        := bist.io.writeEn
+    ctrl.io.READ_EN         := bist.io.readEn
+    ctrl.io.ADDRESS_IN      := bist.io.addr
+    ctrl.io.DATA_IN         := bist.io.dataOut
+    ctrl.io.LONGWORD_ACCESS := True
+    ctrl.io.WORD_ACCESS     := False
     ctrl.io.BYTE_ACCESS     := False
-    ctrl.io.LONGWORD_ACCESS := False
-    ctrl.io.ADDRESS_IN      := (addr << 1).asBits.resize(ctrl.io.ADDRESS_IN.getWidth)
-    ctrl.io.DATA_IN         := pattern(addr).resize(32)
+    bist.io.dataIn   := ctrl.io.DATA_OUT
+    bist.io.complete := ctrl.io.COMPLETE
 
-    val fsm = new StateMachine {
-      val Init      = new State with EntryPoint
-      val WrIssue   = new State
-      val WrWait    = new State
-      val RdIssue   = new State
-      val RdWait    = new State
-      val Done      = new State
+    val rpt = new BistSpiReporter
+    rpt.io.spiSck  := io.rp_sck
+    rpt.io.spiMosi := io.rp_mosi
+    rpt.io.spiCsN  := io.rp_csn
+    io.rp_miso     := rpt.io.spiMiso
+    rpt.io.state      := bist.io.state
+    rpt.io.phase      := bist.io.phase
+    rpt.io.progress   := bist.io.progress
+    rpt.io.errCnt     := bist.io.errCnt
+    rpt.io.firstAddr  := bist.io.firstAddr
+    rpt.io.firstGot   := bist.io.firstGot
+    rpt.io.firstExp   := bist.io.firstExp
+    rpt.io.firstPhase := bist.io.firstPhase
+    bist.io.restart   := rpt.io.restart
 
-      // REQUEST is a 1-cycle pulse (Issue states are active exactly one cycle).
-      ctrl.io.REQUEST  := isActive(WrIssue) || isActive(RdIssue)
-      ctrl.io.WRITE_EN := isActive(WrIssue) || isActive(WrWait)
-      ctrl.io.READ_EN  := isActive(RdIssue) || isActive(RdWait)
-
-      Init.whenIsActive {
-        when(resetN && ctrl.io.reset_client_n) { addr := 0; goto(WrIssue) }
-      }
-      WrIssue.whenIsActive { busySeen := False; goto(WrWait) }
-      WrWait.whenIsActive {
-        when(!ctrl.io.COMPLETE) { busySeen := True }
-        when(busySeen && ctrl.io.COMPLETE) {
-          when(addr === (N - 1)) { addr := 0; goto(RdIssue) }
-            .otherwise           { addr := addr + 1; goto(WrIssue) }
-        }
-      }
-      RdIssue.whenIsActive { busySeen := False; goto(RdWait) }
-      RdWait.whenIsActive {
-        when(!ctrl.io.COMPLETE) { busySeen := True }
-        when(busySeen && ctrl.io.COMPLETE) {
-          when(ctrl.io.DATA_OUT(15 downto 0) =/= pattern(addr)) { fail := True }
-          when(addr === (N - 1)) { goto(Done) }
-            .otherwise           { addr := addr + 1; goto(RdIssue) }
-        }
-      }
-      Done.whenIsActive { done := True }
-    }
-
-    // Heartbeat / result on led_core.
+    // led_core: steady = running, fast = pass, slow = fail
     val hb = Reg(UInt(27 bits)) init 0
     hb := hb + 1
+    val done = bist.io.state =/= 0
+    val fail = bist.io.state === 2
     io.led_core(0) := Mux(done, Mux(fail, hb(25), hb(23)), False)
 
     // SDRAM pin wiring
@@ -130,7 +116,6 @@ class SdramTestTop extends Component {
     io.sdram_wen  := ctrl.io.SDRAM_WE_N
     io.sdram_dqm  := ctrl.io.SDRAM_udqm ## ctrl.io.SDRAM_ldqm
 
-    // Bidirectional DQ
     ctrl.io.SDRAM_DQ_IN := io.sdram_dq
     when(ctrl.io.SDRAM_DQ_OE) { io.sdram_dq := ctrl.io.SDRAM_DQ_OUT }
   }

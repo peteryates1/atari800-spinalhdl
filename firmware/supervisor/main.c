@@ -358,6 +358,39 @@ static void handle_console(void) {
                  gpio_get(22), gpio_get(15) != t0 ? "toggling" : "static");
       break;
     }
+    case 'm': case 'M': {  // SDRAM BIST status (sdram_test bitstream); 'M' restarts
+      uint8_t tx[24] = {0}, rx[24];
+      if (ch == 'M') {
+        tx[0] = 0xA0;
+        fpga_spi_frame(tx, rx, sizeof tx);
+        cdc_printf("bist: restart sent\r\n");
+        tx[0] = 0;
+        sleep_ms(200);
+      }
+      for (int i = 0; i < 120; i++) {          // up to ~60 s
+        fpga_spi_frame(tx, rx, sizeof tx);
+        if (rx[0] != 0xB5 || rx[22] != 0x5A) {
+          cdc_printf("bist: bad frame (%02x...%02x) - is sdram_test.sof loaded?\r\n", rx[0], rx[22]);
+          break;
+        }
+        uint32_t prog = rx[3] | (rx[4] << 8) | (rx[5] << 16) | ((uint32_t)rx[6] << 24);
+        uint16_t errs = rx[7] | (rx[8] << 8);
+        if (rx[1] == 0) {
+          cdc_printf("bist: RUNNING phase %u addr %07lx errs %u\r\n", rx[2], prog, errs);
+        } else {
+          uint32_t fa = rx[9] | (rx[10] << 8) | (rx[11] << 16) | ((uint32_t)rx[12] << 24);
+          uint32_t fg = rx[13] | (rx[14] << 8) | (rx[15] << 16) | ((uint32_t)rx[16] << 24);
+          uint32_t fe = rx[17] | (rx[18] << 8) | (rx[19] << 16) | ((uint32_t)rx[20] << 24);
+          if (rx[1] == 1) cdc_printf("bist: PASS (errs %u)\r\n", errs);
+          else cdc_printf("bist: FAIL errs %u | first: phase %u addr %07lx got %08lx exp %08lx\r\n",
+                          errs, rx[21], fa, fg, fe);
+          break;
+        }
+        if (ch == 'm') break;                   // single poll for lowercase
+        sleep_ms(500);
+      }
+      break;
+    }
     case 'l': dump_logring(); break;
     case 'h':
     default:

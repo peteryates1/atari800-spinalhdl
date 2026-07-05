@@ -258,13 +258,12 @@ class Atari800Rp2040HdmiLgTop extends Component {
     val sdramPor = Reg(UInt(16 bits)) init 0
     when(sdramPor =/= sdramPor.maxValue) { sdramPor := sdramPor + 1 }
 
-    // Geometry per the QMTech Test04 reference (Sdram_Params.h): 13-bit rows,
-    // 10-bit columns, 2 bank bits - a 64 MB-class part. COLUMN_WIDTH=9 (the
-    // 32 MB Winbond assumption) drove the chip's A9 column bit with stale row
-    // bits: self-consistent at low addresses, scrambled above - which is why
-    // ROM-from-SDRAM failed at every window over 0x124000.
+    // Geometry proven by the full-range SDRAM BIST (boards/.../sdram_test):
+    // 13-bit rows, 9-bit columns, 32 MB. (The 10-column QMTech Test04 config
+    // fails the BIST walk instantly - that reference is for a different
+    // module variant.)
     val sdramCtrl = new SdramStatemachine(
-      ADDRESS_WIDTH = 25, ROW_WIDTH = 13, COLUMN_WIDTH = 10, AP_BIT = 10
+      ADDRESS_WIDTH = 24, ROW_WIDTH = 13, COLUMN_WIDTH = 9, AP_BIT = 10
     )
     sdramCtrl.io.CLK_SYSTEM      := clkSys
     sdramCtrl.io.CLK_SDRAM       := clkSdram
@@ -377,7 +376,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     sdramCtrl.io.WORD_ACCESS     := arb.io.sdram.wordAccess
     sdramCtrl.io.LONGWORD_ACCESS := arb.io.sdram.longwordAccess
     sdramCtrl.io.REFRESH         := arb.io.sdram.refresh
-    sdramCtrl.io.ADDRESS_IN      := B"0" ## arb.io.sdram.addr   // 26-bit port (25-bit byte addr)
+    sdramCtrl.io.ADDRESS_IN      := arb.io.sdram.addr
     sdramCtrl.io.DATA_IN         := arb.io.sdram.dataIn
     arb.io.sdram.complete := sdramCtrl.io.COMPLETE
     arb.io.sdram.dataOut  := sdramCtrl.io.DATA_OUT
