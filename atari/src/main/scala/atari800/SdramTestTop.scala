@@ -18,7 +18,7 @@ class SdramPll extends BlackBox {
 // full-range addressing fault hide for weeks. This version runs SdramBistEngine
 // (address-bit walk + two full 32 MB sweeps with address-unique data + a
 // refresh-retention pass) against OUR SdramStatemachine, configured with the
-// QMTech Test04 reference geometry (13-bit rows, 10-bit columns, 2 bank bits).
+// BIST-proven chip geometry (W9825G6KH-class: 13-bit rows, 9-bit columns).
 //
 // Reporting:
 //   led_core: steady = running, fast blink (~6 Hz) = PASS, slow (~1.5 Hz) = FAIL
@@ -124,4 +124,107 @@ class SdramTestTop extends Component {
 object SdramTestTopSv extends App {
   SpinalConfig(mode = SystemVerilog, targetDirectory = "generated")
     .generate(new SdramTestTop)
+}
+
+// Same full-range BIST, but on the MAIN design's exact clock tree: atari_pll
+// c0 = 57.69 MHz system (engine + reporter), c1 = 115.38 MHz controller,
+// c2 = 115.38 MHz @ -2400 ps driving the chip's clock pin - plus the main
+// project's IOE registers and SDC constraints. The 100 MHz test passing while
+// the Atari corrupts high rows makes THIS configuration the prime suspect;
+// a failure here names the weak address bits directly.
+class SdramTest115Top extends Component {
+  val io = new Bundle {
+    val clk_in     = in  Bool()
+    val sdram_clk  = out Bool()
+    val sdram_cke  = out Bool()
+    val sdram_csn  = out Bool()
+    val sdram_rasn = out Bool()
+    val sdram_casn = out Bool()
+    val sdram_wen  = out Bool()
+    val sdram_ba   = out Bits(2 bits)
+    val sdram_addr = out Bits(13 bits)
+    val sdram_dqm  = out Bits(2 bits)
+    val sdram_dq   = inout(Analog(Bits(16 bits)))
+    val rp_sck     = in  Bool()
+    val rp_mosi    = in  Bool()
+    val rp_csn     = in  Bool()
+    val rp_miso    = out Bool()
+    val led_core   = out Bits(1 bits)
+  }
+  noIoPrefix()
+
+  val pll = new AtariPll
+  pll.io.areset := False
+  pll.io.inclk0 := io.clk_in
+  val clkSys   = pll.io.c0        //  57.69 MHz
+  val clkCtrl  = pll.io.c1        // 115.38 MHz, 0 deg
+  io.sdram_clk := pll.io.c2       // 115.38 MHz, -2400 ps (chip clock pin)
+
+  val sysDomain = ClockDomain(clkSys, config = ClockDomainConfig(resetKind = BOOT))
+
+  val area = new ClockingArea(sysDomain) {
+    val porCnt = Reg(UInt(16 bits)) init 0
+    when(porCnt =/= porCnt.maxValue) { porCnt := porCnt + 1 }
+    val resetN = porCnt.msb
+
+    val ctrl = new SdramStatemachine(
+      ADDRESS_WIDTH = 24, ROW_WIDTH = 13, COLUMN_WIDTH = 9, AP_BIT = 10
+    )
+    ctrl.io.CLK_SYSTEM := clkSys
+    ctrl.io.CLK_SDRAM  := clkCtrl
+    ctrl.io.RESET_N    := resetN
+    ctrl.io.REFRESH    := False
+
+    val bist = new SdramBistEngine(addrWidth = ctrl.io.ADDRESS_IN.getWidth,
+                                   retWaitBits = 26)   // 1.16 s @ 57.69 MHz
+    bist.io.ready := ctrl.io.reset_client_n
+    ctrl.io.REQUEST         := bist.io.request
+    ctrl.io.WRITE_EN        := bist.io.writeEn
+    ctrl.io.READ_EN         := bist.io.readEn
+    ctrl.io.ADDRESS_IN      := bist.io.addr
+    ctrl.io.DATA_IN         := bist.io.dataOut
+    ctrl.io.LONGWORD_ACCESS := True
+    ctrl.io.WORD_ACCESS     := False
+    ctrl.io.BYTE_ACCESS     := False
+    bist.io.dataIn   := ctrl.io.DATA_OUT
+    bist.io.complete := ctrl.io.COMPLETE
+
+    val rpt = new BistSpiReporter
+    rpt.io.spiSck  := io.rp_sck
+    rpt.io.spiMosi := io.rp_mosi
+    rpt.io.spiCsN  := io.rp_csn
+    io.rp_miso     := rpt.io.spiMiso
+    rpt.io.state      := bist.io.state
+    rpt.io.phase      := bist.io.phase
+    rpt.io.progress   := bist.io.progress
+    rpt.io.errCnt     := bist.io.errCnt
+    rpt.io.firstAddr  := bist.io.firstAddr
+    rpt.io.firstGot   := bist.io.firstGot
+    rpt.io.firstExp   := bist.io.firstExp
+    rpt.io.firstPhase := bist.io.firstPhase
+    bist.io.restart   := rpt.io.restart
+
+    val hb = Reg(UInt(27 bits)) init 0
+    hb := hb + 1
+    val done = bist.io.state =/= 0
+    val fail = bist.io.state === 2
+    io.led_core(0) := Mux(done, Mux(fail, hb(25), hb(23)), False)
+
+    io.sdram_addr := ctrl.io.SDRAM_ADDR
+    io.sdram_ba   := ctrl.io.SDRAM_BA1 ## ctrl.io.SDRAM_BA0
+    io.sdram_cke  := ctrl.io.SDRAM_CKE
+    io.sdram_csn  := ctrl.io.SDRAM_CS_N
+    io.sdram_rasn := ctrl.io.SDRAM_RAS_N
+    io.sdram_casn := ctrl.io.SDRAM_CAS_N
+    io.sdram_wen  := ctrl.io.SDRAM_WE_N
+    io.sdram_dqm  := ctrl.io.SDRAM_udqm ## ctrl.io.SDRAM_ldqm
+
+    ctrl.io.SDRAM_DQ_IN := io.sdram_dq
+    when(ctrl.io.SDRAM_DQ_OE) { io.sdram_dq := ctrl.io.SDRAM_DQ_OUT }
+  }
+}
+
+object SdramTest115TopSv extends App {
+  SpinalConfig(mode = SystemVerilog, targetDirectory = "generated")
+    .generate(new SdramTest115Top)
 }

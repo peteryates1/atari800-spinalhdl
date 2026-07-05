@@ -1,0 +1,29 @@
+# Standalone SDRAM BIST on the MAIN design's clocking (57.69/115.38, -2400ps).
+set_global_assignment -name DEVICE 10CL025YU256I7G
+set_global_assignment -name FAMILY "Cyclone 10 LP"
+set_global_assignment -name TOP_LEVEL_ENTITY SdramTest115Top
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION 25.1
+set_global_assignment -name SYSTEMVERILOG_FILE ../../../generated/SdramTest115Top.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../atari_starraiders/atari_pll.sv
+set_global_assignment -name SEARCH_PATH ../../../generated
+set_global_assignment -name SDC_FILE sdram_test_115.sdc
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+set_global_assignment -name SOURCE_TCL_SCRIPT_FILE ../pins.tcl
+
+# IOE-forced SDRAM interface registers, identical to the main project - the
+# fit must not differ from what the Atari build gets.
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to sdram_dq[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_dq[*]
+set_instance_assignment -name FAST_OUTPUT_ENABLE_REGISTER ON -to sdram_dq[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_addr[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_ba[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_dqm[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_rasn
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_casn
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_wen
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_csn
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_cke
+
+set_global_assignment -name LAST_QUARTUS_VERSION "25.1std.0 Lite Edition"

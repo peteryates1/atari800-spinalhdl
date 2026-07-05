@@ -96,8 +96,8 @@ class SdramStatemachine(
   val command_next           = Bits(4 bits)
   val sdram_state_next       = Bits(3 bits)
   val sdram_state_reg        = Bits(3 bits)
-  val delay_next             = Bits(14 bits)
-  val delay_reg              = Bits(14 bits)
+  val delay_next             = Bits(16 bits)
+  val delay_reg              = Bits(16 bits)
   val cycles_since_refresh_next = Bits(11 bits)
   val cycles_since_refresh_reg  = Bits(11 bits)
   val refresh_pending_next   = Bits(12 bits)
@@ -170,7 +170,7 @@ class SdramStatemachine(
   val sdramArea = new ClockingArea(sdramClockDomain) {
     val r_dq_in_reg       = Reg(Bits(16 bits)) init 0
     val r_sdram_state_reg = Reg(Bits(3 bits)) init sdram_state_init addTag(crossClockDomain)
-    val r_delay_reg       = Reg(Bits(14 bits)) init 0
+    val r_delay_reg       = Reg(Bits(16 bits)) init 0
     val r_refresh_pending_reg = Reg(Bits(12 bits)) init 0
     val r_cycles_since_refresh_reg = Reg(Bits(11 bits)) init 0
     val r_data_out_reg    = Reg(Bits(32 bits)) init 0 addTag(crossClockDomain)
@@ -317,7 +317,10 @@ class SdramStatemachine(
       refresh_pending_next := (refresh_pending_reg.asUInt - 1).asBits.resized
     }
   } otherwise {
-    when(cycles_since_refresh_reg === B"11111111111") {
+    // W9825G6KH-6 needs 8192 refreshes per 64 ms (one per 7.8 us). The
+    // original 2048-cycle interval (from the MiST port) is 2.3x too slow at
+    // our clocks; written-once rows decayed while re-accessed rows survived.
+    when(cycles_since_refresh_reg.asUInt === 750) {
       refresh_pending_next := (refresh_pending_reg.asUInt + 1).asBits.resized
       cycles_since_refresh_next := B(0, 11 bits)
     }
@@ -344,9 +347,9 @@ class SdramStatemachine(
 
   switch(sdram_state_reg) {
     is(sdram_state_powerup) {
-      when(delay_reg(13)) {
+      when(delay_reg(15)) {   // 32768 cycles: >= 200 us power-up pause at any clock we use
         sdram_state_next := sdram_state_init_precharge
-        delay_next := B(0, 14 bits)
+        delay_next := B(0, 16 bits)
       }
     }
     is(sdram_state_init) {
@@ -368,17 +371,17 @@ class SdramStatemachine(
           addr_next(6 downto 4) := B"011"
           addr_next(8 downto 7) := B"00"
           addr_next(9) := False
-          if (ROW_WIDTH > 10) addr_next(11 downto 10) := B"00"
+          if (ROW_WIDTH > 10) addr_next(ROW_WIDTH - 1 downto 10) := B(0, ROW_WIDTH - 10 bits)
         }
         is(B"1010") {
           sdram_state_next := sdram_state_idle
-          delay_next := B(0, 14 bits)
+          delay_next := B(0, 16 bits)
         }
       }
     }
     is(sdram_state_idle) {
       reset_client_n_next := True
-      delay_next := B(0, 14 bits)
+      delay_next := B(0, 16 bits)
 
       idle_priority := (request_sreg ^ reply_reg) ## require_refresh ## WRITE_EN_sreg ## READ_EN_sreg
       switch(idle_priority) {
@@ -423,7 +426,7 @@ class SdramStatemachine(
           data_out_next(15 downto 8) := (dq_in_reg(7 downto 0) & repeat(8, dqm_mask_sreg(0))) |
                                         (data_out_reg(15 downto 8) & ~repeat(8, dqm_mask_sreg(0)))
           data_out_next(31 downto 16) := dq_in_reg(15 downto 0)
-          delay_next := B(0, 14 bits)
+          delay_next := B(0, 16 bits)
           reply_next := request_sreg
           sdram_state_next := sdram_state_idle
         }
