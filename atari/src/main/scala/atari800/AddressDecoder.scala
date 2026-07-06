@@ -762,8 +762,9 @@ class AddressDecoder(
               }
             }
             io.romAddr := B"000000" ## B"00" ## addrNext(13 downto 0)
-            io.sdramAddr := sdramOsRomAddr
-            io.sdramAddr(13 downto 0) := addrNext(13 downto 0)
+            // Flat map: OS lives at its natural $D800-$DFFF in the 64K SDRAM
+            // image. sdramAddr already = extendedBank ## addr[13:0] (0xD800+),
+            // so no shadow-region override — the supervisor loads the OS there.
           }
         }
         // OS ROM C0xx-CFxx
@@ -818,8 +819,7 @@ class AddressDecoder(
               }
             }
             io.romAddr := B"000000" ## B"00" ## addrNext(13 downto 0)
-            io.sdramAddr := sdramOsRomAddr
-            io.sdramAddr(13 downto 0) := addrNext(13 downto 0)
+            // Flat map: OS $E000-$FFFF at its natural place in the 64K image.
           }
         }
         default {

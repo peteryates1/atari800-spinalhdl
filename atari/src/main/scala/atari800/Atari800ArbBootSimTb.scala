@@ -107,8 +107,8 @@ object Atari800ArbBootSimTb extends App {
   compiled.doSim("arb_boot", seed = 42) { dut =>
     val os2 = Files.readAllBytes(Paths.get("roms/atarios2.rom"))
     val osb = Files.readAllBytes(Paths.get("roms/atariosb.rom"))
-    for (i <- os2.indices) dut.mock.mem.setBigInt(0x141800 + i, BigInt(os2(i) & 0xFF))
-    for (i <- osb.indices) dut.mock.mem.setBigInt(0x142000 + i, BigInt(osb(i) & 0xFF))
+    for (i <- os2.indices) dut.mock.mem.setBigInt(0xD800 + i, BigInt(os2(i) & 0xFF))
+    for (i <- osb.indices) dut.mock.mem.setBigInt(0xE000 + i, BigInt(osb(i) & 0xFF))
     println(f"preloaded OS; vector bytes ${osb(0x1FFC) & 0xFF}%02x ${osb(0x1FFD) & 0xFF}%02x")
 
     dut.clockDomain.forkStimulus(period = 17640)
@@ -124,7 +124,7 @@ object Atari800ArbBootSimTb extends App {
     while (cycles < 3000000 && vsyncs < 3) {
       dut.clockDomain.waitRisingEdge(); cycles += 1
       val req = dut.atari.io.SDRAM_REQUEST.toBoolean
-      if (req && !lastReq && dut.atari.io.SDRAM_ADDR.toInt >= 0x140000) {
+      if (req && !lastReq && dut.atari.io.SDRAM_ADDR.toInt >= 0xD800 && dut.atari.io.SDRAM_ADDR.toInt <= 0xFFFF) {
         osReads += 1
         if (osReads <= 8) println(f"OS req #$osReads addr=${dut.atari.io.SDRAM_ADDR.toInt}%06x cyc=$cycles")
       }

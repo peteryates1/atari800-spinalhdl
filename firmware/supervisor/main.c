@@ -270,8 +270,8 @@ static void handle_console(void) {
       static FATFS fs;
       if (f_mount(&fs, "", 1) != FR_OK) { cdc_printf("boot: SD mount failed\r\n"); fpga_send_control(0x00); break; }
       struct { const char *path; uint32_t addr; } items[] = {
-        { "/os/atarios2.rom", 0x141800 },   // $D800-$DFFF (2 KB), OS window @0x140000
-        { "/os/atariosb.rom", 0x142000 },   // $E000-$FFFF (8 KB)
+        { "/os/atarios2.rom", 0x00D800 },   // $D800-$DFFF (2 KB), flat 64K image
+        { "/os/atariosb.rom", 0x00E000 },   // $E000-$FFFF (8 KB), flat 64K image
       };
       bool ok = true;
       fpga_send_control(0x10);              // HALT the 6502: quiet SDRAM during load
@@ -438,11 +438,11 @@ static void handle_console(void) {
     }
     case 'v': {   // re-verify loaded os2 twice + dump first 32 bytes vs file
       fpga_send_control(0x10);
-      fpga_verify_content(0x141800, 2048, 0x11e1);
-      fpga_verify_content(0x141800, 2048, 0x11e1);
+      fpga_verify_content(0x00D800, 2048, 0x11e1);
+      fpga_verify_content(0x00D800, 2048, 0x11e1);
       uint8_t mem[32];
       for (int i = 0; i < 32; i++) {   // V len=1 = single-byte peek
-        uint8_t tx[8] = { 0x56, 0x14, 0x18, (uint8_t)i, 0, 0, 1, 0 };
+        uint8_t tx[8] = { 0x56, 0x00, 0xD8, (uint8_t)i, 0, 0, 1, 0 };
         uint8_t rx[10];
         fpga_spi_frame(tx, rx, sizeof tx);
         sleep_ms(2);
@@ -456,7 +456,7 @@ static void handle_console(void) {
         f_read(&f, fb2, 32, &rd); f_close(&f);
       }
       for (int r = 0; r < 2; r++) {
-        cdc_printf("sdram %06x:", 0x141800 + r * 16);
+        cdc_printf("sdram %06x:", 0x00D800 + r * 16);
         for (int i = 0; i < 16; i++) cdc_printf(" %02x", mem[r * 16 + i]);
         cdc_printf("\r\n  file %06x:", r * 16);
         for (int i = 0; i < 16; i++) cdc_printf(" %02x", fb2[r * 16 + i]);

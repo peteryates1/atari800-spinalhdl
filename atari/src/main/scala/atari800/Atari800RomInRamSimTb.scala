@@ -30,8 +30,8 @@ object Atari800RomInRamSimTb extends App {
     // Preload the OS exactly as the supervisor does
     val os2 = Files.readAllBytes(Paths.get("roms/atarios2.rom"))
     val osb = Files.readAllBytes(Paths.get("roms/atariosb.rom"))
-    for (i <- os2.indices) sdram.mem(0x385800 + i) = os2(i)
-    for (i <- osb.indices) sdram.mem(0x386000 + i) = osb(i)
+    for (i <- os2.indices) sdram.mem(0xD800 + i) = os2(i)
+    for (i <- osb.indices) sdram.mem(0xE000 + i) = osb(i)
     println(f"preloaded: os2 ${os2.length} @385800, osb ${osb.length} @386000; vector=${osb(0x1FFC) & 0xFF}%02x ${osb(0x1FFD) & 0xFF}%02x")
 
     dut.clockDomain.forkStimulus(period = 17640)
