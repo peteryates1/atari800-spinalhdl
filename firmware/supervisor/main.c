@@ -172,6 +172,23 @@ static void fpga_send_control(uint8_t bits) {
   fpga_spi_frame(tx, rx, sizeof tx);
 }
 
+// Capture-window offset that centres the picture in the framebuffer. Measured
+// against the standard Atari playfield origin (fixed across graphics modes):
+// hStart shifts content right, vSkip drops top-border lines. These are the
+// default values, applied at startup and on every boot; a future SD config
+// file (e.g. /config.txt) will override them by writing new values here.
+#define FB_HSTART 4
+#define FB_VSKIP  21
+
+static uint8_t g_fb_hstart = FB_HSTART;
+static uint8_t g_fb_vskip  = FB_VSKIP;
+
+static void fpga_set_offset(uint8_t hstart, uint8_t vskip) {
+  uint8_t tx[3] = {'G', hstart, vskip};
+  uint8_t rx[3];
+  fpga_spi_frame(tx, rx, sizeof tx);
+}
+
 // Bit-banged K frame at ~20 kHz: same wire protocol, glacial timing.
 // Splits "SPI speed/format problem" from "FPGA receive logic problem".
 static void fpga_bitbang_key_a(void) {
@@ -289,6 +306,7 @@ static void handle_console(void) {
       // while we load. The reset that matters is the one AFTER the load.
       if (ok) {
         cdc_printf("boot: OS loaded+verified, resetting Atari\r\n");
+        fpga_set_offset(g_fb_hstart, g_fb_vskip);  // re-apply (FPGA may have been reprogrammed)
         fpga_send_control(0x11);            // release halt via reset
         fpga_send_control(0x00);
       } else {
@@ -474,6 +492,36 @@ static void handle_console(void) {
       }
       break;
     }
+    case 'o': {   // o <hStart> <vSkip> : set capture-window offset (live, no rebuild)
+      char line[32]; int n = 0;
+      absolute_time_t dl = make_timeout_time_ms(500);
+      while (n < 31 && absolute_time_diff_us(get_absolute_time(), dl) > 0) {
+        tud_task(); uint8_t c2;
+        if (tud_cdc_available() && tud_cdc_read(&c2, 1) == 1) {
+          if (c2 == '\r' || c2 == '\n') break;
+          line[n++] = (char)c2; dl = make_timeout_time_ms(500);
+        }
+      }
+      line[n] = 0;
+      char *sp = line;
+      g_fb_hstart = (uint8_t)strtoul(sp, &sp, 10);
+      g_fb_vskip  = (uint8_t)strtoul(sp, &sp, 10);
+      fpga_set_offset(g_fb_hstart, g_fb_vskip);
+      cdc_printf("capture offset set: hStart=%d vSkip=%d\r\n", g_fb_hstart, g_fb_vskip);
+      break;
+    }
+    case 'G': {   // report the live-content bounding box inside the framebuffer
+      uint8_t z[24] = {0}, st[24];
+      fpga_spi_frame(z, st, sizeof z);
+      // status stream byte 0 is the 0xA5 magic, so field is(N) lands at byte N+1
+      int minX = st[15] | (st[16] << 8), maxX = st[17] | (st[18] << 8);
+      int minY = st[19] | (st[20] << 8), maxY = st[21] | (st[22] << 8);
+      cdc_printf("fb content bbox: x=%d..%d (w=%d)  y=%d..%d (h=%d)  buffer 384x288\r\n",
+                 minX, maxX, maxX - minX + 1, minY, maxY, maxY - minY + 1);
+      cdc_printf("  left margin=%d right=%d  top=%d bottom=%d\r\n",
+                 minX, 383 - maxX, minY, 287 - maxY);
+      break;
+    }
     case 'l': dump_logring(); break;
     case 'h':
     default:
@@ -558,6 +606,7 @@ int main(void) {
 
   fpga_spi_init();
   fpga_send_control(0x00);
+  fpga_set_offset(g_fb_hstart, g_fb_vskip);   // centre the picture by default
 
   // Cold-boot re-enumeration. tud_init() above asserts the USB pull-up and
   // presents the device before tuh_init()/fpga_spi_init() run, but those run

@@ -17,6 +17,7 @@ class VideoFbWriteSpec extends AnyFunSuite {
       dut.io.pixStrobe #= false; dut.io.hsync #= false; dut.io.vsync #= false
       dut.io.blank #= false; dut.io.colour #= 0
       dut.io.wrComplete #= false
+      dut.io.hStart #= 0; dut.io.vSkip #= 0
 
       // SDRAM mock with ARBITER-STYLE deferred sampling: the flags/addr/data
       // are read N cycles after the request pulse, at "serve" time - exactly

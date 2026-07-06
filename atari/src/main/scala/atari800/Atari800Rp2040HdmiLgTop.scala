@@ -357,6 +357,10 @@ class Atari800Rp2040HdmiLgTop extends Component {
     val dbgStickyDrop = dropCnt =/= 0
     kbd.io.meterLate := lateCnt
     kbd.io.meterDrop := dropCnt
+    kbd.io.bbMinX := fbWrite.io.bbMinX
+    kbd.io.bbMaxX := fbWrite.io.bbMaxX
+    kbd.io.bbMinY := fbWrite.io.bbMinY
+    kbd.io.bbMaxY := fbWrite.io.bbMaxY
 
 
     // Supervisor SDRAM loader -> arbiter port D (lowest priority)
@@ -434,6 +438,22 @@ class Atari800Rp2040HdmiLgTop extends Component {
     vidHs.addTag(crossClockDomain)
     vidVs.addTag(crossClockDomain)
   }
+
+  // Capture-window centring offset. Lives in a BOOT-reset domain (same clkSys,
+  // but only reset at FPGA config) so it survives the Atari/console reset that
+  // resets sysArea. Defaults centre the standard 320x192 playfield; the SPI 'G'
+  // command (offsetWr pulse from the keyboard bridge, same clock) overrides it
+  // — the hook a future SD config file writes through.
+  val cfgArea = new ClockingArea(ClockDomain(clkSys, config = ClockDomainConfig(resetKind = BOOT))) {
+    val hOff = Reg(UInt(9 bits)) init 4
+    val vOff = Reg(UInt(9 bits)) init 21
+    when(sysArea.kbd.io.offsetWr) {
+      hOff := sysArea.kbd.io.offsetH
+      vOff := sysArea.kbd.io.offsetV
+    }
+  }
+  sysArea.fbWrite.io.hStart := cfgArea.hOff
+  sysArea.fbWrite.io.vSkip  := cfgArea.vOff
 
   // =========================================================================
   // HDMI 720p output: the framebuffer scaler's 8-bit GTIA colour index goes

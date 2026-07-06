@@ -65,8 +65,20 @@ class RpAtariKeyboard extends Component {
     val ldComplete = in  Bool()
     // debug
     val frameCount = out UInt(8 bits)
+    // capture-window offset write (SPI 'G' command). The holding registers
+    // live in a BOOT-reset domain in the top (survive the Atari reset, which
+    // resets this component); offsetWr pulses when a new pair arrives.
+    val offsetH    = out UInt(9 bits)
+    val offsetV    = out UInt(9 bits)
+    val offsetWr   = out Bool()
     val meterLate  = in UInt(16 bits)   // fb-read late-line count (status 10,11)
     val meterDrop  = in UInt(16 bits)   // fb-write dropped-quad count (12,13)
+    // captured-content bounding box (status 14..21): the live picture's
+    // extent inside the framebuffer, for centring the capture window
+    val bbMinX     = in UInt(9 bits)
+    val bbMaxX     = in UInt(9 bits)
+    val bbMinY     = in UInt(9 bits)
+    val bbMaxY     = in UInt(9 bits)
   }
 
   // ---- Input synchronisers (SPI clock << sys clock; 3-stage) ----
@@ -123,7 +135,7 @@ class RpAtariKeyboard extends Component {
   // ---- MISO status stream (slave shifts on falling edge, mode 0) ----
   val frameCnt = Reg(UInt(8 bits)) init 0
   val shiftOut = Reg(Bits(8 bits)) init 0
-  val outIdx   = Reg(UInt(4 bits)) init 0
+  val outIdx   = Reg(UInt(5 bits)) init 0
   when(csFall) { shiftOut := B(0xA5, 8 bits); outIdx := 0 }
   when(!csN && sckFall) {
     when(bitCnt === 0) {   // byte boundary: load the next status byte whole
@@ -145,6 +157,14 @@ class RpAtariKeyboard extends Component {
           is(11) { shiftOut := io.meterLate(15 downto 8).asBits }
           is(12) { shiftOut := io.meterDrop(7 downto 0).asBits }
           is(13) { shiftOut := io.meterDrop(15 downto 8).asBits }
+          is(14) { shiftOut := io.bbMinX(7 downto 0).asBits }
+          is(15) { shiftOut := (B(0, 7 bits) ## io.bbMinX(8)) }
+          is(16) { shiftOut := io.bbMaxX(7 downto 0).asBits }
+          is(17) { shiftOut := (B(0, 7 bits) ## io.bbMaxX(8)) }
+          is(18) { shiftOut := io.bbMinY(7 downto 0).asBits }
+          is(19) { shiftOut := (B(0, 7 bits) ## io.bbMinY(8)) }
+          is(20) { shiftOut := io.bbMaxY(7 downto 0).asBits }
+          is(21) { shiftOut := (B(0, 7 bits) ## io.bbMaxY(8)) }
           default { shiftOut := B(0, 8 bits) }
         }
       }
@@ -173,6 +193,10 @@ class RpAtariKeyboard extends Component {
   val nextOption = Reg(Bool()) init False
 
   val ctrlBits = Reg(Bits(5 bits)) init 0
+  val hStartReg   = Reg(UInt(9 bits)) init 0   // transient carriers across the frame
+  val vSkipReg    = Reg(UInt(9 bits)) init 0
+  val offsetWrReg = Reg(Bool()) init False
+  offsetWrReg := False
 
   val hidMap = Mem(Bits(7 bits), AtariHidMap.table.map(v => B(v, 7 bits)))
 
@@ -203,6 +227,10 @@ class RpAtariKeyboard extends Component {
               nextKeys(mapped(5 downto 0).asUInt) := True
             }
           }
+        }
+        is(B(0x47, 8 bits)) {              // 'G': set capture-window offset
+          when(byteIdx === 1) { hStartReg := byteVal.asUInt.resize(9) }
+          when(byteIdx === 2) { vSkipReg  := byteVal.asUInt.resize(9); offsetWrReg := True }
         }
         is(B(0x43, 8 bits)) {              // 'C': control bits
           when(byteIdx === 1) { ctrlBits := byteVal(4 downto 0) }
@@ -302,6 +330,9 @@ class RpAtariKeyboard extends Component {
   io.ctrlSelect   := ctrlBits(2)
   io.ctrlOption   := ctrlBits(3)
   io.ctrlHalt     := ctrlBits(4)
+  io.offsetH      := hStartReg
+  io.offsetV      := vSkipReg
+  io.offsetWr     := offsetWrReg
   io.frameCount   := frameCnt
 
   // ---- KEYBOARD_RESPONSE generation (matches Ch376UsbKeyboard) ----

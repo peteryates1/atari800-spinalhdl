@@ -36,6 +36,12 @@ class VideoFbWrite(
     // (including the Atari's RAM -> crash at boot; found on hardware when the
     // clear sweep started the instant reset released).
     val enable    = in  Bool()
+    // Runtime capture-window offset (centres the picture in the buffer without
+    // a rebuild). hStart: fb column where each line's capture begins (shifts
+    // content right). vSkip: lines skipped after vsync before capture starts
+    // (shifts content up, dropping that many top-border lines).
+    val hStart    = in  UInt(9 bits) default U(0, 9 bits)
+    val vSkip     = in  UInt(9 bits) default U(0, 9 bits)
     // ---- video input (sys domain) ----
     val pixStrobe = in  Bool()          // pulse: a new pixel sample is valid
     val colour    = in  Bits(8 bits)    // GTIA colour index
@@ -56,6 +62,13 @@ class VideoFbWrite(
     val dbgDropTgl = out Bool()         // toggles per dropped quad (rate meter)
     val dbgLines   = out UInt(10 bits)  // hsyncs counted in the previous frame
     val dbgEdgeY   = out UInt(11 bits)  // y of the LAST dark->bright line transition
+    // Bounding box of non-black captured content in the previous frame (fb
+    // coordinates). Tells us exactly where the live picture sits inside the
+    // 384x288 buffer, so the capture window can be centred without guessing.
+    val bbMinX     = out UInt(9 bits)
+    val bbMaxX     = out UInt(9 bits)
+    val bbMinY     = out UInt(9 bits)
+    val bbMaxY     = out UInt(9 bits)
   }
 
   // ---- Capture side: track x/y, push {addr,data} on each active pixel ----
@@ -85,12 +98,24 @@ class VideoFbWrite(
   val edgeYAcc   = Reg(UInt(11 bits)) init 0
   val edgeY      = Reg(UInt(11 bits)) init 0
   io.dbgEdgeY := edgeY
+  // Bounding box accumulators (reset each frame; latched at vsync).
+  val bbMinXA = Reg(UInt(9 bits)) init 511
+  val bbMaxXA = Reg(UInt(9 bits)) init 0
+  val bbMinYA = Reg(UInt(9 bits)) init 511
+  val bbMaxYA = Reg(UInt(9 bits)) init 0
+  val bbMinX  = Reg(UInt(9 bits)) init 0
+  val bbMaxX  = Reg(UInt(9 bits)) init 0
+  val bbMinY  = Reg(UInt(9 bits)) init 0
+  val bbMaxY  = Reg(UInt(9 bits)) init 0
+  io.bbMinX := bbMinX; io.bbMaxX := bbMaxX; io.bbMinY := bbMinY; io.bbMaxY := bbMaxY
 
   require(width % 4 == 0, "width must be a multiple of 4 (packed 32-bit writes)")
   val fifo = StreamFifo(FbWriteReq(addrWidth), fifoDepth)
 
   val inFrame = x < width && y < height
   val armed = Reg(Bool()) init True
+  val skipCnt = Reg(UInt(9 bits)) init 0          // top-border lines still to skip
+  val xStart  = (io.hStart(8 downto 2) @@ U"2'b00").resize(11)  // 4-aligned (quad packing)
   val chk = Mux(x(5) ^ y(5), B(0x1A, 8 bits), B(0x86, 8 bits))
   // Pixels are packed 4-to-a-word (SDRAM byte writes cannot keep up with the
   // pixel rate once reads have priority): bytes 0..2 of each quad accumulate
@@ -133,7 +158,10 @@ class VideoFbWrite(
         } otherwise { x := x + 1 }
       }
     } otherwise {
-      when(io.pixStrobe && !io.blank && inFrame) {
+      // capture only after the top-border skip (skipCnt == 0)
+      val capActive = skipCnt === 0
+      fifo.io.push.valid := push && capActive
+      when(io.pixStrobe && !io.blank && inFrame && capActive) {
         when(x(1 downto 0) =/= 3) {
           quad.subdivideIn(8 bits)(x(1 downto 0)) := pixData
           x := x + 1
@@ -141,11 +169,21 @@ class VideoFbWrite(
           when(fifo.io.push.ready) { x := x + 1 }
             .otherwise { overflow := True; dropTgl := !dropTgl; x := x + 1 }
         }
-        when(pixData =/= 0) { nzCnt := nzCnt + 1 }
+        when(pixData =/= 0) {
+          nzCnt := nzCnt + 1
+          when(x.resize(9) < bbMinXA) { bbMinXA := x.resize(9) }
+          when(x.resize(9) > bbMaxXA) { bbMaxXA := x.resize(9) }
+          when(y.resize(9) < bbMinYA) { bbMinYA := y.resize(9) }
+          when(y.resize(9) > bbMaxYA) { bbMaxYA := y.resize(9) }
+        }
       }
       when(hsRise) {
-        x := 0
-        when(armed) { armed := False }
+        x := xStart
+        when(skipCnt =/= 0) {
+          skipCnt := skipCnt - 1
+          when(skipCnt === 1) { armed := False }   // last skip line consumes the arm
+        }
+          .elsewhen(armed) { armed := False }
           .elsewhen(y =/= (height - 1)) { y := y + 1 }
         val bright = nzCnt > 200
         when(bright && !prevBright) { edgeYAcc := y }
@@ -153,8 +191,11 @@ class VideoFbWrite(
         nzCnt := 0
       }
       when(vsRise) {
-        x := 0; y := 0; armed := True; frameCount := frameCount + 1
+        x := xStart; y := 0; armed := True; frameCount := frameCount + 1
+        skipCnt := io.vSkip
         edgeY := edgeYAcc; prevBright := False
+        bbMinX := bbMinXA; bbMaxX := bbMaxXA; bbMinY := bbMinYA; bbMaxY := bbMaxYA
+        bbMinXA := 511; bbMaxXA := 0; bbMinYA := 511; bbMaxYA := 0
       }
     }
   }

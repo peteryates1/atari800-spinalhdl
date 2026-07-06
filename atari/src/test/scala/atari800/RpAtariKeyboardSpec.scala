@@ -46,6 +46,8 @@ class RpAtariKeyboardSpec extends AnyFunSuite {
       dut.io.ldRdData #= 0
       dut.io.meterLate #= 0
       dut.io.meterDrop #= 0
+      dut.io.bbMinX #= 0; dut.io.bbMaxX #= 0
+      dut.io.bbMinY #= 0; dut.io.bbMaxY #= 0
       dut.clockDomain.waitSampling(10)
       body(dut)
     }
