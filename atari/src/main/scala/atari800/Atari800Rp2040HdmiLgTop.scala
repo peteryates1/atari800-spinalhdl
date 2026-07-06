@@ -204,7 +204,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // atari.io.HALT is driven below (held until SDRAM init completes)
     atari.io.TURBO_VBLANK_ONLY         := False
     atari.io.THROTTLE_COUNT_6502       := B(31, 6 bits)
-    atari.io.emulated_cartridge_select := B(0, 6 bits)
+    // emulated_cartridge_select driven from cfgArea (BOOT domain) below
     atari.io.freezer_enable            := False
     atari.io.freezer_activate          := False
     atari.io.atari800mode              := True
@@ -293,11 +293,14 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // Sample at the Atari hi-res pixel rate (sys/8 ~ 7.2 MHz), phase-locked to
     // each line by hsync. colourEnable (sys/2 ~ 28.8 MHz) is 4x too fast: the
     // 384-wide buffer filled after ~96 real pixels (image squashed to the left).
-    val pixDiv    = Reg(UInt(3 bits)) init 0
-    val capHsPrev = RegNext(atari.io.VIDEO_HS) init False
-    pixDiv := pixDiv + 1
-    when(atari.io.VIDEO_HS && !capHsPrev) { pixDiv := 0 }
-    fbWrite.io.pixStrobe := pixDiv === 7
+    // Lock the capture strobe to the core's real hi-res pixel clock (one pulse
+    // per displayed pixel) instead of a free-running sys/8 counter - the free
+    // divider drifts within a line, so no fixed phase samples cleanly (residual
+    // speckle on fine detail). pixPhase now selects a small settling delay
+    // (cycles after the pixel-clock edge) so we sample VIDEO_B once it's stable.
+    val hrClk  = atari.io.dbgColourClockHighres
+    val hrHist = History(hrClk, 8, init = False)   // hrHist(k) = pulse k cycles ago
+    // pixStrobe driven from after cfgArea (phase lives in the BOOT-reset cfgArea)
     fbWrite.io.colour    := atari.io.VIDEO_B
     fbWrite.io.hsync     := atari.io.VIDEO_HS
     fbWrite.io.vsync     := atari.io.VIDEO_VS
@@ -335,6 +338,8 @@ class Atari800Rp2040HdmiLgTop extends Component {
     arb.io.c.longwordAccess := !fbRead.io.rdWide
     arb.io.c.wideAccess     := fbRead.io.rdWide
     fbRead.io.rdData        := arb.io.c.wideOut
+    // Double buffering: display reads the buffer capture last completed.
+    fbRead.io.readBuf       := fbWrite.io.readyBuf
 
     // Sticky probe: has the Atari (port A) ever addressed the upper SDRAM
     // regions (bit 22 set = OS/cart windows at 0x50xxxx/0x70xxxx)?
@@ -357,6 +362,18 @@ class Atari800Rp2040HdmiLgTop extends Component {
     val dbgStickyDrop = dropCnt =/= 0
     kbd.io.meterLate := lateCnt
     kbd.io.meterDrop := dropCnt
+
+    // Port-A (Atari CPU+ANTIC) SDRAM stall meter: the arbiter cannot preempt an
+    // in-flight (now wide, 8-beat) framebuffer transaction, so port A can be
+    // blocked past a single-access time. Track the worst stall (cycles the
+    // Atari waited for one SDRAM access) since arming - if it's ~a wide-burst
+    // length, head-of-line blocking is starving ANTIC's display DMA.
+    val aBusy    = arb.io.a.request && !arb.io.a.complete
+    val aWaitCnt = Reg(UInt(10 bits)) init 0
+    val aMaxWait = Reg(UInt(10 bits)) init 0
+    when(aBusy) { aWaitCnt := aWaitCnt + 1 } otherwise { aWaitCnt := 0 }
+    when(meterArm.msb && aWaitCnt > aMaxWait) { aMaxWait := aWaitCnt }
+    kbd.io.aMaxWait := aMaxWait
     kbd.io.bbMinX := fbWrite.io.bbMinX
     kbd.io.bbMaxX := fbWrite.io.bbMaxX
     kbd.io.bbMinY := fbWrite.io.bbMinY
@@ -447,13 +464,19 @@ class Atari800Rp2040HdmiLgTop extends Component {
   val cfgArea = new ClockingArea(ClockDomain(clkSys, config = ClockDomainConfig(resetKind = BOOT))) {
     val hOff = Reg(UInt(9 bits)) init 4
     val vOff = Reg(UInt(9 bits)) init 21
+    val cart = Reg(Bits(6 bits)) init 0        // 0 = no cart; set by supervisor 'X'
+    val pixPhase = Reg(UInt(3 bits)) init 7    // capture sample phase (sweepable)
     when(sysArea.kbd.io.offsetWr) {
       hOff := sysArea.kbd.io.offsetH
       vOff := sysArea.kbd.io.offsetV
     }
+    when(sysArea.kbd.io.cartWr) { cart := sysArea.kbd.io.cartSel }
+    when(sysArea.kbd.io.pixPhaseWr) { pixPhase := sysArea.kbd.io.pixPhase }
   }
   sysArea.fbWrite.io.hStart := cfgArea.hOff
   sysArea.fbWrite.io.vSkip  := cfgArea.vOff
+  sysArea.fbWrite.io.pixStrobe := sysArea.hrHist(cfgArea.pixPhase)
+  sysArea.atari.io.emulated_cartridge_select := cfgArea.cart
 
   // =========================================================================
   // HDMI 720p output: the framebuffer scaler's 8-bit GTIA colour index goes

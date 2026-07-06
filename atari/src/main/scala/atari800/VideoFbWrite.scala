@@ -58,6 +58,11 @@ class VideoFbWrite(
     val wrComplete = in  Bool()
     // ---- status ----
     val frameCount = out UInt(16 bits)
+    // Double buffering: the just-completed frame's buffer index, published at
+    // vsync. The display reads this buffer while capture fills the other, so
+    // the 50 Hz PAL write and 60 Hz 720p read never touch the same buffer -
+    // no tearing of moving content (the "photon noise" twinkle).
+    val readyBuf   = out UInt(2 bits)
     val overflow   = out Bool()         // sticky: a pixel was dropped (FIFO full)
     val dbgDropTgl = out Bool()         // toggles per dropped quad (rate meter)
     val dbgLines   = out UInt(10 bits)  // hsyncs counted in the previous frame
@@ -121,8 +126,22 @@ class VideoFbWrite(
   // pixel rate once reads have priority): bytes 0..2 of each quad accumulate
   // in `quad`, the 4th completes the word and pushes one 32-bit write.
   val quad = Reg(Bits(24 bits)) init 0
+  // Triple buffer: capture cycles writeBuf 0->1->2->0, publishing each as
+  // readyBuf when its frame completes. Reader (60 Hz) is faster than writer
+  // (50 Hz PAL), so two buffers can tear when the writer laps back onto the
+  // buffer being displayed; three buffers cannot (the writer needs two full
+  // frames to return, longer than one display frame). Buffers 0x40000 apart.
+  val writeBuf   = Reg(UInt(2 bits)) init 0
+  val readyBufR  = Reg(UInt(2 bits)) init 0
+  io.readyBuf := readyBufR
+  // The reset clear sweep runs over all three buffers (clearBuf cycles) so no
+  // buffer's borders ever show stale SDRAM.
+  val clearing = RegInit(Bool(clearOnReset))
+  val clearBuf = Reg(UInt(2 bits)) init 0
+  val bufSel    = Mux(clearing, clearBuf, writeBuf)
+  val bufOffset = (bufSel << 18).resize(addrWidth)
   fifo.io.push.payload.addr :=
-    (U(fbBase, addrWidth bits) + (y << strideLog2) + (x(10 downto 2) @@ U"2'b00")).resize(addrWidth)
+    (U(fbBase, addrWidth bits) + bufOffset + (y << strideLog2) + (x(10 downto 2) @@ U"2'b00")).resize(addrWidth)
 
   if (debugFill) {
     // Free-running sweep of the whole framebuffer, ignoring ALL video inputs —
@@ -137,9 +156,8 @@ class VideoFbWrite(
         .otherwise { x := x + 1 }
     } otherwise { overflow := True }   // FIFO full => SDRAM writes not draining
   } else {
-    // One black sweep of the whole buffer after reset (before capturing) so no
+    // One black sweep of BOTH buffers after reset (before capturing) so no
     // stale SDRAM content survives where the capture window doesn't reach.
-    val clearing = RegInit(Bool(clearOnReset))
     val pixData = (if (debugPattern) chk else io.colour)
     val push = !clearing && io.pixStrobe && !io.blank && inFrame && x(1 downto 0) === 3
     fifo.io.push.valid        := push
@@ -153,7 +171,11 @@ class VideoFbWrite(
       } elsewhen(fifo.io.push.ready) {
         when(x === (width - 1)) {
           x := 0
-          when(y === (height - 1)) { y := 0; clearing := False; armed := True }
+          when(y === (height - 1)) {
+            y := 0
+            when(clearBuf =/= 2) { clearBuf := clearBuf + 1 }   // sweep next buffer
+              .otherwise { clearing := False; armed := True }
+          }
             .otherwise { y := y + 1 }
         } otherwise { x := x + 1 }
       }
@@ -193,6 +215,8 @@ class VideoFbWrite(
       when(vsRise) {
         x := xStart; y := 0; armed := True; frameCount := frameCount + 1
         skipCnt := io.vSkip
+        readyBufR := writeBuf                                  // frame just captured is ready
+        writeBuf  := Mux(writeBuf === 2, U(0, 2 bits), writeBuf + 1)  // next of three
         edgeY := edgeYAcc; prevBright := False
         bbMinX := bbMinXA; bbMaxX := bbMaxXA; bbMinY := bbMinYA; bbMaxY := bbMaxYA
         bbMinXA := 511; bbMaxXA := 0; bbMinYA := 511; bbMaxYA := 0

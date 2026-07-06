@@ -46,6 +46,9 @@ class VideoFbRead2(
     val rdWide     = out Bool()
     val rdComplete = in  Bool()
     val rdData     = in  Bits(256 bits)
+    // Double buffering: which buffer the capture last completed. Latched at the
+    // display's own frame boundary so it never switches mid-frame.
+    val readBuf    = in  UInt(2 bits) default U(0, 2 bits)
     val dbgBeat    = out Bool()   // toggles/blinks while reads are completing
     val dbgBusy    = out Bool()   // fetch state-machine busy
     val dbgReq     = out Bool()   // pixel->fetch request toggle (reqTgl)
@@ -73,6 +76,7 @@ class VideoFbRead2(
   // cross-domain handshake registers
   val reqTgl   = Bool()   // pixel -> fetch: new line to load
   val ackTgl   = Bool()   // fetch -> pixel: load done
+  val readBufPub = UInt(2 bits) // pixel -> fetch: which buffer to read (per-frame stable)
   val wantSrcY = UInt(log2Up(srcH) bits)
   val wantBank = UInt(log2Up(numBanks) bits)
 
@@ -83,6 +87,12 @@ class VideoFbRead2(
     val lineEnd = hc === (hTotal - 1)
     hc := Mux(lineEnd, U(0), hc + 1)
     when(lineEnd) { vc := Mux(vc === (vTotal - 1), U(0), vc + 1) }
+
+    // Latch the display's read buffer at each frame boundary (never mid-frame).
+    val readBufDisp = Reg(UInt(2 bits)) init 0
+    val readBufSync = BufferCC(io.readBuf, U(0, 2 bits))
+    when(lineEnd && vc === (vTotal - 1)) { readBufDisp := readBufSync }
+    readBufPub := readBufDisp
 
     val deC = (hc < hActive) && (vc < vActive)
     val hsC = hc >= (hActive + hFront) && hc < (hActive + hFront + hSync)
@@ -236,7 +246,9 @@ class VideoFbRead2(
     unload.simPublic(); dataR.simPublic(); fx.simPublic()   // 1..4 = writing byte (unload-1), 0 = idle
     io.rdReq  := rdReqR
     io.rdWide := Bool(fetchBytes == 32)
-    io.rdAddr := (U(fbBase, addrWidth bits) + (ySnap << strideLog2) + fx).asBits.resize(addrWidth)
+    val readBufFetch = BufferCC(readBufPub, U(0, 2 bits))
+    val rdBufOffset  = (readBufFetch << 18).resize(addrWidth)
+    io.rdAddr := (U(fbBase, addrWidth bits) + rdBufOffset + (ySnap << strideLog2) + fx).asBits.resize(addrWidth)
     // wantSrcY/wantBank change on the SAME pixel cycle as the reqTgl toggle, so
     // when the synchronised edge is first seen the synchronised bus may still be
     // mid-transition (bits can straddle the async sampling edge on silicon —

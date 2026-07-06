@@ -11,7 +11,7 @@ import java.nio.file.{Files, Paths}
 // pulse-shape or toggle-handshake bug in the ROM fetch path shows up here
 // and nowhere else. OS window at 0x140000 (current decoder map).
 // Run: sbt "atari/runMain atari800.Atari800ArbBootSimTb"
-class Atari800ArbBootHarness extends Component {
+class Atari800ArbBootHarness(cartMode: Int = 0) extends Component {
   val io = new Bundle {
     val videoVs   = out Bool()
     val osReadSeen = out Bool()
@@ -26,7 +26,7 @@ class Atari800ArbBootHarness extends Component {
   atari.io.RAM_SELECT := B"011"
   atari.io.TURBO_VBLANK_ONLY := False
   atari.io.THROTTLE_COUNT_6502 := B(31, 6 bits)
-  atari.io.emulated_cartridge_select := B(0, 6 bits)
+  atari.io.emulated_cartridge_select := B(cartMode, 6 bits)
   atari.io.freezer_enable := False
   atari.io.freezer_activate := False
   atari.io.atari800mode := True
@@ -138,5 +138,64 @@ object Atari800ArbBootSimTb extends App {
       lastVs = vs
     }
     println(s"done: cycles=$cycles osReqs=$osReads vsyncs=$vsyncs pcPages=${pcPages.map(_.toHexString).mkString(",")}")
+  }
+}
+
+// Cart-boot variant: OS at flat $D800/$E000 AND an 8K cart at flat $A000,
+// with emulated_cartridge_select=1 (CART_MODE_8K). Confirms the flat cart
+// read + OS cart-detection works before hardware.
+// Run: sbt "atari/runMain atari800.Atari800CartBootSimTb"
+object Atari800CartBootSimTb extends App {
+  val compiled = SimConfig
+    .withConfig(SpinalConfig(
+      defaultClockDomainFrequency = FixedFrequency(56.67 MHz),
+      defaultConfigForClockDomains = ClockDomainConfig(resetKind = ASYNC, resetActiveLevel = LOW)
+    ))
+    .workspacePath("sim_workspace")
+    .addSimulatorFlag("-Wno-WIDTHEXPAND")
+    .addSimulatorFlag("-Wno-WIDTHTRUNC")
+    .addSimulatorFlag("--x-initial-edge")
+    .addSimulatorFlag("--x-assign 0")
+    .compile(new Atari800ArbBootHarness(cartMode = 1))   // CART_MODE_8K
+
+  compiled.doSim("cart_boot", seed = 42) { dut =>
+    val os2 = Files.readAllBytes(Paths.get("roms/atarios2.rom"))
+    val osb = Files.readAllBytes(Paths.get("roms/atariosb.rom"))
+    val cart = Files.readAllBytes(Paths.get("roms/Star Raiders.rom"))
+    for (i <- os2.indices)  dut.mock.mem.setBigInt(0xD800 + i, BigInt(os2(i) & 0xFF))
+    for (i <- osb.indices)  dut.mock.mem.setBigInt(0xE000 + i, BigInt(osb(i) & 0xFF))
+    for (i <- cart.indices) dut.mock.mem.setBigInt(0xA000 + i, BigInt(cart(i) & 0xFF))
+    println(f"preloaded OS + 8K cart; cart vectors BFFA=${cart(0x1FFA) & 0xFF}%02x${cart(0x1FFB) & 0xFF}%02x " +
+            f"BFFC=${cart(0x1FFC) & 0xFF}%02x BFFE=${cart(0x1FFE) & 0xFF}%02x${cart(0x1FFF) & 0xFF}%02x")
+
+    dut.clockDomain.forkStimulus(period = 17640)
+    dut.clockDomain.waitRisingEdge(10)
+    dut.clockDomain.assertReset()
+    dut.clockDomain.waitRisingEdge(100)
+    dut.clockDomain.deassertReset()
+
+    var vsyncs = 0; var lastVs = false
+    var cartReads = 0; var lastReq = false
+    var cycles = 0
+    val pcPages = scala.collection.mutable.LinkedHashSet[Int]()
+    while (cycles < 4000000 && vsyncs < 3) {
+      dut.clockDomain.waitRisingEdge(); cycles += 1
+      val req = dut.atari.io.SDRAM_REQUEST.toBoolean
+      val a = dut.atari.io.SDRAM_ADDR.toInt
+      if (req && !lastReq && a >= 0xA000 && a <= 0xBFFF) {
+        cartReads += 1
+        if (cartReads <= 8) println(f"cart read #$cartReads addr=$a%06x cyc=$cycles")
+      }
+      lastReq = req
+      if (dut.atari.atari800xl.cpu6502.CPU_ENABLE.toBoolean) {
+        val pc = dut.atari.atari800xl.cpu6502.debugPc.toInt
+        if (!pcPages.contains(pc >> 12)) { pcPages += (pc >> 12); println(f"CPU page ${pc >> 12}%X000 (PC=$pc%04X) cyc=$cycles") }
+      }
+      val vs = dut.io.videoVs.toBoolean
+      if (vs && !lastVs) { vsyncs += 1; println(s"vsync #$vsyncs cyc=$cycles") }
+      lastVs = vs
+    }
+    val ranCart = pcPages.contains(0xA) || pcPages.contains(0xB)
+    println(s"done: cycles=$cycles cartReads=$cartReads vsyncs=$vsyncs pcPages=${pcPages.map(_.toHexString).mkString(",")} ranInCart=$ranCart")
   }
 }

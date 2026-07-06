@@ -189,6 +189,7 @@ class Atari800Core(
     val dbgColbk                = out Bits(7 bits)
     val dbgVisibleLive          = out Bool()
     val dbgColourClock          = out Bool()
+    val dbgColourClockHighres   = out Bool()
     val dbgGtiaWrEn             = out Bool()
     val dbgAnticWrEn            = out Bool()
     val dbgDmactl               = out Bits(7 bits)
@@ -786,6 +787,7 @@ class Atari800Core(
   io.dbgColbk               := gtia1.io.dbgColbk
   io.dbgVisibleLive         := gtia1.io.dbgVisibleLive
   io.dbgColourClock         := ANTIC_COLOUR_CLOCK_OUT
+  io.dbgColourClockHighres  := ANTIC_HIGHRES_COLOUR_CLOCK_OUT
   io.dbgGtiaWrEn            := GTIA_WRITE_ENABLE
   io.dbgAnticWrEn           := ANTIC_WRITE_ENABLE
   io.dbgDmactl              := antic1.io.dbgDmactl

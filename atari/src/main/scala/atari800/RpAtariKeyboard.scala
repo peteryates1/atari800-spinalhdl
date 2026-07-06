@@ -71,6 +71,14 @@ class RpAtariKeyboard extends Component {
     val offsetH    = out UInt(9 bits)
     val offsetV    = out UInt(9 bits)
     val offsetWr   = out Bool()
+    // cartridge select (SPI 'X' command). Holding register lives in the same
+    // BOOT-reset cfgArea so it survives the Atari reset; cartWr pulses on set.
+    val cartSel    = out Bits(6 bits)
+    val cartWr     = out Bool()
+    // capture pixel-sample phase (SPI 'P' command): which of the 8 sys/8 sub-
+    // phases samples VIDEO_B. Held in the BOOT-reset cfgArea so it survives reset.
+    val pixPhase   = out UInt(3 bits)
+    val pixPhaseWr = out Bool()
     val meterLate  = in UInt(16 bits)   // fb-read late-line count (status 10,11)
     val meterDrop  = in UInt(16 bits)   // fb-write dropped-quad count (12,13)
     // captured-content bounding box (status 14..21): the live picture's
@@ -79,6 +87,7 @@ class RpAtariKeyboard extends Component {
     val bbMaxX     = in UInt(9 bits)
     val bbMinY     = in UInt(9 bits)
     val bbMaxY     = in UInt(9 bits)
+    val aMaxWait   = in UInt(10 bits)   // worst port-A SDRAM stall (status 22,23)
   }
 
   // ---- Input synchronisers (SPI clock << sys clock; 3-stage) ----
@@ -120,8 +129,6 @@ class RpAtariKeyboard extends Component {
   wq.io.push.valid   := False
   wq.io.push.payload := pushPtr.asBits ## B(0, 8 bits)
   val ldPtr    = Reg(UInt(24 bits)) init 0        // R/V drain-side byte address
-  val quadBuf  = Reg(Bits(24 bits)) init 0        // bytes 0..2 of the quad
-  val wrData   = Reg(Bits(32 bits)) init 0
   val wrValid  = Reg(Bool()) init False
   val ldSum    = Reg(UInt(16 bits)) init 0
   val ldCnt    = Reg(UInt(16 bits)) init 0
@@ -165,6 +172,8 @@ class RpAtariKeyboard extends Component {
           is(19) { shiftOut := (B(0, 7 bits) ## io.bbMinY(8)) }
           is(20) { shiftOut := io.bbMaxY(7 downto 0).asBits }
           is(21) { shiftOut := (B(0, 7 bits) ## io.bbMaxY(8)) }
+          is(22) { shiftOut := io.aMaxWait(7 downto 0).asBits }
+          is(23) { shiftOut := (B(0, 6 bits) ## io.aMaxWait(9 downto 8)) }
           default { shiftOut := B(0, 8 bits) }
         }
       }
@@ -197,6 +206,12 @@ class RpAtariKeyboard extends Component {
   val vSkipReg    = Reg(UInt(9 bits)) init 0
   val offsetWrReg = Reg(Bool()) init False
   offsetWrReg := False
+  val cartSelReg  = Reg(Bits(6 bits)) init 0
+  val cartWrReg   = Reg(Bool()) init False
+  cartWrReg := False
+  val pixPhaseReg = Reg(UInt(3 bits)) init 7
+  val pixPhaseWrReg = Reg(Bool()) init False
+  pixPhaseWrReg := False
 
   val hidMap = Mem(Bits(7 bits), AtariHidMap.table.map(v => B(v, 7 bits)))
 
@@ -231,6 +246,12 @@ class RpAtariKeyboard extends Component {
         is(B(0x47, 8 bits)) {              // 'G': set capture-window offset
           when(byteIdx === 1) { hStartReg := byteVal.asUInt.resize(9) }
           when(byteIdx === 2) { vSkipReg  := byteVal.asUInt.resize(9); offsetWrReg := True }
+        }
+        is(B(0x58, 8 bits)) {              // 'X': set cartridge select (CartLogic mode)
+          when(byteIdx === 1) { cartSelReg := byteVal(5 downto 0); cartWrReg := True }
+        }
+        is(B(0x50, 8 bits)) {              // 'P': set capture pixel-sample phase
+          when(byteIdx === 1) { pixPhaseReg := byteVal(2 downto 0).asUInt; pixPhaseWrReg := True }
         }
         is(B(0x43, 8 bits)) {              // 'C': control bits
           when(byteIdx === 1) { ctrlBits := byteVal(4 downto 0) }
@@ -276,7 +297,7 @@ class RpAtariKeyboard extends Component {
   val vGo = vBusy && !wq.io.pop.valid            // reads wait out queued writes
   io.ldReq := (wq.io.pop.valid || wrValid || vGo) && !ldInFlight
   io.ldAddr := ldPtr.asBits
-  io.ldData := wrData
+  io.ldData := B(0, 32 bits)   // overridden from the queue on pop
   wq.io.pop.ready := False
   when(wq.io.pop.valid) {
     io.ldAddr := wq.io.pop.payload(31 downto 8)
@@ -333,6 +354,10 @@ class RpAtariKeyboard extends Component {
   io.offsetH      := hStartReg
   io.offsetV      := vSkipReg
   io.offsetWr     := offsetWrReg
+  io.cartSel      := cartSelReg
+  io.cartWr       := cartWrReg
+  io.pixPhase     := pixPhaseReg
+  io.pixPhaseWr   := pixPhaseWrReg
   io.frameCount   := frameCnt
 
   // ---- KEYBOARD_RESPONSE generation (matches Ch376UsbKeyboard) ----

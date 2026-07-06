@@ -189,6 +189,23 @@ static void fpga_set_offset(uint8_t hstart, uint8_t vskip) {
   fpga_spi_frame(tx, rx, sizeof tx);
 }
 
+// Cartridge select: CartLogic mode (0 = none, 0x01 = 8K, 0x21 = 16K, ...).
+// The holding register is in the BOOT-reset cfgArea, so it survives the reset
+// that boots the cart. A future SD config file picks the cart + mode here.
+#define DEFAULT_CART_PATH "/cartridge/Star Raiders.rom"
+
+static void fpga_set_cart(uint8_t mode) {
+  uint8_t tx[2] = {'X', mode};
+  uint8_t rx[2];
+  fpga_spi_frame(tx, rx, sizeof tx);
+}
+
+static void fpga_set_phase(uint8_t phase) {
+  uint8_t tx[2] = {'P', (uint8_t)(phase & 7)};
+  uint8_t rx[2];
+  fpga_spi_frame(tx, rx, sizeof tx);
+}
+
 // Bit-banged K frame at ~20 kHz: same wire protocol, glacial timing.
 // Splits "SPI speed/format problem" from "FPGA receive logic problem".
 static void fpga_bitbang_key_a(void) {
@@ -248,22 +265,26 @@ static void handle_console(void) {
                  sd_sdhc() ? "SDHC/XC" : "SDSC", blocks, blocks / 2048);
       break;
     }
-    case 'd': {   // mount + list root directory
+    case 'd': {   // mount + list root and /cartridge
       static FATFS fs;
       FRESULT fr = f_mount(&fs, "", 1);
       if (fr != FR_OK) { cdc_printf("sd: f_mount failed (%d)\r\n", fr); break; }
-      DIR dir; FILINFO fno;
-      fr = f_opendir(&dir, "/");
-      if (fr != FR_OK) { cdc_printf("sd: opendir failed (%d)\r\n", fr); break; }
-      int n = 0;
-      while (f_readdir(&dir, &fno) == FR_OK && fno.fname[0]) {
-        cdc_printf("  %s%-40s %lu\r\n", (fno.fattrib & AM_DIR) ? "/" : " ",
-                   fno.fname, (unsigned long)fno.fsize);
-        if (++n >= 64) break;
-        tud_task();
+      const char *dirs[] = { "/", "/cartridge" };
+      for (unsigned di = 0; di < 2; di++) {
+        DIR dir; FILINFO fno;
+        fr = f_opendir(&dir, dirs[di]);
+        if (fr != FR_OK) { cdc_printf("sd: opendir %s failed (%d)\r\n", dirs[di], fr); continue; }
+        cdc_printf("== %s ==\r\n", dirs[di]);
+        int n = 0;
+        while (f_readdir(&dir, &fno) == FR_OK && fno.fname[0]) {
+          cdc_printf("  %s%-40s %lu\r\n", (fno.fattrib & AM_DIR) ? "/" : " ",
+                     fno.fname, (unsigned long)fno.fsize);
+          if (++n >= 64) break;
+          tud_task();
+        }
+        f_closedir(&dir);
       }
-      f_closedir(&dir);
-      cdc_printf("sd: %d entries\r\n", n);
+      cdc_printf("sd: entries listed\r\n");
       break;
     }
     case 'B': {   // boot: hold reset, load OS from SD to SDRAM, release
@@ -300,16 +321,45 @@ static void handle_console(void) {
         }
         ok = ok && fileOk;
       }
+      // Default cartridge: load to its natural flat address and select it.
+      // 8K -> $A000 (mode 0x01), 16K -> $8000 (mode 0x21). Graceful if absent.
+      uint8_t cartMode = 0;
+      if (ok) {
+        FIL cf;
+        if (f_open(&cf, DEFAULT_CART_PATH, FA_READ) == FR_OK) {
+          uint32_t csize = f_size(&cf);
+          uint32_t caddr = (csize > 8192) ? 0x8000 : 0xA000;
+          uint8_t  cmode = (csize > 8192) ? 0x21 : 0x01;
+          fpga_load_zero();
+          uint16_t lc = 0, ls = 0; uint32_t ct = 0;
+          static uint8_t cbuf[504]; UINT crd;
+          while (f_read(&cf, cbuf, sizeof cbuf, &crd) == FR_OK && crd > 0) {
+            fpga_load(caddr + ct, cbuf, crd, &lc, &ls); ct += crd; tud_task();
+          }
+          f_close(&cf);
+          if (fpga_verify_content(caddr, ct, ls)) {
+            cartMode = cmode;
+            cdc_printf("boot: cart %s -> %04lx (%lu bytes) mode %02x\r\n",
+                       DEFAULT_CART_PATH, caddr, ct, cmode);
+          } else {
+            cdc_printf("boot: cart verify failed - booting without cart\r\n");
+          }
+        } else {
+          cdc_printf("boot: no cart (%s) - memo pad\r\n", DEFAULT_CART_PATH);
+        }
+      }
       // The supervisor "reset" is a stretched ~1.1 ms pulse (the control
       // register lives in the reset domain), so there is no true hold: the
       // Atari runs (crashed, harmlessly - ROM regions reject 6502 writes)
       // while we load. The reset that matters is the one AFTER the load.
       if (ok) {
-        cdc_printf("boot: OS loaded+verified, resetting Atari\r\n");
+        cdc_printf("boot: loaded+verified, resetting Atari (cart mode %02x)\r\n", cartMode);
         fpga_set_offset(g_fb_hstart, g_fb_vskip);  // re-apply (FPGA may have been reprogrammed)
+        fpga_set_cart(cartMode);            // 0 = memo pad; else boot the cart
         fpga_send_control(0x11);            // release halt via reset
         fpga_send_control(0x00);
       } else {
+        fpga_set_cart(0);                   // no cart on error
         fpga_send_control(0x00);            // release halt, no reset
         cdc_printf("boot: load errors - not resetting\r\n");
       }
@@ -397,10 +447,10 @@ static void handle_console(void) {
       int t0 = gpio_get(15);
       sleep_ms(50);
       (void)t0;
-      uint8_t z[16] = {0}, st[16];
+      uint8_t z[26] = {0}, st[26];
       fpga_spi_frame(z, st, sizeof z);
-      cdc_printf("fb meters: late=%u drop=%u (counts since config)\r\n",
-                 st[11] | (st[12] << 8), st[13] | (st[14] << 8));
+      cdc_printf("fb meters: late=%u drop=%u | portA maxStall=%u cyc (since config)\r\n",
+                 st[11] | (st[12] << 8), st[13] | (st[14] << 8), st[23] | (st[24] << 8));
       break;
     }
     case 'm': case 'M': {  // SDRAM BIST status (sdram_test bitstream); 'M' restarts
@@ -520,6 +570,22 @@ static void handle_console(void) {
                  minX, maxX, maxX - minX + 1, minY, maxY, maxY - minY + 1);
       cdc_printf("  left margin=%d right=%d  top=%d bottom=%d\r\n",
                  minX, 383 - maxX, minY, 287 - maxY);
+      break;
+    }
+    case 'P': {   // P <n> : set capture pixel-sample phase 0..7 (sweep to kill speckle)
+      char line[16]; int n = 0;
+      absolute_time_t dl = make_timeout_time_ms(500);
+      while (n < 15 && absolute_time_diff_us(get_absolute_time(), dl) > 0) {
+        tud_task(); uint8_t c2;
+        if (tud_cdc_available() && tud_cdc_read(&c2, 1) == 1) {
+          if (c2 == '\r' || c2 == '\n') break;
+          line[n++] = (char)c2; dl = make_timeout_time_ms(500);
+        }
+      }
+      line[n] = 0;
+      uint8_t ph = (uint8_t)(strtoul(line, NULL, 10) & 7);
+      fpga_set_phase(ph);
+      cdc_printf("pixel sample phase = %u\r\n", ph);
       break;
     }
     case 'l': dump_logring(); break;

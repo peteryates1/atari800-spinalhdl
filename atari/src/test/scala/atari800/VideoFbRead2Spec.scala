@@ -82,6 +82,7 @@ class VideoFbRead2Spec extends AnyFunSuite {
       dut.io.enable #= (enableAfterTicks == 0)
       dut.io.rdComplete #= !idleLow
       dut.io.rdData #= 0
+      dut.io.readBuf #= 0
 
       if (enableAfterTicks > 0) {
         // While "in reset", any read request would be lost on hardware — so

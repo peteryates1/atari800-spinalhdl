@@ -108,6 +108,7 @@ class Atari800CoreSimpleSdram(
     val dbgColbk        = out Bits(7 bits)
     val dbgVisibleLive  = out Bool()
     val dbgColourClock  = out Bool()
+    val dbgColourClockHighres = out Bool()
     val dbgAN           = out Bits(3 bits)
     val dbgGtiaWrEn     = out Bool()
     val dbgAnticWrEn    = out Bool()
@@ -399,6 +400,7 @@ class Atari800CoreSimpleSdram(
   io.dbgColbk        := atari800xl.io.dbgColbk
   io.dbgVisibleLive  := atari800xl.io.dbgVisibleLive
   io.dbgColourClock  := atari800xl.io.dbgColourClock
+  io.dbgColourClockHighres := atari800xl.io.dbgColourClockHighres
   io.dbgAN           := atari800xl.io.AN_out
   io.dbgGtiaWrEn     := atari800xl.io.dbgGtiaWrEn
   io.dbgAnticWrEn    := atari800xl.io.dbgAnticWrEn

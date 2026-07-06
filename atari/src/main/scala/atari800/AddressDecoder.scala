@@ -681,7 +681,8 @@ class AddressDecoder(
           when(emuCartEnable & emuCartRd4) {
             emuCartS4N := False
             when(emuCartAddressEnable) {
-              io.sdramAddr := sdramCartAddr
+              // Flat map: 16K cart at its natural $8000-$9FFF (sdramAddr already
+              // = flat CPU address); supervisor loads the cart there.
               memoryDataInt(7 downto 0) := io.sdramData(7 downto 0)
               requestComplete := io.sdramRequestComplete
               sdramChipSelect := startRequest
@@ -702,7 +703,8 @@ class AddressDecoder(
           when(emuCartEnable & emuCartRd5) {
             emuCartS5N := False
             when(emuCartAddressEnable) {
-              io.sdramAddr := sdramCartAddr
+              // Flat map: 8K cart (and $A000 half of 16K) at its natural
+              // $A000-$BFFF; supervisor loads the cart there.
               memoryDataInt(7 downto 0) := io.sdramData(7 downto 0)
               requestComplete := io.sdramRequestComplete
               sdramChipSelect := startRequest
