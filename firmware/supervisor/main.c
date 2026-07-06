@@ -17,6 +17,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "hardware/spi.h"
@@ -378,8 +379,10 @@ static void handle_console(void) {
       int t0 = gpio_get(15);
       sleep_ms(50);
       (void)t0;
-      cdc_printf("fb meters: read-late=%d write-drop=%d (sticky since boot)\r\n",
-                 gpio_get(15), gpio_get(22));
+      uint8_t z[16] = {0}, st[16];
+      fpga_spi_frame(z, st, sizeof z);
+      cdc_printf("fb meters: late=%u drop=%u (counts since config)\r\n",
+                 st[11] | (st[12] << 8), st[13] | (st[14] << 8));
       break;
     }
     case 'm': case 'M': {  // SDRAM BIST status (sdram_test bitstream); 'M' restarts
@@ -439,6 +442,34 @@ static void handle_console(void) {
         for (int i = 0; i < 16; i++) cdc_printf(" %02x", mem[r * 16 + i]);
         cdc_printf("\r\n  file %06x:", r * 16);
         for (int i = 0; i < 16; i++) cdc_printf(" %02x", fb2[r * 16 + i]);
+        cdc_printf("\r\n");
+      }
+      break;
+    }
+    case 'y': {   // y <hexaddr>: 64-byte hexdump via V single-byte peeks
+      char line[32]; int n = 0;
+      absolute_time_t dl = make_timeout_time_ms(500);
+      while (n < 31 && absolute_time_diff_us(get_absolute_time(), dl) > 0) {
+        tud_task(); uint8_t c2;
+        if (tud_cdc_available() && tud_cdc_read(&c2, 1) == 1) {
+          if (c2 == '\r' || c2 == '\n') break;
+          line[n++] = (char)c2; dl = make_timeout_time_ms(500);
+        }
+      }
+      line[n] = 0;
+      uint32_t a = strtoul(line, NULL, 16);
+      for (int r = 0; r < 4; r++) {
+        cdc_printf("%06lx:", a + r * 16);
+        for (int i = 0; i < 16; i++) {
+          uint32_t p = a + r * 16 + i;
+          uint8_t tx[8] = { 0x56, (uint8_t)(p >> 16), (uint8_t)(p >> 8), (uint8_t)p, 0, 0, 1, 0 };
+          uint8_t rx[10];
+          fpga_spi_frame(tx, rx, sizeof tx);
+          sleep_ms(1);
+          uint8_t z[10] = {0}, st[10];
+          fpga_spi_frame(z, st, sizeof z);
+          cdc_printf(" %02x", st[6]);
+        }
         cdc_printf("\r\n");
       }
       break;
@@ -527,6 +558,18 @@ int main(void) {
 
   fpga_spi_init();
   fpga_send_control(0x00);
+
+  // Cold-boot re-enumeration. tud_init() above asserts the USB pull-up and
+  // presents the device before tuh_init()/fpga_spi_init() run, but those run
+  // without pumping tud_task() — so a host that begins enumerating in that
+  // window gets no answer to its control transfers and gives up until a
+  // physical replug. Now that everything is initialized and the main loop
+  // (which pumps tud_task promptly) is about to start, drop and re-assert the
+  // pull-up: the host sees a fresh connect and enumerates against a stack that
+  // responds immediately. This is what replugging did, done automatically.
+  tud_disconnect();
+  sleep_ms(120);
+  tud_connect();
 
   absolute_time_t next_beat = make_timeout_time_ms(3000);
   while (true) {
