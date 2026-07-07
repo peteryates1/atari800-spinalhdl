@@ -84,7 +84,12 @@ class SdramArbiter3 extends Component {
   io.c.wideOut := io.sdram.wideOut
   io.b.wideOut := io.sdram.wideOut
 
-  io.sdram.refresh := True
+  // Feed the Atari's own ANTIC_REFRESH (port A, pulses during horizontal blank)
+  // to the controller's refresh gate. Queued refreshes are then served only
+  // while ANTIC is in its refresh window (HBLANK), never mid-line during sprite
+  // DMA - which is exactly how real hardware refreshes DRAM. The controller's
+  // force_refresh is the fallback for when the Atari is halted (loading).
+  io.sdram.refresh := io.a.refresh
 
   // default: A on the bus
   io.sdram.request        := False

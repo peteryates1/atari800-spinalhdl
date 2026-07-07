@@ -194,8 +194,8 @@ class Atari800Rp2040HdmiLgTop extends Component {
       video_bits     = 8,
       palette        = 0,
       internal_rom   = 0,
-      internal_ram   = 0,          // all Atari RAM in SDRAM (frees BRAM)
-      basic_in_sdram = false,
+      internal_ram   = 49152,      // TEST: 48 KB Atari RAM in BRAM (blank, non-proprietary)
+      basic_in_sdram = false,      //   -> ANTIC display DMA off the contended SDRAM
       cartridge_rom  = ""
     )
 
@@ -281,7 +281,16 @@ class Atari800Rp2040HdmiLgTop extends Component {
     arb.io.a.byteAccess     := atari.io.SDRAM_8BIT_WRITE_ENABLE
     arb.io.a.wordAccess     := atari.io.SDRAM_16BIT_WRITE_ENABLE
     arb.io.a.longwordAccess := atari.io.SDRAM_32BIT_WRITE_ENABLE
-    arb.io.a.refresh        := atari.io.SDRAM_REFRESH
+    // Refresh only during the Atari's VERTICAL blank. VIDEO_BLANK is high for a
+    // per-line HBLANK stretch (~740 sys cyc) during visible lines, but stays
+    // high across WHOLE scanlines during vertical blank - so a sustained-high
+    // run is our "in VBLANK" flag. Refreshing there: no sprite DMA (no smear),
+    // no visible-line framebuffer capture/display traffic to starve (no jitter),
+    // and ~40 blank lines is ample to walk all 2048 used rows every frame.
+    val vblankCnt = Reg(UInt(12 bits)) init 0
+    when(atari.io.VIDEO_BLANK) { when(vblankCnt =/= U(vblankCnt.maxValue)) { vblankCnt := vblankCnt + 1 } }
+      .otherwise { vblankCnt := 0 }
+    arb.io.a.refresh := vblankCnt >= 2048
     atari.io.SDRAM_REQUEST_COMPLETE := arb.io.a.complete
     atari.io.SDRAM_DO               := arb.io.a.dataOut
 
@@ -298,9 +307,15 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // divider drifts within a line, so no fixed phase samples cleanly (residual
     // speckle on fine detail). pixPhase now selects a small settling delay
     // (cycles after the pixel-clock edge) so we sample VIDEO_B once it's stable.
-    val hrClk  = atari.io.dbgColourClockHighres
-    val hrHist = History(hrClk, 8, init = False)   // hrHist(k) = pulse k cycles ago
-    // pixStrobe driven from after cfgArea (phase lives in the BOOT-reset cfgArea)
+    // DIAGNOSTIC: revert to fba3b03's free-running sys/8 capture strobe to test
+    // whether the pixel-clock-locked strobe is the chunky-jitter source. (May
+    // bring back the fine-detail "speckle" the hires clock was meant to cure.)
+    val capHsPrev = Reg(Bool()) init False
+    capHsPrev := atari.io.VIDEO_HS
+    val pixDiv = Reg(UInt(3 bits)) init 0
+    pixDiv := pixDiv + 1
+    when(atari.io.VIDEO_HS && !capHsPrev) { pixDiv := 0 }
+    fbWrite.io.pixStrobe := pixDiv === 7
     fbWrite.io.colour    := atari.io.VIDEO_B
     fbWrite.io.hsync     := atari.io.VIDEO_HS
     fbWrite.io.vsync     := atari.io.VIDEO_VS
@@ -368,11 +383,20 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // blocked past a single-access time. Track the worst stall (cycles the
     // Atari waited for one SDRAM access) since arming - if it's ~a wide-burst
     // length, head-of-line blocking is starving ANTIC's display DMA.
-    val aBusy    = arb.io.a.request && !arb.io.a.complete
+    // Latch on the port-A request, count cycles until complete, record the
+    // worst - the true stall the Atari (incl. ANTIC sprite DMA) sees, which
+    // the previous "request && !complete" version missed (request is a pulse).
+    val aWaiting = RegInit(False)
     val aWaitCnt = Reg(UInt(10 bits)) init 0
     val aMaxWait = Reg(UInt(10 bits)) init 0
-    when(aBusy) { aWaitCnt := aWaitCnt + 1 } otherwise { aWaitCnt := 0 }
-    when(meterArm.msb && aWaitCnt > aMaxWait) { aMaxWait := aWaitCnt }
+    when(arb.io.a.request && !aWaiting) { aWaiting := True; aWaitCnt := 1 }
+    when(aWaiting) {
+      aWaitCnt := aWaitCnt + 1
+      when(arb.io.a.complete) {
+        aWaiting := False
+        when(meterArm.msb && aWaitCnt > aMaxWait) { aMaxWait := aWaitCnt }
+      }
+    }
     kbd.io.aMaxWait := aMaxWait
     kbd.io.bbMinX := fbWrite.io.bbMinX
     kbd.io.bbMaxX := fbWrite.io.bbMaxX
@@ -475,7 +499,6 @@ class Atari800Rp2040HdmiLgTop extends Component {
   }
   sysArea.fbWrite.io.hStart := cfgArea.hOff
   sysArea.fbWrite.io.vSkip  := cfgArea.vOff
-  sysArea.fbWrite.io.pixStrobe := sysArea.hrHist(cfgArea.pixPhase)
   sysArea.atari.io.emulated_cartridge_select := cfgArea.cart
 
   // =========================================================================

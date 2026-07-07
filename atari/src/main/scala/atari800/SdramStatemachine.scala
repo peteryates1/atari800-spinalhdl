@@ -111,6 +111,12 @@ class SdramStatemachine(
   val cycles_since_refresh_reg  = Bits(11 bits)
   val refresh_pending_next   = Bits(12 bits)
   val refresh_pending_reg    = Bits(12 bits)
+  // Targeted-refresh row pointer. We only refresh the USED rows (Atari RAM +
+  // the framebuffer, all in bank 0, top used row ~1679) instead of the chip's
+  // whole 8192-row array. 11 bits => rows 0..2047, 4x fewer refreshes than the
+  // blind auto-refresh, so the ANTIC/HBLANK-gated refresh can actually keep up.
+  val refreshRow_next        = Bits(11 bits)
+  val refreshRow_reg         = Bits(11 bits)
   val suggest_refresh        = Bool()
   val force_refresh          = Bool()
   val require_refresh        = Bool()
@@ -190,6 +196,7 @@ class SdramStatemachine(
     val r_delay_reg       = Reg(Bits(16 bits)) init 0
     val r_refresh_pending_reg = Reg(Bits(12 bits)) init 0
     val r_cycles_since_refresh_reg = Reg(Bits(11 bits)) init 0
+    val r_refreshRow_reg  = Reg(Bits(11 bits)) init 0
     val r_data_out_reg    = Reg(Bits(32 bits)) init 0 addTag(crossClockDomain)
     val r_wide_out_reg    = Reg(Bits(256 bits)) init 0 addTag(crossClockDomain)
     val r_reply_reg       = Reg(Bool()) init False addTag(crossClockDomain)
@@ -211,6 +218,7 @@ class SdramStatemachine(
     r_delay_reg       := delay_next
     r_refresh_pending_reg := refresh_pending_next
     r_cycles_since_refresh_reg := cycles_since_refresh_next
+    r_refreshRow_reg  := refreshRow_next
     r_data_out_reg    := data_out_next
     r_wide_out_reg    := wide_out_next
     r_reply_reg       := reply_next
@@ -233,6 +241,7 @@ class SdramStatemachine(
     delay_reg                := r_delay_reg
     refresh_pending_reg      := r_refresh_pending_reg
     cycles_since_refresh_reg := r_cycles_since_refresh_reg
+    refreshRow_reg    := r_refreshRow_reg
     data_out_reg             := r_data_out_reg
     wide_out_reg             := r_wide_out_reg
     reply_reg                := r_reply_reg
@@ -332,33 +341,37 @@ class SdramStatemachine(
     }
   }
 
-  // ---- Refresh counters ----
+  // ---- Refresh scheduling ----
+  // Normal refresh is driven directly by the vertical-blank gate (refresh_sreg,
+  // high only during the Atari's VBLANK). The idle dispatch runs it at LOWEST
+  // priority, so it only fills gaps behind client reads/writes - refresh never
+  // blocks the framebuffer capture/display ports (no jitter) and never lands on
+  // a visible sprite-DMA line (no smear). A VBLANK is ~2.5 ms; walking all 2048
+  // used rows costs ~142 us, so every row is refreshed many times per frame.
+  //
+  // HALT fallback: while the Atari is halted for a supervisor load there is no
+  // VBLANK, so reuse the counters as a "cycles since last VBLANK" detector -
+  // refresh_pending counts ~17.7 us ticks, reset by each VBLANK. Past ~30 ms
+  // (well over one 20 ms frame) we assume halted and force refresh so loaded
+  // data doesn't decay before the Atari is released.
   cycles_since_refresh_next := (cycles_since_refresh_reg.asUInt + 1).asBits.resized
   refresh_pending_next      := refresh_pending_reg
+  refreshRow_next           := refreshRow_reg
   suggest_refresh           := False
-  force_refresh             := False
+  force_refresh             := refresh_pending_reg.asUInt >= 1695   // ~30 ms with no VBLANK
 
-  when(refresh_pending_reg.asUInt > 0) {
-    suggest_refresh := True
-  }
-  when(refresh_pending_reg === B"xFFF") {
-    force_refresh := True
-  }
+  require_refresh := refresh_sreg | force_refresh
 
-  require_refresh := force_refresh | (suggest_refresh & refresh_sreg)
-
-  when(refreshing_now) {
+  when(refresh_sreg) {
+    // In VBLANK: refresh is running, so clear the halt detector.
+    refresh_pending_next      := B(0, 12 bits)
     cycles_since_refresh_next := B(0, 11 bits)
-    when(suggest_refresh) {
-      refresh_pending_next := (refresh_pending_reg.asUInt - 1).asBits.resized
-    }
   } otherwise {
-    // W9825G6KH-6 needs 8192 refreshes per 64 ms (one per 7.8 us). The
-    // original 2048-cycle interval (from the MiST port) is 2.3x too slow at
-    // our clocks; written-once rows decayed while re-accessed rows survived.
-    when(cycles_since_refresh_reg.asUInt === 750) {
-      refresh_pending_next := (refresh_pending_reg.asUInt + 1).asBits.resized
+    when(cycles_since_refresh_reg.asUInt === 2047) {
       cycles_since_refresh_next := B(0, 11 bits)
+      when(refresh_pending_reg.asUInt =/= 4095) {
+        refresh_pending_next := (refresh_pending_reg.asUInt + 1).asBits.resized
+      }
     }
   }
 
@@ -420,19 +433,23 @@ class SdramStatemachine(
       reset_client_n_next := True
       delay_next := B(0, 16 bits)
 
-      idle_priority := (request_sreg ^ reply_reg) ## require_refresh ## WRITE_EN_sreg ## READ_EN_sreg
-      switch(idle_priority) {
-        is(B"0100", B"0101", B"0110", B"0111", B"1100", B"1101", B"1110", B"1111") {
-          sdram_state_next := sdram_state_refresh
-        }
-        is(B"1010", B"1011") {
-          sdram_state_next := sdram_state_write
-          when(WIDE_ACCESS_sreg) { sdram_state_next := sdram_state_wide_write }   // 4-bit state
-        }
-        is(B"1001") {
-          sdram_state_next := sdram_state_read
-          when(WIDE_ACCESS_sreg) { sdram_state_next := sdram_state_wide_read }
-        }
+      // Priority: force_refresh (emergency, backlog high) > pending client
+      // read/write > ordinary (gated) refresh. Letting a pending access beat a
+      // non-forced refresh keeps the display reads (port C) from being blocked
+      // by refresh bursts - the underrun that showed up as picture jitter -
+      // while refresh still fills the idle gaps (bus is <30% utilised) and
+      // force_refresh guarantees retention if the backlog ever builds.
+      val idlePending = request_sreg ^ reply_reg
+      when(force_refresh) {
+        sdram_state_next := sdram_state_refresh
+      }.elsewhen(idlePending && WRITE_EN_sreg) {
+        sdram_state_next := sdram_state_write
+        when(WIDE_ACCESS_sreg) { sdram_state_next := sdram_state_wide_write }
+      }.elsewhen(idlePending && READ_EN_sreg) {
+        sdram_state_next := sdram_state_read
+        when(WIDE_ACCESS_sreg) { sdram_state_next := sdram_state_wide_read }
+      }.elsewhen(require_refresh) {
+        sdram_state_next := sdram_state_refresh
       }
     }
     is(sdram_state_read) {
@@ -569,13 +586,24 @@ class SdramStatemachine(
       }
     }
     is(sdram_state_refresh) {
+      // Targeted RAS-only refresh of one USED row: ACTIVATE (opens the row,
+      // which reads it into the sense amps and restores it = a refresh) then
+      // PRECHARGE. Only bank 0, rows 0..2047 - the region the Atari and the
+      // framebuffer actually occupy - so we refresh 4x fewer rows than a blind
+      // whole-chip auto-refresh and can keep up inside the HBLANK-gated window.
       switch(delay_reg(3 downto 0)) {
         is(B"x0") {
-          command_next := sdram_command_refresh
+          command_next := sdram_command_bank_activate
+          ba_next      := B"00"
+          addr_next    := refreshRow_reg.resize(ROW_WIDTH bits)
           refreshing_now := True
+        }
+        is(B"x5") {
+          command_next := sdram_command_precharge   // addr default all-ones -> A10=1 = precharge all
         }
         is(B"x8") {
           sdram_state_next := sdram_state_idle
+          refreshRow_next  := (refreshRow_reg.asUInt + 1).asBits   // 11-bit wrap: rows 0..2047
         }
       }
     }
