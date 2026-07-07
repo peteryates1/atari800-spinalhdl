@@ -103,6 +103,38 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
 
     io.romRequestComplete := romRequestReg
     romRequestNext := io.romRequest & ~io.romWrEnable
+  } else if (internalRom == 5) {
+    // Atari 800 OS in BLANK, WRITABLE BRAM. Same D800-FFFF layout as rom=3, but
+    // the supervisor loads it from SD at boot (via romWrEnable) instead of the
+    // ROM being embedded from a file - so nothing proprietary enters the .sof.
+    // rom-space address (from AddressDecoder / load port): bit15=0 selects OS,
+    // bits(13:11) select the block, bits(12:0) the offset.
+    val rom2  = new GenericRamInfer(ADDRESS_WIDTH = 11, SPACE = 2048, DATA_WIDTH = 8)  // D800-DFFF
+    val rom10 = new GenericRamInfer(ADDRESS_WIDTH = 13, SPACE = 8192, DATA_WIDTH = 8)  // E000-FFFF
+    rom2.io.address  := io.romAddr(10 downto 0)
+    rom10.io.address := io.romAddr(12 downto 0)
+    rom2.io.data  := io.romDataIn
+    rom10.io.data := io.romDataIn
+
+    val romweTemp = io.romWrEnable & io.romRequest
+    val we2  = Bool(); val we10 = Bool()
+    we2 := False; we10 := False
+    io.romData := B(0xFF, 8 bits)
+    when(~io.romAddr(15)) {
+      switch(io.romAddr(13 downto 11)) {
+        is(B"011")                         { io.romData := rom2.io.q;  we2  := romweTemp }
+        is(B"100", B"101", B"110", B"111") { io.romData := rom10.io.q; we10 := romweTemp }
+        default { }
+      }
+    }
+    rom2.io.we  := we2
+    rom10.io.we := we10
+
+    // Writes: give a 2-cycle busy->done edge so the streaming loader (which
+    // waits for complete to go low, then high) sees a proper handshake. Reads
+    // keep the 1-cycle romRequestReg path.
+    io.romRequestComplete := RegNext(RegNext(romweTemp, False), False) | romRequestReg
+    romRequestNext := io.romRequest & ~io.romWrEnable
   } else if (internalRom == 2) {
     // 16K OS loop variant
     val rom16a = new FileRom(s"$romDir/atarixl_loop.rom", 16384, writable = true)

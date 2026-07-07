@@ -144,6 +144,13 @@ static void fpga_load(uint32_t addr, const uint8_t *data, uint32_t len,
   }
 }
 
+// Set loader destination: 0 = SDRAM (port D), 1 = BRAM OS-ROM, 2 = BRAM RAM.
+// BRAM-ROM 'W' addresses are ROM-SPACE: D800->0x1800, E000->0x2000.
+static void fpga_set_dest(uint8_t dest) {
+  uint8_t tx[2] = { 0x42, dest }, rx[2];
+  fpga_spi_frame(tx, rx, sizeof tx);
+}
+
 // 'V' frame: FPGA reads len bytes at addr (byte mode - the CPU's view) and
 // sums them; poll status bytes 6..8 for the result. Returns true on match.
 static bool fpga_verify_content(uint32_t addr, uint32_t len, uint16_t want) {
@@ -291,11 +298,12 @@ static void handle_console(void) {
       static FATFS fs;
       if (f_mount(&fs, "", 1) != FR_OK) { cdc_printf("boot: SD mount failed\r\n"); fpga_send_control(0x00); break; }
       struct { const char *path; uint32_t addr; } items[] = {
-        { "/os/atarios2.rom", 0x00D800 },   // $D800-$DFFF (2 KB), flat 64K image
-        { "/os/atariosb.rom", 0x00E000 },   // $E000-$FFFF (8 KB), flat 64K image
+        { "/os/atarios2.rom", 0x001800 },   // $D800-$DFFF -> ROM-space 0x1800 (BRAM)
+        { "/os/atariosb.rom", 0x002000 },   // $E000-$FFFF -> ROM-space 0x2000 (BRAM)
       };
       bool ok = true;
       fpga_send_control(0x10);              // HALT the 6502: quiet SDRAM during load
+      fpga_set_dest(1);                     // OS -> blank BRAM OS-ROM (not SDRAM)
       for (unsigned it = 0; it < 2 && ok; it++) {
         bool fileOk = false;
         for (int attempt = 0; attempt < 3 && !fileOk; attempt++) {
@@ -313,14 +321,15 @@ static void handle_console(void) {
           f_close(&f);
           uint16_t fcnt, fsum; fpga_load_status(&fcnt, &fsum);
           bool match = (lcnt == fcnt && lsum == fsum);
-          cdc_printf("boot: %s -> %06lx (%lu bytes) stream %s\r\n", items[it].path,
+          cdc_printf("boot: %s -> ROM-BRAM %06lx (%lu bytes) stream %s\r\n", items[it].path,
                      items[it].addr, total, match ? "ok" : "CHECKSUM MISMATCH");
-          // and now the part no stream checksum can fake: what the SDRAM holds
-          fileOk = fpga_verify_content(items[it].addr, total, lsum) && match;
+          // BRAM has no read-back path yet (Step 1) - trust the stream checksum.
+          fileOk = match;
           if (!fileOk) cdc_printf("boot: retrying %s\r\n", items[it].path);
         }
         ok = ok && fileOk;
       }
+      fpga_set_dest(0);                     // cart + everything else -> SDRAM as before
       // Default cartridge: load to its natural flat address and select it.
       // 8K -> $A000 (mode 0x01), 16K -> $8000 (mode 0x21). Graceful if absent.
       uint8_t cartMode = 0;

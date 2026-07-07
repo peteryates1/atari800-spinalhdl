@@ -193,7 +193,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
       cycle_length   = 32,
       video_bits     = 8,
       palette        = 0,
-      internal_rom   = 0,
+      internal_rom   = 5,          // 800 OS in BLANK loadable BRAM (SD-loaded, not embedded)
       internal_ram   = 49152,      // 48 KB Atari RAM in BRAM (blank, non-proprietary)
       basic_in_sdram = false,      //   -> ANTIC display DMA off the contended SDRAM
       cartridge_rom  = ""
@@ -405,8 +405,10 @@ class Atari800Rp2040HdmiLgTop extends Component {
 
 
     // Supervisor SDRAM loader -> arbiter port D (lowest priority)
-    arb.io.d.request        := kbd.io.ldReq
-    kbd.io.ldComplete       := arb.io.d.complete
+    // Loader destination (kbd 'B' command): 0 = SDRAM (port D), 1 = BRAM OS-ROM,
+    // 2 = BRAM RAM. BRAM targets drive the core's LOAD port instead of port D.
+    val ldToBram = kbd.io.ldDest =/= B(0, 2 bits)
+    arb.io.d.request        := kbd.io.ldReq && !ldToBram
     arb.io.d.readEnable     := !kbd.io.ldWrite
     arb.io.d.writeEnable    := kbd.io.ldWrite
     arb.io.d.addr           := kbd.io.ldAddr
@@ -415,6 +417,15 @@ class Atari800Rp2040HdmiLgTop extends Component {
     arb.io.d.byteAccess     := True
     arb.io.d.wordAccess     := False
     arb.io.d.longwordAccess := False
+
+    // Core BRAM load port (OS ROM / RAM), fed by the same loader when ldToBram.
+    atari.io.LOAD_ENABLE     := ldToBram && kbd.io.ctrlHalt   // only drive the bus while halted
+    atari.io.LOAD_TARGET_ROM := kbd.io.ldDest === B(1, 2 bits)
+    atari.io.LOAD_ADDR       := kbd.io.ldAddr(21 downto 0)
+    atari.io.LOAD_DATA       := kbd.io.ldData(7 downto 0)
+    atari.io.LOAD_WE         := kbd.io.ldReq && kbd.io.ldWrite && ldToBram
+    atari.io.LOAD_REQUEST    := kbd.io.ldReq && ldToBram
+    kbd.io.ldComplete        := Mux(ldToBram, atari.io.LOAD_COMPLETE, arb.io.d.complete)
 
 
     // Arbiter -> SdramStatemachine

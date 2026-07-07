@@ -63,6 +63,7 @@ class RpAtariKeyboard extends Component {
     val ldWrite    = out Bool()          // high: write (W); low: read (R)
     val ldRdData   = in  Bits(32 bits)   // arbiter port D dataOut
     val ldComplete = in  Bool()
+    val ldDest     = out Bits(2 bits)     // 0=SDRAM(port D), 1=BRAM OS-ROM, 2=BRAM RAM
     // debug
     val frameCount = out UInt(8 bits)
     // capture-window offset write (SPI 'G' command). The holding registers
@@ -133,6 +134,8 @@ class RpAtariKeyboard extends Component {
   val ldSum    = Reg(UInt(16 bits)) init 0
   val ldCnt    = Reg(UInt(16 bits)) init 0
   val ldIsRead = Reg(Bool()) init False
+  val ldDestReg = Reg(Bits(2 bits)) init 0        // 'B': load destination
+  io.ldDest := ldDestReg
   val rdByte   = Reg(Bits(8 bits)) init 0
   val drainCnt = Reg(UInt(16 bits)) init 0        // completed queue writes
   val vBusy    = Reg(Bool()) init False
@@ -272,7 +275,10 @@ class RpAtariKeyboard extends Component {
           when(byteIdx === 5) { vLen(15 downto 8)   := byteVal.asUInt }
           when(byteIdx === 6) { vLen(7 downto 0)    := byteVal.asUInt }
         }
-        is(B(0x57, 8 bits)) {              // 'W': SDRAM load
+        is(B(0x42, 8 bits)) {              // 'B': set load destination (0 SDRAM, 1 BRAM-ROM, 2 BRAM-RAM)
+          when(byteIdx === 1) { ldDestReg := byteVal(1 downto 0) }
+        }
+        is(B(0x57, 8 bits)) {              // 'W': load stream to current destination
           when(byteIdx === 1) { pushPtr(23 downto 16) := byteVal.asUInt }
           when(byteIdx === 2) { pushPtr(15 downto 8)  := byteVal.asUInt }
           when(byteIdx === 3) { pushPtr(7 downto 0)   := byteVal.asUInt }

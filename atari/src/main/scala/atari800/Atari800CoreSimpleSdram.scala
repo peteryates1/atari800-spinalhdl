@@ -78,6 +78,16 @@ class Atari800CoreSimpleSdram(
     val SDRAM_8BIT_WRITE_ENABLE    = out Bool()
     val SDRAM_REFRESH              = out Bool()
 
+    // Supervisor BRAM load port: writes the OS ROM / RAM BRAM directly while the
+    // Atari is HALTed, so OS/RAM load from SD into blank BRAM (nothing embedded).
+    val LOAD_ENABLE      = in  Bool() default(False)
+    val LOAD_TARGET_ROM  = in  Bool() default(False)   // 1 = OS ROM BRAM, 0 = RAM BRAM
+    val LOAD_ADDR        = in  Bits(22 bits) default(0) // rom-space / ram-space address
+    val LOAD_DATA        = in  Bits(8 bits)  default(0)
+    val LOAD_WE          = in  Bool() default(False)
+    val LOAD_REQUEST     = in  Bool() default(False)
+    val LOAD_COMPLETE    = out Bool()
+
     // DMA
     val DMA_FETCH              = in  Bool()
     val DMA_READ_ENABLE        = in  Bool()
@@ -314,7 +324,7 @@ class Atari800CoreSimpleSdram(
 
   // PBI - expose what's needed for SDRAM
   io.DMA_MEMORY_DATA                     := atari800xl.io.PBI_SNOOP_DATA
-  PBI_WRITE_DATA                         := atari800xl.io.PBI_WRITE_DATA
+  PBI_WRITE_DATA                         := Mux(io.LOAD_ENABLE, io.LOAD_DATA.resize(32), atari800xl.io.PBI_WRITE_DATA)
   io.SDRAM_8BIT_WRITE_ENABLE             := atari800xl.io.PBI_WIDTH_8bit_ACCESS
   io.SDRAM_16BIT_WRITE_ENABLE            := atari800xl.io.PBI_WIDTH_16bit_ACCESS
   io.SDRAM_32BIT_WRITE_ENABLE            := atari800xl.io.PBI_WIDTH_32bit_ACCESS
@@ -348,17 +358,30 @@ class Atari800CoreSimpleSdram(
   io.SDRAM_ADDR                        := atari800xl.io.SDRAM_ADDR
   atari800xl.io.SDRAM_DO               := io.SDRAM_DO
 
-  RAM_ADDR                           := atari800xl.io.RAM_ADDR
-  atari800xl.io.RAM_DO               := RAM_DO
-  RAM_REQUEST                        := atari800xl.io.RAM_REQUEST
-  atari800xl.io.RAM_REQUEST_COMPLETE := RAM_REQUEST_COMPLETE
-  RAM_WRITE_ENABLE                   := atari800xl.io.RAM_WRITE_ENABLE
+  // Memory-bus OUTPUTS (core -> BRAM), muxed with the supervisor load port.
+  // While LOAD_ENABLE (Atari HALTed) the loader drives the addressed BRAM.
+  when(io.LOAD_ENABLE) {
+    RAM_ADDR         := io.LOAD_ADDR(18 downto 0)
+    RAM_REQUEST      := io.LOAD_REQUEST & ~io.LOAD_TARGET_ROM
+    RAM_WRITE_ENABLE := io.LOAD_WE      & ~io.LOAD_TARGET_ROM
+    ROM_ADDR         := io.LOAD_ADDR
+    ROM_REQUEST      := io.LOAD_REQUEST & io.LOAD_TARGET_ROM
+    ROM_WRITE_ENABLE := io.LOAD_WE      & io.LOAD_TARGET_ROM
+  } otherwise {
+    RAM_ADDR         := atari800xl.io.RAM_ADDR
+    RAM_REQUEST      := atari800xl.io.RAM_REQUEST
+    RAM_WRITE_ENABLE := atari800xl.io.RAM_WRITE_ENABLE
+    ROM_ADDR         := atari800xl.io.ROM_ADDR
+    ROM_REQUEST      := atari800xl.io.ROM_REQUEST
+    ROM_WRITE_ENABLE := atari800xl.io.ROM_WRITE_ENABLE
+  }
+  io.LOAD_COMPLETE := Mux(io.LOAD_TARGET_ROM, ROM_REQUEST_COMPLETE, RAM_REQUEST_COMPLETE)
 
-  ROM_ADDR                           := atari800xl.io.ROM_ADDR
+  // Memory-bus INPUTS (BRAM -> core), unchanged.
+  atari800xl.io.RAM_DO               := RAM_DO
+  atari800xl.io.RAM_REQUEST_COMPLETE := RAM_REQUEST_COMPLETE
   atari800xl.io.ROM_DO               := ROM_DO
-  ROM_REQUEST                        := atari800xl.io.ROM_REQUEST
   atari800xl.io.ROM_REQUEST_COMPLETE := ROM_REQUEST_COMPLETE
-  ROM_WRITE_ENABLE                   := atari800xl.io.ROM_WRITE_ENABLE
 
   atari800xl.io.DMA_FETCH              := io.DMA_FETCH
   atari800xl.io.DMA_READ_ENABLE        := io.DMA_READ_ENABLE
