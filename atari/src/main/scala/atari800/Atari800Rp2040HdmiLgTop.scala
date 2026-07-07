@@ -194,7 +194,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
       video_bits     = 8,
       palette        = 0,
       internal_rom   = 0,
-      internal_ram   = 49152,      // TEST: 48 KB Atari RAM in BRAM (blank, non-proprietary)
+      internal_ram   = 49152,      // 48 KB Atari RAM in BRAM (blank, non-proprietary)
       basic_in_sdram = false,      //   -> ANTIC display DMA off the contended SDRAM
       cartridge_rom  = ""
     )
