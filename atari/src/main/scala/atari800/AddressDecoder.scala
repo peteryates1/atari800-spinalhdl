@@ -681,12 +681,17 @@ class AddressDecoder(
           when(emuCartEnable & emuCartRd4) {
             emuCartS4N := False
             when(emuCartAddressEnable) {
-              // Flat map: 16K cart at its natural $8000-$9FFF (sdramAddr already
-              // = flat CPU address); supervisor loads the cart there.
-              memoryDataInt(7 downto 0) := io.sdramData(7 downto 0)
-              requestComplete := io.sdramRequestComplete
-              sdramChipSelect := startRequest
-              ramChipSelect := False
+              // 16K cart lower half in the shared RAM BRAM at $8000-$9FFF; read
+              // from RAM, swallow writes (read-only ROM cart).
+              memoryDataInt(7 downto 0) := io.ramData(7 downto 0)
+              sdramChipSelect := False
+              when(writeEnableNext) {
+                requestComplete := True
+                ramChipSelect := False
+              } otherwise {
+                requestComplete := io.ramRequestComplete
+                ramChipSelect := startRequest
+              }
             } otherwise {
               memoryDataInt(7 downto 0) := B"xFF"
               requestComplete := True
@@ -703,12 +708,19 @@ class AddressDecoder(
           when(emuCartEnable & emuCartRd5) {
             emuCartS5N := False
             when(emuCartAddressEnable) {
-              // Flat map: 8K cart (and $A000 half of 16K) at its natural
-              // $A000-$BFFF; supervisor loads the cart there.
-              memoryDataInt(7 downto 0) := io.sdramData(7 downto 0)
-              requestComplete := io.sdramRequestComplete
-              sdramChipSelect := startRequest
-              ramChipSelect := False
+              // Cart lives in the SHARED top-of-RAM BRAM at $A000-$BFFF (supervisor
+              // loads it as RAM). Read it from RAM; swallow writes = read-only ROM
+              // cart. RD5 stays set so the OS detects and boots the cartridge - so
+              // the supervisor's cart-select IS the read-only control.
+              memoryDataInt(7 downto 0) := io.ramData(7 downto 0)
+              sdramChipSelect := False
+              when(writeEnableNext) {
+                requestComplete := True                 // swallow (read-only)
+                ramChipSelect := False
+              } otherwise {
+                requestComplete := io.ramRequestComplete
+                ramChipSelect := startRequest
+              }
             } otherwise {
               memoryDataInt(7 downto 0) := B"xFF"
               requestComplete := True

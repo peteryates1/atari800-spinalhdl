@@ -130,10 +130,9 @@ class InternalRomRam(internalRom: Int = 1, internalRam: Int = 16384, cartridgeRo
     rom2.io.we  := we2
     rom10.io.we := we10
 
-    // Writes: give a 2-cycle busy->done edge so the streaming loader (which
-    // waits for complete to go low, then high) sees a proper handshake. Reads
-    // keep the 1-cycle romRequestReg path.
-    io.romRequestComplete := RegNext(RegNext(romweTemp, False), False) | romRequestReg
+    // Reads complete 1 cycle later (romRequestReg); writes immediately. The
+    // streaming loader's busy->done handshake is generated in the core load path.
+    io.romRequestComplete := romweTemp | romRequestReg
     romRequestNext := io.romRequest & ~io.romWrEnable
   } else if (internalRom == 2) {
     // 16K OS loop variant

@@ -329,16 +329,15 @@ static void handle_console(void) {
         }
         ok = ok && fileOk;
       }
-      fpga_set_dest(0);                     // cart + everything else -> SDRAM as before
-      // Default cartridge: load to its natural flat address and select it.
-      // 8K -> $A000 (mode 0x01), 16K -> $8000 (mode 0x21). Graceful if absent.
+      // Default cartridge: load into the SHARED top-of-RAM BRAM (A000-BFFF) as
+      // ROM. cartMode 0 = no emuCart; A000-BFFF stays RAM BRAM holding the cart.
       uint8_t cartMode = 0;
       if (ok) {
         FIL cf;
         if (f_open(&cf, DEFAULT_CART_PATH, FA_READ) == FR_OK) {
           uint32_t csize = f_size(&cf);
           uint32_t caddr = (csize > 8192) ? 0x8000 : 0xA000;
-          uint8_t  cmode = (csize > 8192) ? 0x21 : 0x01;
+          fpga_set_dest(2);                  // cart -> RAM BRAM (shared top-of-RAM)
           fpga_load_zero();
           uint16_t lc = 0, ls = 0; uint32_t ct = 0;
           static uint8_t cbuf[504]; UINT crd;
@@ -346,13 +345,14 @@ static void handle_console(void) {
             fpga_load(caddr + ct, cbuf, crd, &lc, &ls); ct += crd; tud_task();
           }
           f_close(&cf);
-          if (fpga_verify_content(caddr, ct, ls)) {
-            cartMode = cmode;
-            cdc_printf("boot: cart %s -> %04lx (%lu bytes) mode %02x\r\n",
-                       DEFAULT_CART_PATH, caddr, ct, cmode);
-          } else {
-            cdc_printf("boot: cart verify failed - booting without cart\r\n");
-          }
+          fpga_set_dest(0);                  // back to SDRAM for anything else
+          uint16_t fc, fs2; fpga_load_status(&fc, &fs2);
+          bool cmatch = (lc == fc && ls == fs2);
+          // Enable emuCart (RD5) so the OS detects+boots it; decoder now reads the
+          // cart region from RAM BRAM (read-only), not SDRAM.
+          if (cmatch) cartMode = (csize > 8192) ? 0x21 : 0x01;
+          cdc_printf("boot: cart %s -> RAM-BRAM %04lx (%lu bytes) stream %s mode %02x\r\n",
+                     DEFAULT_CART_PATH, caddr, ct, cmatch ? "ok" : "MISMATCH", cartMode);
         } else {
           cdc_printf("boot: no cart (%s) - memo pad\r\n", DEFAULT_CART_PATH);
         }

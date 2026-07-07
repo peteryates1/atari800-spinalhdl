@@ -375,7 +375,11 @@ class Atari800CoreSimpleSdram(
     ROM_REQUEST      := atari800xl.io.ROM_REQUEST
     ROM_WRITE_ENABLE := atari800xl.io.ROM_WRITE_ENABLE
   }
-  io.LOAD_COMPLETE := Mux(io.LOAD_TARGET_ROM, ROM_REQUEST_COMPLETE, RAM_REQUEST_COMPLETE)
+  // Load-write completion: a 2-cycle busy->done edge on the load pulse so the
+  // streaming loader's handshake sees it, independent of the RAM/ROM immediate
+  // write-complete (normal CPU RAM writes stay 1-cycle). Works for both targets.
+  val loadWrPulse = io.LOAD_ENABLE & io.LOAD_WE & io.LOAD_REQUEST
+  io.LOAD_COMPLETE := RegNext(RegNext(loadWrPulse, False), False)
 
   // Memory-bus INPUTS (BRAM -> core), unchanged.
   atari800xl.io.RAM_DO               := RAM_DO
