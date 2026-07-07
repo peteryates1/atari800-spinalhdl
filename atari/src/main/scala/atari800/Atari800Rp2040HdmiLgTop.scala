@@ -273,14 +273,17 @@ class Atari800Rp2040HdmiLgTop extends Component {
     val arb = new SdramArbiter3
 
     // Port A — Atari core
-    arb.io.a.request        := atari.io.SDRAM_REQUEST
-    arb.io.a.readEnable     := atari.io.SDRAM_READ_ENABLE
-    arb.io.a.writeEnable    := atari.io.SDRAM_WRITE_ENABLE
-    arb.io.a.addr           := B"0" ## atari.io.SDRAM_ADDR
-    arb.io.a.dataIn         := atari.io.SDRAM_DI
-    arb.io.a.byteAccess     := atari.io.SDRAM_8BIT_WRITE_ENABLE
-    arb.io.a.wordAccess     := atari.io.SDRAM_16BIT_WRITE_ENABLE
-    arb.io.a.longwordAccess := atari.io.SDRAM_32BIT_WRITE_ENABLE
+    // Step 3: the Atari is 100% in BRAM (RAM+OS+cart), so it never touches SDRAM
+    // (verified: portA maxStall=0). Sever port A's data path - only its refresh
+    // input is kept (below), for framebuffer retention. SDRAM is framebuffer-only.
+    arb.io.a.request        := False
+    arb.io.a.readEnable     := False
+    arb.io.a.writeEnable    := False
+    arb.io.a.addr           := B(0, 24 bits)
+    arb.io.a.dataIn         := B(0, 32 bits)
+    arb.io.a.byteAccess     := False
+    arb.io.a.wordAccess     := False
+    arb.io.a.longwordAccess := False
     // Refresh only during the Atari's VERTICAL blank. VIDEO_BLANK is high for a
     // per-line HBLANK stretch (~740 sys cyc) during visible lines, but stays
     // high across WHOLE scanlines during vertical blank - so a sustained-high
@@ -291,8 +294,10 @@ class Atari800Rp2040HdmiLgTop extends Component {
     when(atari.io.VIDEO_BLANK) { when(vblankCnt =/= U(vblankCnt.maxValue)) { vblankCnt := vblankCnt + 1 } }
       .otherwise { vblankCnt := 0 }
     arb.io.a.refresh := vblankCnt >= 2048
-    atari.io.SDRAM_REQUEST_COMPLETE := arb.io.a.complete
-    atari.io.SDRAM_DO               := arb.io.a.dataOut
+    // Atari SDRAM interface tied off: it never requests, but self-complete any
+    // stray request so nothing could ever hang. Data unused.
+    atari.io.SDRAM_REQUEST_COMPLETE := atari.io.SDRAM_REQUEST
+    atari.io.SDRAM_DO               := B(0, 32 bits)
 
     // Port B — framebuffer write: capture raw Atari video (8-bit GTIA index)
     // fbBase must be ABOVE the Atari's RAM in SDRAM (internal_ram=0 -> RAM at
@@ -408,13 +413,16 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // Loader destination (kbd 'B' command): 0 = SDRAM (port D), 1 = BRAM OS-ROM,
     // 2 = BRAM RAM. BRAM targets drive the core's LOAD port instead of port D.
     val ldToBram = kbd.io.ldDest =/= B(0, 2 bits)
-    arb.io.d.request        := kbd.io.ldReq && !ldToBram
-    arb.io.d.readEnable     := !kbd.io.ldWrite
-    arb.io.d.writeEnable    := kbd.io.ldWrite
-    arb.io.d.addr           := kbd.io.ldAddr
-    arb.io.d.dataIn         := kbd.io.ldData
-    kbd.io.ldRdData         := arb.io.d.dataOut
-    arb.io.d.byteAccess     := True
+    // Step 3: port D (loader -> SDRAM) severed. OS/cart now load into BRAM via
+    // the core LOAD port (ldDest 1/2); an SDRAM load (ldDest 0) would just
+    // self-complete as a no-op. SDRAM is framebuffer-only.
+    arb.io.d.request        := False
+    arb.io.d.readEnable     := False
+    arb.io.d.writeEnable    := False
+    arb.io.d.addr           := B(0, 24 bits)
+    arb.io.d.dataIn         := B(0, 32 bits)
+    kbd.io.ldRdData         := B(0, 32 bits)
+    arb.io.d.byteAccess     := False
     arb.io.d.wordAccess     := False
     arb.io.d.longwordAccess := False
 
@@ -425,7 +433,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     atari.io.LOAD_DATA       := kbd.io.ldData(7 downto 0)
     atari.io.LOAD_WE         := kbd.io.ldReq && kbd.io.ldWrite && ldToBram
     atari.io.LOAD_REQUEST    := kbd.io.ldReq && ldToBram
-    kbd.io.ldComplete        := Mux(ldToBram, atari.io.LOAD_COMPLETE, arb.io.d.complete)
+    kbd.io.ldComplete        := Mux(ldToBram, atari.io.LOAD_COMPLETE, kbd.io.ldReq)  // dest 0 = no-op self-complete
 
 
     // Arbiter -> SdramStatemachine
