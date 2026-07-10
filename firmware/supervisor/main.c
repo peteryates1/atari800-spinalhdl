@@ -835,14 +835,28 @@ int main(void) {
   // rewrites flash when the SD file's size/mtime differ -> no wear per boot.
   {
     static FATFS stagefs;
-    if (sd_card_present() && sd_init() == 0 && f_mount(&stagefs, "", 1) == FR_OK) {
+    // On a cold power-on the FPGA is still loading from config-flash, so the SD
+    // card — reached through the FPGA passthrough — isn't ready for the first
+    // few hundred ms. Retry until it responds (or time out) before staging;
+    // otherwise staging silently skips on every cold boot.
+    bool sd_ok = false;
+    absolute_time_t deadline = make_timeout_time_ms(2500);
+    while (absolute_time_diff_us(get_absolute_time(), deadline) > 0) {
+      if (sd_card_present() && sd_init() == 0 && f_mount(&stagefs, "", 1) == FR_OK) {
+        sd_ok = true;
+        break;
+      }
+      sleep_ms(50);
+    }
+    if (sd_ok) {
       char rbf[CFG_PATH_LEN];
       if (config_fpga_path(rbf, sizeof rbf))     // e.g. /atari/800/core.rbf
         g_fpga_staged = fpga_stage_if_changed(rbf);
       f_mount(0, "", 0);
     }
     cdc_printf("fpga: staged core = %lu bytes%s\r\n", (unsigned long)g_fpga_staged,
-               g_fpga_staged ? " (console 'F' to configure)" : " (none)");
+               g_fpga_staged ? " (console 'F' to configure)"
+                             : (sd_ok ? " (no image on SD)" : " (SD not ready)"));
   }
 
   // PIO-USB host on rhport 1
