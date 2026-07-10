@@ -28,6 +28,8 @@
 #include "config.h"
 #include "sio.h"
 #include "jtag.h"
+#include "blaster.h"
+#include "ft245_eeprom.h"
 #include "supervisor.h"
 
 // ---- Board wiring ----
@@ -705,6 +707,110 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
 #define BISECT_NO_CLOCK 0
 #endif
 
+// ---- USB-Blaster (FTDI) emulation ----------------------------------------
+// Ported from ~/pico-usb-blaster (MIT). Active only while g_blaster_mode is set
+// (the device then enumerates as 09fb:6001, see usb_descriptors.c). jtagd /
+// quartus_pgm drive JTAG through the vendor bulk endpoints and probe the device
+// via FTDI vendor control requests, which we answer here.
+
+// FTDI vendor request codes
+#define FTDI_SIO_RESET             0x00
+#define FTDI_SIO_MODEM_CTRL        0x01
+#define FTDI_SIO_SET_FLOW_CTRL     0x02
+#define FTDI_SIO_SET_BAUD_RATE     0x03
+#define FTDI_SIO_SET_DATA          0x04
+#define FTDI_SIO_GET_MODEM_STATUS  0x05
+#define FTDI_SIO_SET_LATENCY_TIMER 0x09
+#define FTDI_SIO_GET_LATENCY_TIMER 0x0A
+#define FTDI_SIO_READ_EEPROM       0x90
+
+// FTDI modem/line status; also the 2-byte header prepended to every bulk IN.
+#define FTDI_MODEM_STATUS 0x31
+#define FTDI_LINE_STATUS  0x60
+
+static uint8_t ftdi_latency_timer = 2;   // ms
+
+static bool handle_vendor_in_request(uint8_t rhport, tusb_control_request_t const *request) {
+  uint8_t response[2] = {0};
+  uint16_t resp_length;
+
+  switch (request->bRequest) {
+    case FTDI_SIO_GET_MODEM_STATUS:
+      response[0] = FTDI_MODEM_STATUS; response[1] = FTDI_LINE_STATUS;
+      resp_length = (request->wLength < 2) ? request->wLength : 2;
+      break;
+    case FTDI_SIO_GET_LATENCY_TIMER:
+      response[0] = ftdi_latency_timer; resp_length = 1;
+      break;
+    case FTDI_SIO_READ_EEPROM: {
+      uint16_t address = request->wIndex * 2;
+      if ((address + 1) < FT245_EEPROM_LENGTH) {
+        response[0] = FT245_EEPROM[address]; response[1] = FT245_EEPROM[address + 1];
+      }
+      resp_length = (request->wLength < 2) ? request->wLength : 2;
+      break;
+    }
+    default:
+      response[0] = FTDI_MODEM_STATUS; response[1] = FTDI_LINE_STATUS;
+      resp_length = (request->wLength < 2) ? request->wLength : 2;
+      break;
+  }
+
+  tud_control_xfer(rhport, request, response, resp_length);
+  return true;
+}
+
+static bool handle_vendor_out_request(uint8_t rhport, tusb_control_request_t const *request) {
+  switch (request->bRequest) {
+    case FTDI_SIO_RESET:              blaster_reset(); break;
+    case FTDI_SIO_SET_LATENCY_TIMER:  ftdi_latency_timer = request->wValue & 0xFF; break;
+    case FTDI_SIO_MODEM_CTRL:
+    case FTDI_SIO_SET_FLOW_CTRL:
+    case FTDI_SIO_SET_BAUD_RATE:
+    case FTDI_SIO_SET_DATA:           break;   // ACK silently
+    default:                          break;
+  }
+  if (request->wLength > 0) tud_control_xfer(rhport, request, NULL, 0);
+  else                      tud_control_status(rhport, request);
+  return true;
+}
+
+bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const *request) {
+  if (stage != CONTROL_STAGE_SETUP) return true;
+  if (request->bmRequestType_bit.direction == TUSB_DIR_IN)
+    return handle_vendor_in_request(rhport, request);
+  return handle_vendor_out_request(rhport, request);
+}
+
+// Pump the Blaster bulk endpoints: read OUT protocol bytes, drive JTAG, and
+// return any read-back bytes as FT245 packets (2-byte status header + payload).
+static void blaster_vendor_task(void) {
+  static uint32_t prev_tx_ms = 0;
+  static uint8_t  tx_buf[2 + 64 * 2] = { FTDI_MODEM_STATUS, FTDI_LINE_STATUS };
+  static int      tx_ready = 0;
+
+  if (!tud_mounted()) { tx_ready = 0; return; }
+
+  while (tud_vendor_available() && tx_ready <= 64) {
+    uint8_t buf[64];
+    uint32_t count = tud_vendor_read(buf, sizeof(buf));
+    tx_ready += blaster_process(buf, (int)count, tx_buf + 2 + tx_ready);
+  }
+
+  uint32_t now = to_ms_since_boot(get_absolute_time());
+  if (tx_ready > 0 || (now - prev_tx_ms) >= ftdi_latency_timer) {
+    int txCount = tx_ready > 62 ? 62 : tx_ready;
+    // Only write once the previous IN packet has drained, so each USB transfer
+    // carries exactly one FT245 status header (see pico-usb-blaster notes).
+    if (tud_vendor_write_available() < CFG_TUD_VENDOR_TX_BUFSIZE) return;
+    tud_vendor_write(tx_buf, txCount + 2);
+    tud_vendor_write_flush();
+    prev_tx_ms = now;
+    tx_ready -= txCount;
+    if (tx_ready > 0) memcpy(tx_buf + 2, tx_buf + 2 + txCount, tx_ready);
+  }
+}
+
 int main(void) {
 #if !BISECT_CDC_ONLY && !BISECT_NO_CLOCK
   set_sys_clock_khz(120000, true);   // PIO-USB officially supports 120 MHz
@@ -731,6 +837,7 @@ int main(void) {
   fpga_spi_init();
   fpga_send_control(0x00);
   fpga_set_offset(g_fb_hstart, g_fb_vskip);   // centre the picture by default
+  blaster_reset();   // idle the JTAG pins (GPIO0-3); ready for Quartus to program
 
   // Cold-boot re-enumeration. tud_init() above asserts the USB pull-up and
   // presents the device before tuh_init()/fpga_spi_init() run, but those run
@@ -751,6 +858,7 @@ int main(void) {
   absolute_time_t next_beat = make_timeout_time_ms(3000);
   while (true) {
     tud_task();
+    blaster_vendor_task();               // service Quartus JTAG programming (idle-cheap)
 #if !BISECT_CDC_ONLY
     tuh_task();
 #endif

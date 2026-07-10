@@ -117,6 +117,15 @@
 // CDC Endpoint transfer buffer size, more is faster
 #define CFG_TUD_CDC_EP_BUFSIZE   (TUD_OPT_HIGH_SPEED ? 512 : 64)
 
+// Vendor class: used only for the USB-Blaster (FTDI 09fb:6001) identity that
+// the device re-enumerates into for FPGA JTAG programming (see blaster.c /
+// g_blaster_mode). Buffers per the pico-usb-blaster reference: a large RX FIFO
+// keeps NAKs down when jtagd streams; TX is one FT245 packet.
+#define CFG_TUD_VENDOR            1
+#define CFG_TUD_VENDOR_EPSIZE     64
+#define CFG_TUD_VENDOR_RX_BUFSIZE 1024
+#define CFG_TUD_VENDOR_TX_BUFSIZE 64
+
 //--------------------------------------------------------------------
 // HOST CONFIGURATION
 //--------------------------------------------------------------------

@@ -15,6 +15,7 @@ add_executable(supervisor
     config.c
     sio.c
     jtag.c
+    blaster.c
     supervisor.c
     usb_descriptors.c
     sd_spi.c
