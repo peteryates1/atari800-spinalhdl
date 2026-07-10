@@ -14,6 +14,7 @@ add_executable(supervisor
     main.c
     config.c
     sio.c
+    jtag.c
     supervisor.c
     usb_descriptors.c
     sd_spi.c

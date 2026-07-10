@@ -1,90 +1,118 @@
-# Project Status — 2026-07-07
+# Project Status — 2026-07-10
 
 Handoff snapshot. Board: **atari-800-rp2040-qmtech-10cl025** (QMTech Cyclone 10 LP
-10CL025 + RP2040-STAMP + HDMI). Everything below is committed and hardware-verified.
+10CL025 + RP2040-STAMP + HDMI). Everything below is committed and hardware-verified
+unless noted.
 
 ## TL;DR — current state
 
-The Atari 800 runs **entirely from BRAM** (RAM + OS + cartridge). **SDRAM carries
-only the framebuffer.** Star Raiders boots and plays over 720p HDMI. The two
-long-standing display bugs — the photon/sprite **smear** and the whole-picture
-**jitter** — are gone *by construction*. **Nothing proprietary is in the `.sof`**:
-the OS and cart stream from the SD card into blank BRAM at boot.
+The Atari 800 runs **entirely from BRAM** (RAM + OS + cartridge); **SDRAM carries
+only the 720p framebuffer**. The RP2040-STAMP is the **supervisor**: it brings up
+USB + SD, then **auto-boots the Atari from a JSON config on the SD card**, emulates
+**SIO disk drives** (D1:–D4:) from ATR images, and hosts an **Alt-F12 supervisor
+menu** to pause/live-edit/reboot. **Nothing proprietary is in the `.sof`** — OS,
+cart, and disks all stream from SD.
 
-Resource use: logic **46%**, BRAM **65/66 M9K**, timing clean (slack ~1.6 ns).
+Confirmed on hardware: **Star Raiders** boots from cartridge over 720p HDMI, and
+**Jumpman** boots and runs off an emulated SIO disk in D1:. The old display bugs
+(sprite smear, whole-picture jitter) are gone by construction.
+
+Resource use: logic ~49%, BRAM **65/66 M9K**, timing clean.
 
 ## Architecture
 
 **Memory split**
 - **BRAM (inside the FPGA):** Atari 48 KB RAM (0000–BFFF), 800 OS ROM
-  (D800–FFFF), and the cartridge. Cart shares the top-of-RAM BRAM (A000–BFFF) —
-  same address space as RAM — and is read-only while the cart is active.
+  (D800–FFFF), and the cartridge (shares top-of-RAM A000–BFFF, read-only while
+  the cart is active).
 - **SDRAM (external):** the 720p framebuffer only (triple-buffered), written by
   the video capture, read by the scaler. No CPU/ANTIC/loader traffic.
 
 **Why:** ANTIC's real-time display DMA can't tolerate SDRAM contention/latency.
-Sharing SDRAM between the Atari and the framebuffer starved ANTIC → jitter, and
-mid-line refresh disrupted sprite DMA → smear. Putting the Atari fully in BRAM
-removes the shared resource entirely. See `memory/project_antic_ram_in_bram.md`.
+Putting the Atari fully in BRAM removes the shared resource. See
+`memory/project_antic_ram_in_bram.md`.
 
-**Load path (supervisor → BRAM):**
-- `InternalRomRam` `internal_rom=5`: 800 OS as blank, writable BRAM.
-- `Atari800CoreSimpleSdram` LOAD port: muxes supervisor address/data/we into the
-  RAM/ROM BRAM write ports while the Atari is halted (post-decoder).
-- Loader `ldDest` (`'B'`=0x42 SPI cmd): 0=SDRAM, 1=BRAM-OS, 2=BRAM-RAM.
-- Cart region in `AddressDecoder` reads `io.ramData` (RAM BRAM), swallows writes.
+**Load path (supervisor → BRAM):** supervisor streams OS/cart over the SPI link
+into the RAM/ROM BRAM write ports while the Atari is halted. Loader `ldDest`
+(`'B'`=0x42 SPI cmd): 0=SDRAM (severed/no-op), 1=BRAM-OS, 2=BRAM-RAM.
 
-## Boot process (currently MANUAL — see next steps)
+## Boot process — config-driven, auto at power-on
 
-1. Power-on: FPGA configures (blank BRAM); SDRAM does power-up init (~285 µs);
-   Atari held halted until `sdramReady`. RP2040 brings up USB (CDC console +
-   PIO-USB keyboard), SPI, SD; enters its main loop. **No auto-boot.**
-2. Console `'B'` (via `bootcart.py`, keypress, etc.):
-   - mount SD; halt 6502 (`0x10`)
-   - `ldDest=1`, load `atarios2.rom`→rom 0x1800, `atariosb.rom`→rom 0x2000
-   - `ldDest=2`, load cart→RAM 0xA000; set cart mode 0x01, offset, phase
-   - reset Atari (`0x11`→`0x00`, a stretched ~1.1 ms pulse)
-3. Atari boots from BRAM: OS vectors → RD5 cart detect → Star Raiders.
+1. Power-on: FPGA configures (blank BRAM); SDRAM inits; Atari held halted until
+   `sdramReady`. RP2040 brings up USB (CDC console + PIO-USB keyboard), SPI, SD.
+2. **Auto-boot** (`do_boot()` after `tud_connect()`): mount SD → read the config
+   hierarchy → halt 6502 → stream OS + cart into BRAM → mount disks → reset.
+   Console `'B'` re-runs it.
+3. Atari boots from BRAM; SIO disk traffic is serviced live by the supervisor.
 4. Capture → SDRAM framebuffer → scaler → 720p HDMI.
 
-Control byte: bit0 reset, bit1 start, bit2 select, bit3 option, bit4 halt.
+**SD config hierarchy** (`firmware/supervisor/config.c`):
+`/config.json {default:"/atari/800"}` → machine `/atari/800/config.json`
+(`memory-map[]` OS/RAM entries, `cartridge{directory,default}`,
+`disks{directory,drives[]}`) → per-cart and per-disk `config.json {file,image,type}`.
+
+## SIO disk emulator (`firmware/supervisor/sio.c`)
+
+Port of the JOP `SioDiskEmu.java` to the RP2040, driving the existing
+`SioBridge.scala` hardware serializer over SPI. `sio_poll()` drains command
+frames from the bridge RX FIFO, services READ_SECTOR / GET_STATUS / GET_SPEED
+from ATR images via FatFs, and streams sectors back through the TX FIFO (19200
+baud, 8-bit end-around-carry checksums). Writes NAK (read-only for now).
+Console `'D'` prints counters. **Jumpman confirmed booting off emulated D1:.**
+
+## Supervisor menu (`firmware/supervisor/supervisor.c`)
+
+**Alt-F12** (or console `'~'`) pauses the Atari and opens a menu to **live-edit**
+the boot selection — cart → none/pick, disk in D1:–D4: — then reboot. Edits are
+an **in-memory copy**; the SD JSON is untouched unless the explicit "save as
+default" action is invoked (`config_save`). Rendering is over the **serial
+console** today; an on-screen HDMI renderer (RP2040 rasterizes into the SDRAM
+framebuffer) is designed but not built. Alt-F12 hotkey is coded but untested (no
+physical keyboard connected yet).
+
+## Control / SPI protocol quick reference
+
+- Control byte: bit0 reset, bit1 start, bit2 select, bit3 option, bit4 halt
+  (0x10=halt/pause, 0x11=halt+reset pulse, 0x00=release).
+- SIO SPI cmds: `'Q'`(0x51)=SIO reg write {addr,lo,hi}; `'S'`(0x53)=SIO reg read
+  (latched, returned in a status frame). See `fpga_link.h`.
 
 ## Recent commit trail
 
+- `13f8612` Config-driven boot, SIO disk emulator, and supervisor menu
+- `e15e68c` STATUS.md handoff snapshot (Atari in BRAM, SDRAM framebuffer-only)
 - `9d3192e` Step 3: sever Atari↔SDRAM path; SDRAM framebuffer-only
 - `222c79f` Step 2: cart into shared top-of-RAM BRAM (read-only)
 - `853fbcf` Step 1: supervisor loads 800 OS into blank BRAM from SD
-- `5f407b2` Fix display jitter: Atari 48 KB RAM in BRAM (the root-cause fix)
-- `218c8f4` Cart-from-SDRAM, triple buffer, pixel-clock-locked capture
 
 ## Rebuild / flash / boot (quick reference)
 
 ```bash
 # Regenerate SystemVerilog from SpinalHDL (after Scala edits):
 sbt "atari/runMain atari800.Atari800Rp2040HdmiLgSv"
-# Build + program the FPGA:
+# Build + program the FPGA (JTAG via Altera Blaster — see next steps):
 cd boards/atari-800-rp2040-qmtech-10cl025/atari_starraiders && make build && make program
 # Build + flash the supervisor firmware (RP2040, via SWD debug probe):
 cd firmware/supervisor/build && make -j4
 openocd -f interface/cmsis-dap.cfg -c "adapter speed 5000; transport select swd" \
         -f target/rp2040.cfg -c "program supervisor.elf verify reset exit"
-# Trigger the boot (sends console 'B'): bootcart.py over /dev/ttyACM1
 ```
 
-SD card layout: `/os/atarios2.rom` (2K), `/os/atariosb.rom` (8K),
-`/cartridge/Star Raiders.rom` (8K).
+**Caveat:** the running SioBridge `.sof` is volatile JTAG SRAM; the config flash
+still holds the pre-SioBridge bitstream, so a power-cycle reverts. Re-program over
+the Blaster (or regenerate the `.jic`) after a power-cycle until the RP2040 JTAG
+loader (below) lands.
 
-## Remaining / next steps (nothing blocking)
+## Remaining / next steps
 
-1. **Auto-boot** at power-on (run the `'B'` sequence automatically), ideally
-   reading a `/config` file for which OS/cart to load. Biggest usability gap.
-2. **DLI residual**: the star-field/readout boundary shivers slightly — it's a
-   DLI (CPU code) whose timing still varies; a small CPU instruction cache would
-   remove it. Minor.
-3. **Arbiter cleanup**: rewrite the 4-port arbiter as a true 2-port (dead ports
-   A/D are Quartus-pruned today, ~200 LE).
-4. **Banked carts**: the cart read uses flat `ramData` (fine for 8K/16K
-   non-banked); bank-switched carts need `emuCartAddress`.
-5. **Refresh simplification**: the elaborate ANTIC-gated/VBLANK refresh built
-   during the jitter hunt is now redundant (PMG buffer is in BRAM) — could
-   revert to plain free-running refresh for a cleaner baseline.
+1. **RP2040 JTAG loader** (next milestone): let the RP2040 configure the FPGA
+   with a `.sof`/`.rbf` — both **from the host for dev** (removing the Altera
+   Blaster dependency) and **from the SD card** at power-on. Based on
+   **dirtyJTAG** (RP2040 as an OpenOCD-compatible JTAG probe). First step: audit
+   which FPGA config/JTAG pins are wired to the RP2040. See
+   `memory/project_sdcard_boot_vision.md`.
+2. **On-screen supervisor menu** on HDMI (RP2040 → SDRAM framebuffer + small FPGA
+   hw assist). Designed, not built.
+3. **SIO write support** (currently read-only / NAK on write).
+4. **Banked carts**: cart read uses flat `ramData` (fine for 8K/16K non-banked);
+   bank-switched carts need `emuCartAddress`.

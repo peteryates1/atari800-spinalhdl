@@ -27,6 +27,7 @@
 #include "lib/fatfs/source/ff.h"
 #include "config.h"
 #include "sio.h"
+#include "jtag.h"
 #include "supervisor.h"
 
 // ---- Board wiring ----
@@ -415,6 +416,7 @@ static void handle_console(void) {
     }
     case 'B': do_boot(); break;   // manual re-boot (also runs automatically at power-on)
     case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
+    case 'J': jtag_idcode_print(); break; // JTAG bring-up: read FPGA IDCODE (GPIO0-3 -> J10)
     case 'w': {   // SDRAM load channel self-test: 1 KB pattern @ 0x300000
       static uint8_t pat[1024];
       for (int i = 0; i < 1024; i++) pat[i] = (uint8_t)(i * 7 + 3);

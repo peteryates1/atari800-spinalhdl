@@ -4,6 +4,13 @@ Atari 800 FPGA core written in SpinalHDL, integrated with the
 [JOP](https://github.com/peteryates1/jop-spinalhdl) Java soft-core processor
 for SD card, USB, OSD, and configuration management.
 
+> **Current focus:** the active target is the **atari-800-rp2040-qmtech-10cl025**
+> board (Cyclone 10 LP 10CL025 + RP2040-STAMP + HDMI), where an **RP2040
+> supervisor** (C firmware, not JOP) handles SD, USB keyboard, config-driven
+> auto-boot, and SIO disk emulation. See **[STATUS.md](STATUS.md)** for the
+> up-to-date snapshot. The JOP/EP4CGX150 paths below remain valid for those
+> boards.
+
 ## Status
 
 The Atari 800 core boots and runs correctly in simulation and on real hardware:
@@ -414,8 +421,39 @@ Note: i9 has 32-bit wide SDRAM (M12L64322A). SdramStatemachine configured for
 | BRAM Tiles | ~20 | 75 | ~27% |
 | DSP48E1 | 5 | 120 | 4% |
 
+## Acknowledgements
+
+This project stands on a number of open-source works:
+
+**FPGA / HDL**
+- **[gyurco/Atari800XL](https://github.com/gyurco/Atari800XL)** (GPL-2.0) — the
+  VHDL Atari 800 core this project is a ground-up SpinalHDL rewrite of.
+- **[SpinalHDL](https://github.com/SpinalHDL/SpinalHDL)** — the hardware
+  description language and toolchain the entire core is written in.
+- **[JOP](https://github.com/peteryates1/jop-spinalhdl)** — Java Optimized
+  Processor soft-core (Martin Schoeberl), used as the earlier EP4CGX150
+  supervisor.
+
+**RP2040 supervisor firmware** (`firmware/supervisor/`)
+- **[Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk)**
+  (BSD-3-Clause) — RP2040 platform, build system, and drivers.
+- **[TinyUSB](https://github.com/hathach/tinyusb)** (MIT, Ha Thach) — the USB
+  device stack (CDC console) and host stack.
+- **[Pico-PIO-USB](https://github.com/sekigon-gonnoc/Pico-PIO-USB)** (MIT,
+  sekigon-gonnoc) — bit-banged USB host over the RP2040 PIO, used for the USB
+  keyboard.
+- **[FatFs](http://elm-chan.org/fsw/ff/)** (1-clause BSD, ChaN) — FAT filesystem
+  for reading OS/cart/disk images and JSON config from the SD card.
+
+**Tooling (planned)**
+- **[dirtyJTAG](https://github.com/jeanthom/DirtyJTAG)** (GPL-2.0, Jean THOMAS) —
+  basis for the upcoming RP2040 JTAG loader that will configure the FPGA from the
+  host and from the SD card (replacing the Altera Blaster dependency).
+
 ## License
 
 See individual source files. The Atari 800 core is derived from
 [gyurco/Atari800XL](https://github.com/gyurco/Atari800XL) (GPL-2.0).
 The JOP soft-core is from [peteryates1/jop-spinalhdl](https://github.com/peteryates1/jop-spinalhdl).
+Bundled third-party firmware libraries retain their own licenses (see
+`firmware/supervisor/lib/*/LICENSE` and the Acknowledgements above).
