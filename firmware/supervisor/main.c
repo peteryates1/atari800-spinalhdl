@@ -30,7 +30,11 @@
 #include "jtag.h"
 #include "blaster.h"
 #include "ft245_eeprom.h"
+#include "fpga_config.h"
 #include "supervisor.h"
+
+// Bytes of FPGA core image (/fpga/core.rbf) staged into flash at boot (0 = none).
+static uint32_t g_fpga_staged = 0;
 
 // ---- Board wiring ----
 #ifndef USE_USB2
@@ -419,6 +423,15 @@ static void handle_console(void) {
     case 'B': do_boot(); break;   // manual re-boot (also runs automatically at power-on)
     case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
     case 'J': jtag_idcode_print(); break; // JTAG bring-up: read FPGA IDCODE (GPIO0-3 -> J10)
+    case 'F': {   // configure the FPGA from the staged /fpga/core.rbf (SD-side load)
+      uint32_t n = fpga_staged_len();
+      if (n == 0) { cdc_printf("fpga: no staged core (put /fpga/core.rbf on SD, reset to stage)\r\n"); break; }
+      cdc_printf("fpga: configuring from staged %lu-byte .rbf ...\r\n", (unsigned long)n);
+      tud_cdc_write_flush(); tud_task();
+      bool ok = fpga_config_from_flash();
+      cdc_printf("fpga: CONF_DONE=%d %s\r\n", ok, ok ? "-- configured (run 'B' to boot the Atari)" : "-- FAILED");
+      break;
+    }
     case 'w': {   // SDRAM load channel self-test: 1 KB pattern @ 0x300000
       static uint8_t pat[1024];
       for (int i = 0; i < 1024; i++) pat[i] = (uint8_t)(i * 7 + 3);
@@ -815,6 +828,20 @@ int main(void) {
 #if !BISECT_CDC_ONLY && !BISECT_NO_CLOCK
   set_sys_clock_khz(120000, true);   // PIO-USB officially supports 120 MHz
 #endif
+
+  // Pre-USB (single-core -> RP2040 flash writes are safe): stage the FPGA core
+  // image from SD into flash IF it changed, so it can be JTAG-loaded later
+  // independent of the SD card (which is offline during reconfiguration). Only
+  // rewrites flash when the SD file's size/mtime differ -> no wear per boot.
+  {
+    static FATFS stagefs;
+    if (sd_card_present() && sd_init() == 0 && f_mount(&stagefs, "", 1) == FR_OK) {
+      g_fpga_staged = fpga_stage_if_changed("/fpga/core.rbf");
+      f_mount(0, "", 0);
+    }
+    cdc_printf("fpga: staged core = %lu bytes%s\r\n", (unsigned long)g_fpga_staged,
+               g_fpga_staged ? " (console 'F' to configure)" : " (none)");
+  }
 
   // PIO-USB host on rhport 1
   pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;

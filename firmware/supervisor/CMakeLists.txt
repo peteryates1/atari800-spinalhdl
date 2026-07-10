@@ -17,6 +17,7 @@ add_executable(supervisor
     jtag.c
     blaster.c
     msc_disk.c
+    fpga_config.c
     supervisor.c
     usb_descriptors.c
     sd_spi.c
@@ -37,6 +38,7 @@ target_link_libraries(supervisor PRIVATE
     pico_stdlib
     hardware_spi
     hardware_pio
+    hardware_flash
     tinyusb_device
     tinyusb_host
     tinyusb_board
