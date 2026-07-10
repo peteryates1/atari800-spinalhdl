@@ -836,7 +836,9 @@ int main(void) {
   {
     static FATFS stagefs;
     if (sd_card_present() && sd_init() == 0 && f_mount(&stagefs, "", 1) == FR_OK) {
-      g_fpga_staged = fpga_stage_if_changed("/fpga/core.rbf");
+      char rbf[CFG_PATH_LEN];
+      if (config_fpga_path(rbf, sizeof rbf))     // e.g. /atari/800/core.rbf
+        g_fpga_staged = fpga_stage_if_changed(rbf);
       f_mount(0, "", 0);
     }
     cdc_printf("fpga: staged core = %lu bytes%s\r\n", (unsigned long)g_fpga_staged,

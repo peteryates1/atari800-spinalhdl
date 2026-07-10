@@ -91,6 +91,18 @@ static int read_file(const char *path, char *buf, int buflen) {
   return (int)rd;
 }
 
+bool config_fpga_path(char *out, int outlen) {
+  static char root[512];
+  int n = read_file("/config.json", root, sizeof root);
+  if (n < 0) return false;
+  const char *rend = root + n;
+  char machine[CFG_PATH_LEN];
+  if (!j_str(j_find(root, rend, "default"), rend, machine, sizeof machine))
+    return false;
+  snprintf(out, outlen, "%s/core.rbf", machine);
+  return true;
+}
+
 bool config_load(boot_config_t *cfg) {
   memset(cfg, 0, sizeof *cfg);
 

@@ -55,6 +55,12 @@ typedef struct {
 // are not errors (cfg.hasCart / cfg.diskCount reflect what was found).
 bool config_load(boot_config_t *cfg);
 
+// Absolute path of the default machine's FPGA core image, e.g.
+// "/atari/800/core.rbf". Reads only /config.json (the "default" machine dir),
+// so it's cheap enough for the pre-USB staging step. Returns false if there's
+// no /config.json / default. (Used by the SD-side FPGA loader.)
+bool config_fpga_path(char *out, int outlen);
+
 // ---- supervisor live-edit helpers (do NOT touch the SD files) ----
 
 // List the subfolder names under <machine>/<subdir> (e.g. cfg->cartDir) into
