@@ -56,6 +56,7 @@ class RpAtariKeyboard extends Component {
     val ctrlSelect = out Bool()
     val ctrlOption = out Bool()
     val ctrlHalt   = out Bool()
+    val supDisplay = out Bool()          // ctrl bit 5: show the RP2040 supervisor framebuffer on HDMI
     // SDRAM loader port (arbiter port D; complete idles low, pulses high)
     val ldReq      = out Bool()
     val ldAddr     = out Bits(24 bits)
@@ -222,7 +223,7 @@ class RpAtariKeyboard extends Component {
   val nextSelect = Reg(Bool()) init False
   val nextOption = Reg(Bool()) init False
 
-  val ctrlBits = Reg(Bits(5 bits)) init 0
+  val ctrlBits = Reg(Bits(6 bits)) init 0
   val hStartReg   = Reg(UInt(9 bits)) init 0   // transient carriers across the frame
   val vSkipReg    = Reg(UInt(9 bits)) init 0
   val offsetWrReg = Reg(Bool()) init False
@@ -275,7 +276,7 @@ class RpAtariKeyboard extends Component {
           when(byteIdx === 1) { pixPhaseReg := byteVal(2 downto 0).asUInt; pixPhaseWrReg := True }
         }
         is(B(0x43, 8 bits)) {              // 'C': control bits
-          when(byteIdx === 1) { ctrlBits := byteVal(4 downto 0) }
+          when(byteIdx === 1) { ctrlBits := byteVal(5 downto 0) }
         }
         is(B(0x52, 8 bits)) {              // 'R': SDRAM read-back
           when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt; ldIsRead := True }
@@ -383,6 +384,7 @@ class RpAtariKeyboard extends Component {
   io.ctrlSelect   := ctrlBits(2)
   io.ctrlOption   := ctrlBits(3)
   io.ctrlHalt     := ctrlBits(4)
+  io.supDisplay   := ctrlBits(5)
   io.offsetH      := hStartReg
   io.offsetV      := vSkipReg
   io.offsetWr     := offsetWrReg

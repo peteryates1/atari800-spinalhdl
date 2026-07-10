@@ -315,7 +315,9 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // fbBase must be ABOVE the Atari's RAM in SDRAM (internal_ram=0 -> RAM at
     // low addresses). 0x100000 = 1 MB, well clear of the Atari's 64 KB.
     val fbWrite = new VideoFbWrite(fbBase = 0x100000, width = 384, strideLog2 = 9, height = 288, addrWidth = 24, clearOnReset = true)
-    fbWrite.io.enable    := BufferCC(sdramCtrl.io.reset_client_n, False)  // SDRAM chip init COMPLETE (not just controller reset release) && !kbd.io.ctrlHalt   // quiesce during supervisor loads
+    // Freeze the Atari video capture while the supervisor screen is shown, so it
+    // doesn't overwrite the buffer the RP2040 is rendering into.
+    fbWrite.io.enable    := BufferCC(sdramCtrl.io.reset_client_n, False) && !kbd.io.supDisplay
     // Sample at the Atari hi-res pixel rate (sys/8 ~ 7.2 MHz), phase-locked to
     // each line by hsync. colourEnable (sys/2 ~ 28.8 MHz) is 4x too fast: the
     // 384-wide buffer filled after ~96 real pixels (image squashed to the left).
@@ -370,8 +372,10 @@ class Atari800Rp2040HdmiLgTop extends Component {
     arb.io.c.longwordAccess := !fbRead.io.rdWide
     arb.io.c.wideAccess     := fbRead.io.rdWide
     fbRead.io.rdData        := arb.io.c.wideOut
-    // Double buffering: display reads the buffer capture last completed.
-    fbRead.io.readBuf       := fbWrite.io.readyBuf
+    // Double buffering: display reads the buffer capture last completed. In
+    // supervisor mode, show buffer 2 (fbBase + 2*0x40000 = 0x180000) instead —
+    // the buffer the RP2040 renders the on-screen menu into via port D.
+    fbRead.io.readBuf       := Mux(kbd.io.supDisplay, U(2, 2 bits), fbWrite.io.readyBuf)
 
     // Sticky probe: has the Atari (port A) ever addressed the upper SDRAM
     // regions (bit 22 set = OS/cart windows at 0x50xxxx/0x70xxxx)?
@@ -424,19 +428,21 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // Supervisor SDRAM loader -> arbiter port D (lowest priority)
     // Loader destination (kbd 'B' command): 0 = SDRAM (port D), 1 = BRAM OS-ROM,
     // 2 = BRAM RAM. BRAM targets drive the core's LOAD port instead of port D.
-    val ldToBram = kbd.io.ldDest =/= B(0, 2 bits)
-    // Step 3: port D (loader -> SDRAM) severed. OS/cart now load into BRAM via
-    // the core LOAD port (ldDest 1/2); an SDRAM load (ldDest 0) would just
-    // self-complete as a no-op. SDRAM is framebuffer-only.
-    arb.io.d.request        := False
-    arb.io.d.readEnable     := False
-    arb.io.d.writeEnable    := False
-    arb.io.d.addr           := B(0, 24 bits)
-    arb.io.d.dataIn         := B(0, 32 bits)
-    kbd.io.ldRdData         := B(0, 32 bits)
+    val ldToBram  = kbd.io.ldDest =/= B(0, 2 bits)
+    val ldToSdram = kbd.io.ldDest === B(0, 2 bits)
+    // Port D re-enabled: the supervisor writes its on-screen framebuffer into
+    // SDRAM (ldDest 0). The loader packs bytes into 32-bit longwords, so use
+    // longword access. Only active while the RP2040 is loading (ldReq), so it
+    // never disturbs normal Atari-in-BRAM operation.
+    arb.io.d.request        := kbd.io.ldReq && ldToSdram
+    arb.io.d.readEnable     := ~kbd.io.ldWrite
+    arb.io.d.writeEnable    := kbd.io.ldWrite
+    arb.io.d.addr           := kbd.io.ldAddr
+    arb.io.d.dataIn         := kbd.io.ldData
+    kbd.io.ldRdData         := arb.io.d.dataOut
     arb.io.d.byteAccess     := False
     arb.io.d.wordAccess     := False
-    arb.io.d.longwordAccess := False
+    arb.io.d.longwordAccess := True
 
     // Core BRAM load port (OS ROM / RAM), fed by the same loader when ldToBram.
     atari.io.LOAD_ENABLE     := ldToBram && kbd.io.ctrlHalt   // only drive the bus while halted
@@ -445,7 +451,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     atari.io.LOAD_DATA       := kbd.io.ldData(7 downto 0)
     atari.io.LOAD_WE         := kbd.io.ldReq && kbd.io.ldWrite && ldToBram
     atari.io.LOAD_REQUEST    := kbd.io.ldReq && ldToBram
-    kbd.io.ldComplete        := Mux(ldToBram, atari.io.LOAD_COMPLETE, kbd.io.ldReq)  // dest 0 = no-op self-complete
+    kbd.io.ldComplete        := Mux(ldToBram, atari.io.LOAD_COMPLETE, arb.io.d.complete)  // dest 0 = SDRAM (port D)
 
 
     // Arbiter -> SdramStatemachine

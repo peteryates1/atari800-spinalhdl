@@ -424,6 +424,22 @@ static void handle_console(void) {
     case 'B': do_boot(); break;   // manual re-boot (also runs automatically at power-on)
     case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
     case 'J': jtag_idcode_print(); break; // JTAG bring-up: read FPGA IDCODE (GPIO0-3 -> J10)
+    case 'V': {   // on-screen supervisor test: render into the SDRAM framebuffer -> HDMI
+      cdc_printf("supdisp: rendering colour bands into fb buf2 (0x180000)...\r\n");
+      tud_cdc_write_flush(); tud_task();
+      fpga_send_control(0x20);            // supDisplay: freeze Atari capture, show buf2
+      fpga_set_dest(0);                   // SDRAM (port D)
+      static uint8_t line[384];
+      for (int y = 0; y < 288; y++) {
+        uint8_t c = (uint8_t)(((y >> 4) << 4) | 0x0C);  // hue by line, luma 0x0C -> bands
+        for (int x = 0; x < 384; x++) line[x] = c;
+        uint16_t lc = 0, ls = 0;
+        fpga_load(0x180000u + (uint32_t)y * 512u, line, 384, &lc, &ls);
+        if ((y & 15) == 0) tud_task();    // keep USB alive during the ~110 KB write
+      }
+      cdc_printf("supdisp: done -- HDMI should show 18 horizontal colour bands. '0' to return.\r\n");
+      break;
+    }
     case 'W': {   // RM2 (CYW43439) connectivity smoke test via the FPGA passthrough
       uint32_t v = 0;
       bool ok = rm2_smoke_test(&v);
