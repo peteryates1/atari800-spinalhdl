@@ -28,7 +28,9 @@ void fbtext_puts(int row, int col, const char *s) {
 }
 
 void fbtext_flush(void) {
-    static uint8_t line[FB_WIDTH];
+    // Write the full stride (not just the 384 visible px) so the 128-px padding
+    // is cleared to the background too, instead of leaking the old Atari frame.
+    static uint8_t line[FB_STRIDE];
     fpga_fb_begin();
     for (int r = 0; r < FBT_ROWS; r++) {
         for (int ly = 0; ly < 16; ly++) {
@@ -39,8 +41,9 @@ void fbtext_flush(void) {
                 for (int b = 0; b < 8; b++)
                     p[b] = (bits & (0x80 >> b)) ? fg : s_bg;
             }
+            for (int x = FB_WIDTH; x < FB_STRIDE; x++) line[x] = s_bg;  // padding -> bg
             uint32_t y = (uint32_t)r * 16 + ly;
-            fpga_fb_write(FB_SUP_BASE + y * FB_STRIDE, line, FB_WIDTH);
+            fpga_fb_write(FB_SUP_BASE + y * FB_STRIDE, line, FB_STRIDE);
         }
     }
 }

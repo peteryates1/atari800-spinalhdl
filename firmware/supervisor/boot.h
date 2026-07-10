@@ -19,5 +19,6 @@ void fpga_send_control(uint8_t bits);
 // On-screen framebuffer write path (SDRAM loader, port D). Used by fbtext.
 void fpga_fb_begin(void);                                           // select SDRAM dest
 void fpga_fb_write(uint32_t sdram_addr, const uint8_t *data, uint32_t len);
+bool fpga_fb_verify(void);   // true if the loader got every byte (no drops)
 
 #endif // BOOT_H

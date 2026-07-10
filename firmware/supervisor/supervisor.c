@@ -1,7 +1,9 @@
 #include "supervisor.h"
 #include "config.h"
 #include "boot.h"
+#include "fbtext.h"
 #include <string.h>
+#include <stdio.h>
 
 // ===== state =====
 static bool          active;
@@ -17,6 +19,47 @@ bool sup_active(void) { return active; }
 static void sup_enter(void);
 void sup_open(void) { if (!active) sup_enter(); }
 
+// ===== on-screen backend: mirror the current menu state onto HDMI =====
+// Rendered into the SDRAM supervisor framebuffer; shown while supDisplay is set
+// (only called while active, so the Atari capture is frozen -> no conflict).
+static void fb_render(void) {
+  if (!active) return;
+  char buf[FBT_COLS + 1];
+  fbtext_colors(0x0F, 0x00);
+  fbtext_clear();
+  fbtext_colors(0x3E, 0x00); fbtext_puts(0, 2, "ATARI 800 SUPERVISOR");
+  fbtext_colors(0x2C, 0x00); fbtext_puts(0, 30, "(paused)");
+
+  if (pending == PICK_NONE) {
+    fbtext_colors(0x0F, 0x00);
+    snprintf(buf, sizeof buf, "Cart : %s%s",
+             live.hasCart ? live.cartName : "<none>",
+             live.hasCart ? (live.cartMode == 0x21 ? "  [16K]" : "  [8K]") : "");
+    fbtext_puts(3, 2, buf);
+    for (int i = 0; i < CFG_MAX_DISKS; i++) {
+      snprintf(buf, sizeof buf, "D%d:  : %s", i + 1,
+               live.diskName[i][0] ? live.diskName[i] : "<empty>");
+      fbtext_puts(4 + i, 2, buf);
+    }
+    fbtext_colors(0x2C, 0x00);
+    fbtext_puts(10, 2, "[c] cart    [1-4] disk in drive");
+    fbtext_puts(11, 2, "[b] boot    [q] resume");
+    fbtext_puts(12, 2, "[s] save as default    [r] reload");
+  } else {
+    fbtext_colors(0x0F, 0x00);
+    fbtext_puts(3, 2, pending == PICK_CART ? "Choose cartridge:" : "Choose disk:");
+    int r = 4;
+    for (int i = 0; i < nameCount && r < FBT_ROWS - 2; i++, r++) {
+      char tag = (i < 10) ? (char)('0' + i) : (char)('a' + i - 10);
+      snprintf(buf, sizeof buf, " %c) %s", tag, names[i]);
+      fbtext_puts(r, 2, buf);
+    }
+    fbtext_colors(0x2C, 0x00);
+    fbtext_puts(FBT_ROWS - 1, 2, "[n] none    [x] cancel");
+  }
+  fbtext_flush();
+}
+
 // ===== rendering (console backend; render-agnostic logic) =====
 static void print_menu(void) {
   cdc_printf("\r\n==== SUPERVISOR (Atari paused) ====\r\n");
@@ -31,6 +74,7 @@ static void print_menu(void) {
   cdc_printf(" [b] boot   [q] resume\r\n");
   cdc_printf(" [s] save as default   [r] reload config\r\n");
   cdc_printf("> ");
+  fb_render();
 }
 
 static void list_folders(const char *subdir) {
@@ -41,15 +85,16 @@ static void list_folders(const char *subdir) {
     cdc_printf("  %c) %s\r\n", tag, names[i]);
   }
   cdc_printf("  [n] none   [x] cancel\r\n> ");
+  fb_render();
 }
 
 // ===== transitions =====
 static void sup_enter(void) {
   config_load(&live);                      // fresh from SD, reflects current config
-  fpga_send_control(0x10);                 // halt/pause the Atari
   active = true;
   pending = PICK_NONE;
-  print_menu();
+  fpga_send_control(0x30);                 // halt (pause) + supDisplay (show on HDMI)
+  print_menu();                            // console + on-screen (fb_render)
 }
 
 static void sup_resume(void) {

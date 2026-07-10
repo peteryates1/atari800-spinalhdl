@@ -164,11 +164,18 @@ static void fpga_set_dest(uint8_t dest) {
 }
 
 // On-screen framebuffer write path for fbtext (boot.h): the loader -> SDRAM
-// port D. fpga_fb_begin selects the SDRAM destination once per flush.
-void fpga_fb_begin(void) { fpga_set_dest(0); }
+// port D. fpga_fb_begin selects the SDRAM destination once per flush and resets
+// the FPGA's byte counter so a flush can be checked for dropped writes.
+static uint16_t g_fb_cnt, g_fb_sum;
+void fpga_fb_begin(void) { fpga_set_dest(0); fpga_load_zero(); g_fb_cnt = 0; g_fb_sum = 0; }
 void fpga_fb_write(uint32_t sdram_addr, const uint8_t *data, uint32_t len) {
-  uint16_t c = 0, s = 0;
-  fpga_load(sdram_addr, data, len, &c, &s);
+  fpga_load(sdram_addr, data, len, &g_fb_cnt, &g_fb_sum);
+}
+// True if the FPGA loader received every byte (no queue-overflow drops).
+bool fpga_fb_verify(void) {
+  uint16_t fcnt = 0, fsum = 0;
+  fpga_load_status(&fcnt, &fsum);
+  return (fcnt == g_fb_cnt && fsum == g_fb_sum);
 }
 
 // ---- SioBridge register access (see fpga_link.h) ----
@@ -450,7 +457,8 @@ static void handle_console(void) {
       fbtext_colors(0x2C, 0x00);
       fbtext_puts(17, 1, "press 0 to return to the atari");
       fbtext_flush();
-      cdc_printf("supdisp: done. '0' to return.\r\n");
+      cdc_printf("supdisp: done. loader drops = %s. '0' to return.\r\n",
+                 fpga_fb_verify() ? "NONE" : "YES (queue overflow -> stale pixels)");
       break;
     }
     case 'W': {   // RM2 (CYW43439) connectivity smoke test via the FPGA passthrough
