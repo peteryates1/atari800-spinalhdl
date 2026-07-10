@@ -235,7 +235,19 @@ class Atari800Rp2040HdmiLgTop extends Component {
     kbd.io.keyboardScan := atari.io.KEYBOARD_SCAN
     atari.io.KEYBOARD_RESPONSE := kbd.io.keyboardResponse
 
-    atari.io.SIO_RXD := True
+    // SIO disk drive emulator: the RP2040 monitors the SIO command bus and
+    // injects drive responses through the SioBridge (hardware serializer),
+    // driven over the same SPI link ('Q' write / 'S' read register access).
+    val sioBridge = new SioBridge
+    sioBridge.io.sioCommand  := atari.io.SIO_COMMAND
+    sioBridge.io.sioTxd      := atari.io.SIO_TXD
+    sioBridge.io.sioClockout := atari.io.SIO_CLOCKOUT
+    atari.io.SIO_RXD         := sioBridge.io.sioRxd
+    sioBridge.bus.addr   := kbd.io.sioAddr
+    sioBridge.bus.rd     := kbd.io.sioRd
+    sioBridge.bus.wr     := kbd.io.sioWr
+    sioBridge.bus.wrData := kbd.io.sioWrData.resize(32)
+    kbd.io.sioRdData     := sioBridge.bus.rdData
 
     atari.io.CONSOL_OPTION := ~io.consolOption | kbd.io.consolOption | kbd.io.ctrlOption
     atari.io.CONSOL_SELECT := ~io.consolSelect | kbd.io.consolSelect | kbd.io.ctrlSelect

@@ -89,6 +89,14 @@ class RpAtariKeyboard extends Component {
     val bbMinY     = in UInt(9 bits)
     val bbMaxY     = in UInt(9 bits)
     val aMaxWait   = in UInt(10 bits)   // worst port-A SDRAM stall (status 22,23)
+    // SIO bridge register access (SPI 'Q'=write, 'S'=read). Drives the SioBridge
+    // bus in the top; sioRd/sioWr are one-cycle pulses. The 16-bit read result
+    // is latched and streamed back in the MISO status block (bytes 24,25).
+    val sioAddr    = out UInt(4 bits)
+    val sioRd      = out Bool()
+    val sioWr      = out Bool()
+    val sioWrData  = out Bits(16 bits)
+    val sioRdData  = in  Bits(32 bits)
   }
 
   // ---- Input synchronisers (SPI clock << sys clock; 3-stage) ----
@@ -142,6 +150,14 @@ class RpAtariKeyboard extends Component {
   val vLen     = Reg(UInt(24 bits)) init 0
   val vSum     = Reg(UInt(16 bits)) init 0
 
+  // ---- SIO bridge register access ('Q' write / 'S' read) ----
+  // Declared before the MISO block, which streams sioRdLatch in bytes 24,25.
+  val sioAddrReg   = Reg(UInt(4 bits)) init 0
+  val sioWrDataReg = Reg(Bits(16 bits)) init 0
+  val sioRdReg     = Reg(Bool()) init False; sioRdReg := False   // one-cycle pulse
+  val sioWrReg     = Reg(Bool()) init False; sioWrReg := False   // one-cycle pulse
+  val sioRdLatch   = Reg(Bits(16 bits)) init 0
+
   // ---- MISO status stream (slave shifts on falling edge, mode 0) ----
   val frameCnt = Reg(UInt(8 bits)) init 0
   val shiftOut = Reg(Bits(8 bits)) init 0
@@ -177,6 +193,8 @@ class RpAtariKeyboard extends Component {
           is(21) { shiftOut := (B(0, 7 bits) ## io.bbMaxY(8)) }
           is(22) { shiftOut := io.aMaxWait(7 downto 0).asBits }
           is(23) { shiftOut := (B(0, 6 bits) ## io.aMaxWait(9 downto 8)) }
+          is(24) { shiftOut := sioRdLatch(7 downto 0) }    // SIO read result lo
+          is(25) { shiftOut := sioRdLatch(15 downto 8) }   // SIO read result hi
           default { shiftOut := B(0, 8 bits) }
         }
       }
@@ -291,6 +309,14 @@ class RpAtariKeyboard extends Component {
             pushPtr := pushPtr + 1
           }
         }
+        is(B(0x51, 8 bits)) {              // 'Q': SIO register write (addr, dataLo, dataHi)
+          when(byteIdx === 1) { sioAddrReg := byteVal(3 downto 0).asUInt }
+          when(byteIdx === 2) { sioWrDataReg(7 downto 0)  := byteVal }
+          when(byteIdx === 3) { sioWrDataReg(15 downto 8) := byteVal; sioWrReg := True }
+        }
+        is(B(0x53, 8 bits)) {              // 'S': SIO register read (addr) -> sioRdLatch
+          when(byteIdx === 1) { sioAddrReg := byteVal(3 downto 0).asUInt; sioRdReg := True }
+        }
       }
     }
     when(byteIdx =/= byteIdx.maxValue) { byteIdx := byteIdx + 1 }
@@ -365,6 +391,15 @@ class RpAtariKeyboard extends Component {
   io.pixPhase     := pixPhaseReg
   io.pixPhaseWr   := pixPhaseWrReg
   io.frameCount   := frameCnt
+
+  // SIO bus outputs + read capture. sioRd pulses the cycle after the 'S'
+  // address byte; SioBridge's rdData (and its rxReadLatch on FIFO reads) is
+  // valid one cycle later, so capture on RegNext(sioRd).
+  io.sioAddr   := sioAddrReg
+  io.sioRd     := sioRdReg
+  io.sioWr     := sioWrReg
+  io.sioWrData := sioWrDataReg
+  when(RegNext(sioRdReg) init False) { sioRdLatch := io.sioRdData(15 downto 0) }
 
   // ---- KEYBOARD_RESPONSE generation (matches Ch376UsbKeyboard) ----
   io.keyboardResponse := B"11"

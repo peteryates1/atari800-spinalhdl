@@ -25,6 +25,9 @@
 #include "tusb.h"
 #include "sd_spi.h"
 #include "lib/fatfs/source/ff.h"
+#include "config.h"
+#include "sio.h"
+#include "supervisor.h"
 
 // ---- Board wiring ----
 #ifndef USE_USB2
@@ -41,7 +44,7 @@
 static char logring[2048];
 static uint16_t logring_w;
 
-static void cdc_printf(const char *fmt, ...) {
+void cdc_printf(const char *fmt, ...) {
   char buf[224];
   va_list args;
   va_start(args, fmt);
@@ -151,6 +154,24 @@ static void fpga_set_dest(uint8_t dest) {
   fpga_spi_frame(tx, rx, sizeof tx);
 }
 
+// ---- SioBridge register access (see fpga_link.h) ----
+void fpga_sio_write(uint8_t addr, uint16_t data) {
+  uint8_t tx[4] = { 0x51, (uint8_t)(addr & 0x0F),
+                    (uint8_t)(data & 0xFF), (uint8_t)(data >> 8) };
+  uint8_t rx[4];
+  fpga_spi_frame(tx, rx, sizeof tx);
+}
+
+uint16_t fpga_sio_read(uint8_t addr) {
+  // Step 1: 'S' triggers the bus read + latch (and any FIFO/sticky side effect).
+  uint8_t tx1[2] = { 0x53, (uint8_t)(addr & 0x0F) }, rx1[2];
+  fpga_spi_frame(tx1, rx1, sizeof tx1);
+  // Step 2: zero-command status frame returns the latch in MISO bytes 25/26.
+  uint8_t tx2[27] = {0}, rx2[27];
+  fpga_spi_frame(tx2, rx2, sizeof tx2);
+  return (uint16_t)rx2[25] | ((uint16_t)rx2[26] << 8);
+}
+
 // 'V' frame: FPGA reads len bytes at addr (byte mode - the CPU's view) and
 // sums them; poll status bytes 6..8 for the result. Returns true on match.
 static bool fpga_verify_content(uint32_t addr, uint32_t len, uint16_t want) {
@@ -173,7 +194,7 @@ static bool fpga_verify_content(uint32_t addr, uint32_t len, uint16_t want) {
   return got == want;
 }
 
-static void fpga_send_control(uint8_t bits) {
+void fpga_send_control(uint8_t bits) {
   uint8_t tx[2] = {'C', bits};
   uint8_t rx[2];
   fpga_spi_frame(tx, rx, sizeof tx);
@@ -198,8 +219,7 @@ static void fpga_set_offset(uint8_t hstart, uint8_t vskip) {
 
 // Cartridge select: CartLogic mode (0 = none, 0x01 = 8K, 0x21 = 16K, ...).
 // The holding register is in the BOOT-reset cfgArea, so it survives the reset
-// that boots the cart. A future SD config file picks the cart + mode here.
-#define DEFAULT_CART_PATH "/cartridge/Star Raiders.rom"
+// that boots the cart. The cart + mode come from the SD config (see config.c).
 
 static void fpga_set_cart(uint8_t mode) {
   uint8_t tx[2] = {'X', mode};
@@ -241,10 +261,109 @@ static void fpga_bitbang_key_a(void) {
 }
 
 // ---- CDC console commands (single letters) ----
+
+// Stream one file from SD to a load destination, retrying on checksum mismatch.
+// dest: 1 = BRAM OS-ROM (rom-space addr), 2 = BRAM RAM (cart). Returns bytes
+// streamed on success, or -1 after 3 failed attempts / open failure.
+static long stream_file(const char *path, uint32_t addr, uint8_t dest,
+                        const char *what) {
+  for (int attempt = 0; attempt < 3; attempt++) {
+    FIL f;
+    if (f_open(&f, path, FA_READ) != FR_OK) {
+      cdc_printf("boot: open %s failed\r\n", path);
+      return -1;
+    }
+    fpga_set_dest(dest);
+    fpga_load_zero();
+    uint16_t lcnt = 0, lsum = 0; uint32_t total = 0;
+    static uint8_t buf[504]; UINT rd;
+    while (f_read(&f, buf, sizeof buf, &rd) == FR_OK && rd > 0) {
+      fpga_load(addr + total, buf, rd, &lcnt, &lsum);
+      total += rd; tud_task();
+    }
+    f_close(&f);
+    uint16_t fcnt, fsum; fpga_load_status(&fcnt, &fsum);
+    bool match = (lcnt == fcnt && lsum == fsum);
+    cdc_printf("boot: %s %s -> %s %04lx (%lu bytes) stream %s\r\n", what, path,
+               dest == 1 ? "ROM-BRAM" : "RAM-BRAM", addr, total,
+               match ? "ok" : "CHECKSUM MISMATCH");
+    if (match) return (long)total;       // BRAM has no read-back; trust stream sum
+    cdc_printf("boot: retrying %s\r\n", path);
+  }
+  return -1;
+}
+
+// Load the OS + cart described by `cfg` into blank BRAM, mount its disk images
+// for the SIO emu, and reset the Atari to run. Assumes the SD is mounted. Used
+// by both the config default (do_boot) and the supervisor's live selection.
+void boot_run(const boot_config_t *cfg) {
+  fpga_send_control(0x10);               // HALT the 6502: quiet the bus during load
+
+  bool ok = (cfg->osCount > 0);
+  for (int i = 0; i < cfg->osCount && ok; i++)
+    ok = stream_file(cfg->os[i].path, cfg->os[i].romAddr, 1, "os") >= 0;
+
+  uint8_t cartMode = 0;
+  if (ok && cfg->hasCart) {
+    if (stream_file(cfg->cartPath, cfg->cartAddr, 2, "cart") >= 0)
+      cartMode = cfg->cartMode;          // enable emuCart RD5 -> OS boots it from BRAM
+    else
+      cdc_printf("boot: cart load failed - memo pad\r\n");
+  } else if (ok) {
+    cdc_printf("boot: no cart - memo pad / disk boot\r\n");
+  }
+  fpga_set_dest(0);
+
+  // Mount disk images for the SIO drive emulator (D1: = slot 0).
+  sio_unmount_all();
+  for (int i = 0; i < CFG_MAX_DISKS; i++) {
+    if (!cfg->diskPath[i][0]) continue;
+    if (sio_mount(i, cfg->diskPath[i]))
+      cdc_printf("boot: D%d: mounted %s\r\n", i + 1, cfg->diskPath[i]);
+    else
+      cdc_printf("boot: D%d: mount FAILED %s\r\n", i + 1, cfg->diskPath[i]);
+  }
+
+  if (ok) {
+    cdc_printf("boot: loaded, resetting Atari (cart mode %02x)\r\n", cartMode);
+    fpga_set_offset(g_fb_hstart, g_fb_vskip);
+    fpga_set_cart(cartMode);             // 0 = memo pad; else boot the cart
+    fpga_send_control(0x11);             // release halt via reset
+    fpga_send_control(0x00);
+  } else {
+    fpga_set_cart(0);
+    fpga_send_control(0x00);
+    cdc_printf("boot: load errors - not resetting\r\n");
+  }
+}
+
+// Boot from the SD config: mount, parse /config.json + machine config, run.
+// Called automatically at power-on and by the console 'B' command.
+static void do_boot(void) {
+  static FATFS fs;
+  if (f_mount(&fs, "", 1) != FR_OK) {
+    cdc_printf("boot: SD mount failed\r\n"); fpga_send_control(0x00); return;
+  }
+  boot_config_t cfg;
+  if (!config_load(&cfg)) {
+    cdc_printf("boot: config load failed (/config.json + machine config)\r\n");
+    fpga_send_control(0x00);
+    return;
+  }
+  cdc_printf("boot: config ok - %d OS block(s), cart %s, %d disk(s)\r\n",
+             cfg.osCount, cfg.hasCart ? "yes" : "no", cfg.diskCount);
+  boot_run(&cfg);
+}
+
 static void handle_console(void) {
   if (!tud_cdc_available()) return;
   uint8_t ch;
   if (tud_cdc_read(&ch, 1) != 1) return;
+  // While the supervisor menu is up, console keys drive it (mirrors the USB
+  // keyboard). '~' opens it from a bare serial terminal (Alt-F12 is the USB-
+  // keyboard hotkey).
+  if (sup_active()) { sup_feed_key((char)ch); return; }
+  if (ch == '~') { sup_open(); return; }
   switch (ch) {
     case 'r': cdc_printf("reset pulse\r\n"); fpga_send_control(0x01); fpga_send_control(0x00); break;
     case 'R': cdc_printf("reset HELD (0 to release)\r\n"); fpga_send_control(0x01); break;
@@ -294,86 +413,8 @@ static void handle_console(void) {
       cdc_printf("sd: entries listed\r\n");
       break;
     }
-    case 'B': {   // boot: hold reset, load OS from SD to SDRAM, release
-      static FATFS fs;
-      if (f_mount(&fs, "", 1) != FR_OK) { cdc_printf("boot: SD mount failed\r\n"); fpga_send_control(0x00); break; }
-      struct { const char *path; uint32_t addr; } items[] = {
-        { "/os/atarios2.rom", 0x001800 },   // $D800-$DFFF -> ROM-space 0x1800 (BRAM)
-        { "/os/atariosb.rom", 0x002000 },   // $E000-$FFFF -> ROM-space 0x2000 (BRAM)
-      };
-      bool ok = true;
-      fpga_send_control(0x10);              // HALT the 6502: quiet SDRAM during load
-      fpga_set_dest(1);                     // OS -> blank BRAM OS-ROM (not SDRAM)
-      for (unsigned it = 0; it < 2 && ok; it++) {
-        bool fileOk = false;
-        for (int attempt = 0; attempt < 3 && !fileOk; attempt++) {
-          FIL f;
-          if (f_open(&f, items[it].path, FA_READ) != FR_OK) {
-            cdc_printf("boot: open %s failed\r\n", items[it].path); break;
-          }
-          fpga_load_zero();
-          uint16_t lcnt = 0, lsum = 0; uint32_t total = 0;
-          static uint8_t buf[504]; UINT rd;
-          while (f_read(&f, buf, sizeof buf, &rd) == FR_OK && rd > 0) {
-            fpga_load(items[it].addr + total, buf, rd, &lcnt, &lsum);
-            total += rd; tud_task();
-          }
-          f_close(&f);
-          uint16_t fcnt, fsum; fpga_load_status(&fcnt, &fsum);
-          bool match = (lcnt == fcnt && lsum == fsum);
-          cdc_printf("boot: %s -> ROM-BRAM %06lx (%lu bytes) stream %s\r\n", items[it].path,
-                     items[it].addr, total, match ? "ok" : "CHECKSUM MISMATCH");
-          // BRAM has no read-back path yet (Step 1) - trust the stream checksum.
-          fileOk = match;
-          if (!fileOk) cdc_printf("boot: retrying %s\r\n", items[it].path);
-        }
-        ok = ok && fileOk;
-      }
-      // Default cartridge: load into the SHARED top-of-RAM BRAM (A000-BFFF) as
-      // ROM. cartMode 0 = no emuCart; A000-BFFF stays RAM BRAM holding the cart.
-      uint8_t cartMode = 0;
-      if (ok) {
-        FIL cf;
-        if (f_open(&cf, DEFAULT_CART_PATH, FA_READ) == FR_OK) {
-          uint32_t csize = f_size(&cf);
-          uint32_t caddr = (csize > 8192) ? 0x8000 : 0xA000;
-          fpga_set_dest(2);                  // cart -> RAM BRAM (shared top-of-RAM)
-          fpga_load_zero();
-          uint16_t lc = 0, ls = 0; uint32_t ct = 0;
-          static uint8_t cbuf[504]; UINT crd;
-          while (f_read(&cf, cbuf, sizeof cbuf, &crd) == FR_OK && crd > 0) {
-            fpga_load(caddr + ct, cbuf, crd, &lc, &ls); ct += crd; tud_task();
-          }
-          f_close(&cf);
-          fpga_set_dest(0);                  // back to SDRAM for anything else
-          uint16_t fc, fs2; fpga_load_status(&fc, &fs2);
-          bool cmatch = (lc == fc && ls == fs2);
-          // Enable emuCart (RD5) so the OS detects+boots it; decoder now reads the
-          // cart region from RAM BRAM (read-only), not SDRAM.
-          if (cmatch) cartMode = (csize > 8192) ? 0x21 : 0x01;
-          cdc_printf("boot: cart %s -> RAM-BRAM %04lx (%lu bytes) stream %s mode %02x\r\n",
-                     DEFAULT_CART_PATH, caddr, ct, cmatch ? "ok" : "MISMATCH", cartMode);
-        } else {
-          cdc_printf("boot: no cart (%s) - memo pad\r\n", DEFAULT_CART_PATH);
-        }
-      }
-      // The supervisor "reset" is a stretched ~1.1 ms pulse (the control
-      // register lives in the reset domain), so there is no true hold: the
-      // Atari runs (crashed, harmlessly - ROM regions reject 6502 writes)
-      // while we load. The reset that matters is the one AFTER the load.
-      if (ok) {
-        cdc_printf("boot: loaded+verified, resetting Atari (cart mode %02x)\r\n", cartMode);
-        fpga_set_offset(g_fb_hstart, g_fb_vskip);  // re-apply (FPGA may have been reprogrammed)
-        fpga_set_cart(cartMode);            // 0 = memo pad; else boot the cart
-        fpga_send_control(0x11);            // release halt via reset
-        fpga_send_control(0x00);
-      } else {
-        fpga_set_cart(0);                   // no cart on error
-        fpga_send_control(0x00);            // release halt, no reset
-        cdc_printf("boot: load errors - not resetting\r\n");
-      }
-      break;
-    }
+    case 'B': do_boot(); break;   // manual re-boot (also runs automatically at power-on)
+    case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
     case 'w': {   // SDRAM load channel self-test: 1 KB pattern @ 0x300000
       static uint8_t pat[1024];
       for (int i = 0; i < 1024; i++) pat[i] = (uint8_t)(i * 7 + 3);
@@ -511,7 +552,7 @@ static void handle_console(void) {
       }
       fpga_send_control(0x00);
       static FATFS fs; FIL f; UINT rd; uint8_t fb2[32] = {0};
-      if (f_mount(&fs, "", 1) == FR_OK && f_open(&f, "/os/atarios2.rom", FA_READ) == FR_OK) {
+      if (f_mount(&fs, "", 1) == FR_OK && f_open(&f, "/atari/800/os/atarios2.rom", FA_READ) == FR_OK) {
         f_read(&f, fb2, 32, &rd); f_close(&f);
       }
       for (int r = 0; r < 2; r++) {
@@ -637,6 +678,12 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
 void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *report, uint16_t len) {
   uint8_t const proto = tuh_hid_interface_protocol(dev_addr, instance);
   if (len >= 8 && (proto == HID_ITF_PROTOCOL_KEYBOARD || proto == HID_ITF_PROTOCOL_NONE)) {
+    // Supervisor hotkey/menu gets first look; if it consumes the report
+    // (Alt-F12, or any key while the menu is up) it never reaches the Atari.
+    if (sup_hid_report(report)) {
+      tuh_hid_receive_report(dev_addr, instance);
+      return;
+    }
     fpga_send_keyboard(report);
     cdc_printf("key p%u: %02x [%02x %02x %02x %02x %02x %02x] fpga=%u\r\n",
                proto, report[0], report[2], report[3], report[4], report[5], report[6], report[7],
@@ -695,6 +742,10 @@ int main(void) {
   sleep_ms(120);
   tud_connect();
 
+  // Auto-boot: load the OS + default cart from SD into blank BRAM and run.
+  // Same sequence as the console 'B' command; 'B' re-runs it on demand.
+  do_boot();
+
   absolute_time_t next_beat = make_timeout_time_ms(3000);
   while (true) {
     tud_task();
@@ -702,6 +753,7 @@ int main(void) {
     tuh_task();
 #endif
     handle_console();
+    if (sio_any_mounted()) sio_poll();   // service SIO disk commands (D1:..)
     if (absolute_time_diff_us(get_absolute_time(), next_beat) < 0) {
       next_beat = make_timeout_time_ms(3000);
       int mounted = 0;

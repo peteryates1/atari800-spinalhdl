@@ -12,6 +12,9 @@ pico_sdk_init()
 
 add_executable(supervisor
     main.c
+    config.c
+    sio.c
+    supervisor.c
     usb_descriptors.c
     sd_spi.c
     sd_diskio.c
@@ -19,7 +22,10 @@ add_executable(supervisor
     lib/fatfs/source/ffunicode.c
 )
 
-target_include_directories(supervisor PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(supervisor PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/lib/fatfs/source
+)
 
 target_link_libraries(supervisor PRIVATE
     pico_stdlib
