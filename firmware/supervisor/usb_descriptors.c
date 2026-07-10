@@ -114,12 +114,15 @@ enum {
   STRID_SERIAL,
 };
 
+// Note: Quartus/jtagd recognise the cable by VID/PID (09fb:6001), not by these
+// strings, so they can describe what the device actually is. (lsusb shows the
+// usb.ids name "Altera Blaster" for the VID/PID regardless.)
 char const* string_desc_arr[] = {
     (const char[]) {0x09, 0x04}, // 0: English (0x0409)
-    "Pico",                        // 1: Manufacturer
-    "USB Blaster",                 // 2: Product
+    "Atari800-LG",                 // 1: Manufacturer
+    "Atari800 Supervisor + FPGA Programmer", // 2: Product
     NULL,                          // 3: Serial (unique ID)
-    "Blaster Console",             // 4: CDC interface
+    "Atari800 Supervisor Console", // 4: CDC interface
 };
 
 static uint16_t _desc_str[32 + 1];

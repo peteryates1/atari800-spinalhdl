@@ -29,9 +29,13 @@ target_include_directories(supervisor PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/lib/fatfs/source
 )
 
+# JTAG shift PIO program (USB-Blaster fast path)
+pico_generate_pio_header(supervisor ${CMAKE_CURRENT_LIST_DIR}/blaster_jtag.pio)
+
 target_link_libraries(supervisor PRIVATE
     pico_stdlib
     hardware_spi
+    hardware_pio
     tinyusb_device
     tinyusb_host
     tinyusb_board

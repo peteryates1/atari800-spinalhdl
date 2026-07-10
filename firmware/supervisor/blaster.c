@@ -2,12 +2,26 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/structs/sio.h"
+#include "hardware/pio.h"
+#include "blaster_jtag.pio.h"
 
 // This board's JTAG TAP (base J10 -> QMTech module). Same GPIOs as jtag.c.
 #define TMS_PIN 0
 #define TCK_PIN 1
 #define TDI_PIN 2
 #define TDO_PIN 3
+
+// PIO shift TCK rate = 120 MHz sysclk / (clkdiv * 4). Divider 5 -> 6 MHz, the
+// real USB-Blaster rate; conservative for the J10 flying leads (the delay-free
+// tens-of-MHz shift failed, but 6 MHz should hold). Raise the divider if a chain
+// scan / program ever fails; the bit-bang fallback (~500 kHz) always works.
+#define BLASTER_TCK_CLKDIV 5.0f
+
+// PIO shift engine (falls back to bit-bang if it can't be placed alongside the
+// PIO-USB host).
+static PIO  s_pio;
+static uint s_sm;
+static bool s_pio_ok = false;
 
 #define TCK_MASK (1u << TCK_PIN)
 #define TDI_MASK (1u << TDI_PIN)
@@ -31,6 +45,25 @@ static bool s_output_enabled = false;
 static int  s_shift_bytes_left = 0;
 static bool s_shift_read_set;
 
+// Try to place the JTAG shift program on a PIO with a free SM (PIO-USB already
+// owns parts of pio0/pio1). Returns true and leaves the SM running (stalled on
+// its empty TX FIFO) on success. Pins stay under SIO control until a shift.
+static bool blaster_pio_try(PIO pio) {
+    if (!pio_can_add_program(pio, &blaster_jtag_program)) return false;
+    int sm = pio_claim_unused_sm(pio, false);
+    if (sm < 0) return false;
+    uint offset = pio_add_program(pio, &blaster_jtag_program);
+    s_pio = pio;
+    s_sm  = (uint)sm;
+    blaster_jtag_program_init(pio, (uint)sm, offset,
+                              TDI_PIN, TDO_PIN, TCK_PIN, BLASTER_TCK_CLKDIV);
+    // Hand TCK/TDI back to SIO so bit-bang navigation still works; shift mode
+    // switches them to PIO on entry.
+    gpio_set_function(TCK_PIN, GPIO_FUNC_SIO);
+    gpio_set_function(TDI_PIN, GPIO_FUNC_SIO);
+    return true;
+}
+
 static void blaster_init(void) {
     gpio_init(TMS_PIN);
     gpio_init(TCK_PIN);
@@ -43,6 +76,11 @@ static void blaster_init(void) {
     gpio_put_masked(OUT_PIN_MASK, 0);
     gpio_set_dir(TDO_PIN, GPIO_IN);
     gpio_pull_up(TDO_PIN);
+
+    // Fast path: PIO shift (bit-bang navigation is unchanged). PIO-USB runs on
+    // pio0(TX)/pio1(RX); try either for a spare SM + instruction slot.
+    s_pio_ok = blaster_pio_try(pio0) || blaster_pio_try(pio1);
+
     s_initialized = true;
 }
 
@@ -99,6 +137,29 @@ static inline uint8_t shift_bitbang(uint8_t data) {
     return ret;
 }
 
+// Switch TCK/TDI to PIO control for a run of shift bytes.
+static inline void shift_enter_pio(void) {
+    pio_gpio_init(s_pio, TCK_PIN);
+    pio_gpio_init(s_pio, TDI_PIN);
+}
+
+// Hand TCK/TDI back to SIO for bit-bang TAP navigation.
+static inline void shift_exit_pio(void) {
+    while (!pio_sm_is_rx_fifo_empty(s_pio, s_sm)) (void)s_pio->rxf[s_sm];
+    gpio_set_function(TCK_PIN, GPIO_FUNC_SIO);
+    gpio_set_function(TDI_PIN, GPIO_FUNC_SIO);
+    gpio_set_dir(TCK_PIN, true);
+    gpio_set_dir(TDI_PIN, true);
+}
+
+// Shift one byte through the PIO SM (autopull/autopush at 8 bits). Right-shift
+// IN lands the 8 bits at [31:24], so read the full word and take the top byte.
+static inline uint8_t shift_pio(uint8_t data) {
+    *(io_rw_8 *)&s_pio->txf[s_sm] = data;
+    while (pio_sm_is_rx_fifo_empty(s_pio, s_sm)) tight_loop_contents();
+    return (uint8_t)(s_pio->rxf[s_sm] >> 24);
+}
+
 void blaster_reset(void) {
     if (!s_initialized) blaster_init();
     s_shift_bytes_left = 0;
@@ -113,13 +174,14 @@ int blaster_process(uint8_t rxBuf[], int rxCount, uint8_t txBuf[]) {
         uint8_t b = rxBuf[i];
 
         if (s_shift_bytes_left > 0) {           // shift mode active
-            uint8_t input = shift_bitbang(b);
+            uint8_t input = s_pio_ok ? shift_pio(b) : shift_bitbang(b);
             if (s_shift_read_set) txBuf[txCount++] = input;
-            --s_shift_bytes_left;
+            if (--s_shift_bytes_left == 0 && s_pio_ok) shift_exit_pio();
         } else if (SHIFT_MODE_FLAG(b)) {        // enter shift mode
             s_shift_read_set = READ_FLAG(b);
             s_shift_bytes_left = PAYLOAD(b);
             gpio_put(TCK_PIN, false);
+            if (s_pio_ok) shift_enter_pio();
         } else {                                // bit-bang mode
             output_enable(OE_FLAG(b));
             uint8_t input = bitbang(b);
