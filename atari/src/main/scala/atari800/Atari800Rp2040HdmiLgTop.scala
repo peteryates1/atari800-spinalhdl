@@ -431,18 +431,19 @@ class Atari800Rp2040HdmiLgTop extends Component {
     val ldToBram  = kbd.io.ldDest =/= B(0, 2 bits)
     val ldToSdram = kbd.io.ldDest === B(0, 2 bits)
     // Port D re-enabled: the supervisor writes its on-screen framebuffer into
-    // SDRAM (ldDest 0). The loader packs bytes into 32-bit longwords, so use
-    // longword access. Only active while the RP2040 is loading (ldReq), so it
-    // never disturbs normal Atari-in-BRAM operation.
+    // SDRAM (ldDest 0). The loader is BYTE-granular — it writes one byte per
+    // request at that byte's address, replicated across all 4 lanes (see the
+    // #* 4 in RpAtariKeyboard), so use byte access. Only active while the RP2040
+    // is loading (ldReq), so it never disturbs normal Atari-in-BRAM operation.
     arb.io.d.request        := kbd.io.ldReq && ldToSdram
     arb.io.d.readEnable     := ~kbd.io.ldWrite
     arb.io.d.writeEnable    := kbd.io.ldWrite
     arb.io.d.addr           := kbd.io.ldAddr
     arb.io.d.dataIn         := kbd.io.ldData
     kbd.io.ldRdData         := arb.io.d.dataOut
-    arb.io.d.byteAccess     := False
+    arb.io.d.byteAccess     := True
     arb.io.d.wordAccess     := False
-    arb.io.d.longwordAccess := True
+    arb.io.d.longwordAccess := False
 
     // Core BRAM load port (OS ROM / RAM), fed by the same loader when ldToBram.
     atari.io.LOAD_ENABLE     := ldToBram && kbd.io.ctrlHalt   // only drive the bus while halted

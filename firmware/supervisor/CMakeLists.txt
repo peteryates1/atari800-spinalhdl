@@ -19,6 +19,7 @@ add_executable(supervisor
     msc_disk.c
     fpga_config.c
     rm2.c
+    fbtext.c
     supervisor.c
     usb_descriptors.c
     sd_spi.c

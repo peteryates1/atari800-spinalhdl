@@ -32,6 +32,7 @@
 #include "ft245_eeprom.h"
 #include "fpga_config.h"
 #include "rm2.h"
+#include "fbtext.h"
 #include "supervisor.h"
 
 // Bytes of FPGA core image (/fpga/core.rbf) staged into flash at boot (0 = none).
@@ -160,6 +161,14 @@ static void fpga_load(uint32_t addr, const uint8_t *data, uint32_t len,
 static void fpga_set_dest(uint8_t dest) {
   uint8_t tx[2] = { 0x42, dest }, rx[2];
   fpga_spi_frame(tx, rx, sizeof tx);
+}
+
+// On-screen framebuffer write path for fbtext (boot.h): the loader -> SDRAM
+// port D. fpga_fb_begin selects the SDRAM destination once per flush.
+void fpga_fb_begin(void) { fpga_set_dest(0); }
+void fpga_fb_write(uint32_t sdram_addr, const uint8_t *data, uint32_t len) {
+  uint16_t c = 0, s = 0;
+  fpga_load(sdram_addr, data, len, &c, &s);
 }
 
 // ---- SioBridge register access (see fpga_link.h) ----
@@ -424,20 +433,24 @@ static void handle_console(void) {
     case 'B': do_boot(); break;   // manual re-boot (also runs automatically at power-on)
     case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
     case 'J': jtag_idcode_print(); break; // JTAG bring-up: read FPGA IDCODE (GPIO0-3 -> J10)
-    case 'V': {   // on-screen supervisor test: render into the SDRAM framebuffer -> HDMI
-      cdc_printf("supdisp: rendering colour bands into fb buf2 (0x180000)...\r\n");
+    case 'V': {   // on-screen supervisor test: render menu text into the framebuffer -> HDMI
+      cdc_printf("supdisp: rendering test menu to HDMI...\r\n");
       tud_cdc_write_flush(); tud_task();
       fpga_send_control(0x20);            // supDisplay: freeze Atari capture, show buf2
-      fpga_set_dest(0);                   // SDRAM (port D)
-      static uint8_t line[384];
-      for (int y = 0; y < 288; y++) {
-        uint8_t c = (uint8_t)(((y >> 4) << 4) | 0x0C);  // hue by line, luma 0x0C -> bands
-        for (int x = 0; x < 384; x++) line[x] = c;
-        uint16_t lc = 0, ls = 0;
-        fpga_load(0x180000u + (uint32_t)y * 512u, line, 384, &lc, &ls);
-        if ((y & 15) == 0) tud_task();    // keep USB alive during the ~110 KB write
-      }
-      cdc_printf("supdisp: done -- HDMI should show 18 horizontal colour bands. '0' to return.\r\n");
+      fbtext_colors(0x0F, 0x00);
+      fbtext_clear();
+      fbtext_colors(0x3E, 0x00); fbtext_puts(0, 1, "ATARI 800 SUPERVISOR");
+      fbtext_colors(0x0F, 0x00);
+      fbtext_puts(2, 1, "machine : /atari/800");
+      fbtext_puts(3, 1, "cart    : Star Raiders");
+      fbtext_puts(4, 1, "disks   : (none)");
+      fbtext_puts(6, 1, "on-screen supervisor - text render");
+      fbtext_puts(8, 1, "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+      fbtext_puts(9, 1, "abcdefghijklmnopqrstuvwxyz  .,:/()[]<>-");
+      fbtext_colors(0x2C, 0x00);
+      fbtext_puts(17, 1, "press 0 to return to the atari");
+      fbtext_flush();
+      cdc_printf("supdisp: done. '0' to return.\r\n");
       break;
     }
     case 'W': {   // RM2 (CYW43439) connectivity smoke test via the FPGA passthrough
