@@ -126,6 +126,12 @@
 #define CFG_TUD_VENDOR_RX_BUFSIZE 1024
 #define CFG_TUD_VENDOR_TX_BUFSIZE 64
 
+// Mass Storage: exposes the SD card as a USB drive so files/configs can be
+// dropped and edited without pulling the card (see msc_disk.c). One 512-byte
+// block per bulk transfer.
+#define CFG_TUD_MSC               1
+#define CFG_TUD_MSC_EP_BUFSIZE    512
+
 //--------------------------------------------------------------------
 // HOST CONFIGURATION
 //--------------------------------------------------------------------

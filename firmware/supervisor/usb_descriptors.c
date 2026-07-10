@@ -70,15 +70,18 @@ enum {
   ITF_NUM_VENDOR = 0,
   ITF_NUM_CDC,
   ITF_NUM_CDC_DATA,
+  ITF_NUM_MSC,
   ITF_NUM_TOTAL
 };
 
-// Endpoints: vendor (Blaster) first, then CDC on distinct numbers.
+// Endpoints: vendor (Blaster) first, then CDC, then MSC — all on distinct numbers.
 #define EPNUM_VENDOR_IN   0x81
 #define EPNUM_VENDOR_OUT  0x02
 #define EPNUM_CDC_NOTIF   0x83
 #define EPNUM_CDC_OUT     0x04
 #define EPNUM_CDC_IN      0x84
+#define EPNUM_MSC_OUT     0x05
+#define EPNUM_MSC_IN      0x85
 
 // Vendor interface: class/subclass/protocol all 255, matching a real Blaster.
 #define TUD_BLASTER_VENDOR_DESCRIPTOR(_itfnum, _stridx, _epout, _epin, _epsize) \
@@ -86,17 +89,20 @@ enum {
     7, TUSB_DESC_ENDPOINT, _epin, TUSB_XFER_BULK, U16_TO_U8S_LE(_epsize), 0, \
     7, TUSB_DESC_ENDPOINT, _epout, TUSB_XFER_BULK, U16_TO_U8S_LE(_epsize), 0
 
-#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_VENDOR_DESC_LEN + TUD_CDC_DESC_LEN)
+#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_VENDOR_DESC_LEN + TUD_CDC_DESC_LEN + TUD_MSC_DESC_LEN)
 
 uint8_t const desc_fs_configuration[] = {
     // Config number, interface count, string index, total length, attribute, power in mA
-    TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x80, 150),
+    TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x80, 250),
 
     // Vendor (USB-Blaster) interface
     TUD_BLASTER_VENDOR_DESCRIPTOR(ITF_NUM_VENDOR, 0, EPNUM_VENDOR_OUT, EPNUM_VENDOR_IN, CFG_TUD_VENDOR_EPSIZE),
 
     // CDC console interface
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 4, EPNUM_CDC_NOTIF, 8, EPNUM_CDC_OUT, EPNUM_CDC_IN, 64),
+
+    // MSC (SD card) interface
+    TUD_MSC_DESCRIPTOR(ITF_NUM_MSC, 5, EPNUM_MSC_OUT, EPNUM_MSC_IN, 64),
 };
 
 uint8_t const* tud_descriptor_configuration_cb(uint8_t index) {
@@ -123,6 +129,7 @@ char const* string_desc_arr[] = {
     "Atari800 Supervisor + FPGA Programmer", // 2: Product
     NULL,                          // 3: Serial (unique ID)
     "Atari800 Supervisor Console", // 4: CDC interface
+    "Atari800 SD Card",            // 5: MSC interface
 };
 
 static uint16_t _desc_str[32 + 1];
