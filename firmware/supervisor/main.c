@@ -31,6 +31,7 @@
 #include "blaster.h"
 #include "ft245_eeprom.h"
 #include "fpga_config.h"
+#include "rm2.h"
 #include "supervisor.h"
 
 // Bytes of FPGA core image (/fpga/core.rbf) staged into flash at boot (0 = none).
@@ -423,6 +424,13 @@ static void handle_console(void) {
     case 'B': do_boot(); break;   // manual re-boot (also runs automatically at power-on)
     case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
     case 'J': jtag_idcode_print(); break; // JTAG bring-up: read FPGA IDCODE (GPIO0-3 -> J10)
+    case 'W': {   // RM2 (CYW43439) connectivity smoke test via the FPGA passthrough
+      uint32_t v = 0;
+      bool ok = rm2_smoke_test(&v);
+      cdc_printf("rm2: test reg = %08lx (expect feedbead) %s\r\n", (unsigned long)v,
+                 ok ? "-- ALIVE" : "-- no/invalid response");
+      break;
+    }
     case 'F': {   // configure the FPGA from the staged /fpga/core.rbf (SD-side load)
       uint32_t n = fpga_staged_len();
       if (n == 0) { cdc_printf("fpga: no staged core (put /fpga/core.rbf on SD, reset to stage)\r\n"); break; }

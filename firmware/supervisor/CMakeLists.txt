@@ -18,6 +18,7 @@ add_executable(supervisor
     blaster.c
     msc_disk.c
     fpga_config.c
+    rm2.c
     supervisor.c
     usb_descriptors.c
     sd_spi.c
