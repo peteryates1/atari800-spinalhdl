@@ -592,17 +592,16 @@ class Atari800Rp2040HdmiLgTop extends Component {
   io.rm2_bt_on       := io.rp_gpio4_in
   io.rm2_wifi_on     := io.rp_gpio5_in
 
-  // DEBUG: route the fb read/write SDRAM handshake onto the RP2040 GPIO for the
-  // logic analyzer. rp_gpioN -> RP2040 GPION -> LA channel (N-2, INPUT_PIN_BASE=2).
-  // NOTE: LA channels 22/23 (RP2040 GPIO24/25) read garbage — GPIO25 is the
-  // LA firmware's LED, GPIO24 dead (VBUS-sense on a stock Pico). Only use
-  // ch10/12/13/20; ch10 carries wrReq (a known toggler) to validate itself.
-  io.rp_gpio12_out := io.sd_dat0                           // SD passthrough restored (MISO -> RP2040)
-  io.rp_gpio14_out := io.sd_cd                             // SD passthrough restored (card detect -> RP2040)
-  io.rp_gpio15_out := sysArea.dbgStickyLate                // GPIO15: sticky - fb READ prefetch ran late (cache underrun)
-  io.rp_gpio22_out := sysArea.dbgStickyDrop                // GPIO22: sticky - fb WRITE dropped a quad
-  io.rp_gpio24_out := sysArea.fbRead.io.dbgBusy            // GPIO24 = LA ch22  (dead channel)
-  io.rp_gpio25_out := sysArea.fbRead.io.dbgBeat            // GPIO25 = LA ch23  (dead channel)
+  io.rp_gpio12_out := io.sd_dat0                           // SD passthrough (MISO -> RP2040)
+  io.rp_gpio14_out := io.sd_cd                             // SD passthrough (card detect -> RP2040)
+  // RM2 return lines: complete the RP2040 <-> Radio Module 2 SPI pass-through so
+  // the RP2040 can read the CYW43439 (previously these two carried framebuffer
+  // bring-up debug for the logic analyzer, no longer needed).
+  io.rp_gpio22_out := io.rm2_miso                          // RM2 MISO  -> RP2040 GPIO22
+  io.rp_gpio24_out := io.rm2_irq_n                         // RM2 IRQ_n -> RP2040 GPIO24
+  // Spare framebuffer debug outputs (free to repurpose):
+  io.rp_gpio15_out := sysArea.dbgStickyLate                // GPIO15: fb READ ran late (cache underrun)
+  io.rp_gpio25_out := sysArea.fbRead.io.dbgBeat            // GPIO25: spare
 
   // =========================================================================
   // RP2040 ↔ FPGA SPI slave: keyboard/control bridge (RpAtariKeyboard).
