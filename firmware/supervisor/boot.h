@@ -21,4 +21,9 @@ void fpga_fb_begin(void);                                           // select SD
 void fpga_fb_write(uint32_t sdram_addr, const uint8_t *data, uint32_t len);
 bool fpga_fb_verify(void);   // true if the loader got every byte (no drops)
 
+// Text-overlay grid write ('T'): stream `n` glyph codes into TextOverlay720's
+// on-chip 40x15 char grid starting at linear cell `cell` (row*40+col); the
+// FPGA generates 720p text pixels directly (no SDRAM). Used by fbtext_flush.
+void fpga_text_write(uint16_t cell, const uint8_t *chars, uint16_t n);
+
 #endif // BOOT_H

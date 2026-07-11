@@ -27,35 +27,34 @@ static void fb_render(void) {
   char buf[FBT_COLS + 1];
   fbtext_colors(0x0F, 0x00);
   fbtext_clear();
-  fbtext_colors(0x3E, 0x00); fbtext_puts(0, 2, "ATARI 800 SUPERVISOR");
-  fbtext_colors(0x2C, 0x00); fbtext_puts(0, 30, "(paused)");
+  fbtext_colors(0x3E, 0x00); fbtext_puts(0, 1, "ATARI 800 SUPERVISOR");
 
   if (pending == PICK_NONE) {
     fbtext_colors(0x0F, 0x00);
-    snprintf(buf, sizeof buf, "Cart : %s%s",
+    snprintf(buf, sizeof buf, "Cart: %s%s",
              live.hasCart ? live.cartName : "<none>",
-             live.hasCart ? (live.cartMode == 0x21 ? "  [16K]" : "  [8K]") : "");
-    fbtext_puts(3, 2, buf);
+             live.hasCart ? (live.cartMode == 0x21 ? " [16K]" : " [8K]") : "");
+    fbtext_puts(2, 1, buf);
     for (int i = 0; i < CFG_MAX_DISKS; i++) {
-      snprintf(buf, sizeof buf, "D%d:  : %s", i + 1,
+      snprintf(buf, sizeof buf, "D%d: %s", i + 1,
                live.diskName[i][0] ? live.diskName[i] : "<empty>");
-      fbtext_puts(4 + i, 2, buf);
+      fbtext_puts(3 + i, 1, buf);
     }
     fbtext_colors(0x2C, 0x00);
-    fbtext_puts(10, 2, "[c] cart    [1-4] disk in drive");
-    fbtext_puts(11, 2, "[b] boot    [q] resume");
-    fbtext_puts(12, 2, "[s] save as default    [r] reload");
+    fbtext_puts(9,  1, "[c] cart   [1-4] disk");
+    fbtext_puts(10, 1, "[b] boot   [q] resume");
+    fbtext_puts(11, 1, "[s] save   [r] reload");
   } else {
     fbtext_colors(0x0F, 0x00);
-    fbtext_puts(3, 2, pending == PICK_CART ? "Choose cartridge:" : "Choose disk:");
-    int r = 4;
-    for (int i = 0; i < nameCount && r < FBT_ROWS - 2; i++, r++) {
+    fbtext_puts(2, 1, pending == PICK_CART ? "Choose cart:" : "Choose disk:");
+    int r = 3;
+    for (int i = 0; i < nameCount && r < FBT_ROWS - 1; i++, r++) {
       char tag = (i < 10) ? (char)('0' + i) : (char)('a' + i - 10);
       snprintf(buf, sizeof buf, " %c) %s", tag, names[i]);
-      fbtext_puts(r, 2, buf);
+      fbtext_puts(r, 1, buf);
     }
     fbtext_colors(0x2C, 0x00);
-    fbtext_puts(FBT_ROWS - 1, 2, "[n] none    [x] cancel");
+    fbtext_puts(FBT_ROWS - 1, 1, "[n] none   [x] cancel");
   }
   fbtext_flush();
 }

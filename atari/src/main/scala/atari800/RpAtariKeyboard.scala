@@ -98,6 +98,11 @@ class RpAtariKeyboard extends Component {
     val sioWr      = out Bool()
     val sioWrData  = out Bits(16 bits)
     val sioRdData  = in  Bits(32 bits)
+    // Supervisor text-overlay char-grid write (SPI 'T'). Streams glyph codes into
+    // TextOverlay720's 40x15 on-chip grid; addr auto-increments. One-cycle pulse.
+    val txtWrEn    = out Bool()
+    val txtAddr    = out UInt(10 bits)   // log2Up(40*15=600)
+    val txtChar    = out Bits(8 bits)
   }
 
   // ---- Input synchronisers (SPI clock << sys clock; 3-stage) ----
@@ -132,8 +137,11 @@ class RpAtariKeyboard extends Component {
   // and a starving arbiter port D (lowest priority, under live video traffic)
   // just deepens the queue instead of silently clobbering a single buffer -
   // the failure mode that corrupted every ROM load until the 'V' content
-  // check caught it. 512 deep = ~4 ms of absorbed starvation at 1 MHz SPI.
-  val wq = StreamFifo(Bits(32 bits), 512)
+  // check caught it. 256 deep = ~2 ms of absorbed starvation at 1 MHz SPI
+  // (halved from 512 to reclaim an M9K for the TextOverlay720 char grid; loads
+  // run with the Atari halted so port-D starvation is mild, and any overflow is
+  // still caught by the 'V' content check).
+  val wq = StreamFifo(Bits(32 bits), 256)
   val pushPtr  = Reg(UInt(24 bits)) init 0        // W push-side address
   val wqOvf    = RegInit(False)                   // sticky: a push was ever lost
   wq.io.push.valid   := False
@@ -158,6 +166,12 @@ class RpAtariKeyboard extends Component {
   val sioRdReg     = Reg(Bool()) init False; sioRdReg := False   // one-cycle pulse
   val sioWrReg     = Reg(Bool()) init False; sioWrReg := False   // one-cycle pulse
   val sioRdLatch   = Reg(Bits(16 bits)) init 0
+
+  // ---- Supervisor text-overlay grid write ('T') ----
+  val txtPtr     = Reg(UInt(10 bits)) init 0   // auto-incrementing cell pointer
+  val txtAddrReg = Reg(UInt(10 bits)) init 0   // cell being written this pulse
+  val txtCharReg = Reg(Bits(8 bits)) init 0
+  val txtWrReg   = Reg(Bool()) init False; txtWrReg := False   // one-cycle pulse
 
   // ---- MISO status stream (slave shifts on falling edge, mode 0) ----
   val frameCnt = Reg(UInt(8 bits)) init 0
@@ -318,6 +332,16 @@ class RpAtariKeyboard extends Component {
         is(B(0x53, 8 bits)) {              // 'S': SIO register read (addr) -> sioRdLatch
           when(byteIdx === 1) { sioAddrReg := byteVal(3 downto 0).asUInt; sioRdReg := True }
         }
+        is(B(0x54, 8 bits)) {              // 'T': text-overlay grid write (addrHi, addrLo, chars...)
+          when(byteIdx === 1) { txtPtr(9 downto 8) := byteVal(1 downto 0).asUInt }
+          when(byteIdx === 2) { txtPtr(7 downto 0) := byteVal.asUInt }
+          when(byteIdx >= 3) {
+            txtCharReg := byteVal
+            txtAddrReg := txtPtr
+            txtWrReg   := True
+            txtPtr     := txtPtr + 1
+          }
+        }
       }
     }
     when(byteIdx =/= byteIdx.maxValue) { byteIdx := byteIdx + 1 }
@@ -385,6 +409,9 @@ class RpAtariKeyboard extends Component {
   io.ctrlOption   := ctrlBits(3)
   io.ctrlHalt     := ctrlBits(4)
   io.supDisplay   := ctrlBits(5)
+  io.txtWrEn      := txtWrReg
+  io.txtAddr      := txtAddrReg
+  io.txtChar      := txtCharReg
   io.offsetH      := hStartReg
   io.offsetV      := vSkipReg
   io.offsetWr     := offsetWrReg

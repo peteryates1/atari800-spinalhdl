@@ -315,8 +315,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // fbBase must be ABOVE the Atari's RAM in SDRAM (internal_ram=0 -> RAM at
     // low addresses). 0x100000 = 1 MB, well clear of the Atari's 64 KB.
     val fbWrite = new VideoFbWrite(fbBase = 0x100000, width = 384, strideLog2 = 9, height = 288, addrWidth = 24, clearOnReset = true)
-    // Freeze the Atari video capture while the supervisor screen is shown, so it
-    // doesn't overwrite the buffer the RP2040 is rendering into.
+    // Freeze the Atari video capture while the supervisor screen is shown.
     fbWrite.io.enable    := BufferCC(sdramCtrl.io.reset_client_n, False) && !kbd.io.supDisplay
     // Sample at the Atari hi-res pixel rate (sys/8 ~ 7.2 MHz), phase-locked to
     // each line by hsync. colourEnable (sys/2 ~ 28.8 MHz) is 4x too fast: the
@@ -360,7 +359,8 @@ class Atari800Rp2040HdmiLgTop extends Component {
     fbRead.io.clkPixel := clkPixel
     // Same ready condition as the SDRAM controller's reset: no fetch requests
     // until the arbiter + SDRAM are live (BufferCC inside fbRead syncs it).
-    fbRead.io.enable   := BufferCC(sdramCtrl.io.reset_client_n, False)   // SDRAM chip init COMPLETE && !kbd.io.ctrlHalt
+    fbRead.io.enable   := BufferCC(sdramCtrl.io.reset_client_n, False)
+    fbRead.io.readBuf  := fbWrite.io.readyBuf         // display reads the last-completed capture
     arb.io.c.request        := fbRead.io.rdReq
     fbRead.io.rdComplete    := arb.io.c.complete
     arb.io.c.readEnable     := True
@@ -372,10 +372,19 @@ class Atari800Rp2040HdmiLgTop extends Component {
     arb.io.c.longwordAccess := !fbRead.io.rdWide
     arb.io.c.wideAccess     := fbRead.io.rdWide
     fbRead.io.rdData        := arb.io.c.wideOut
-    // Double buffering: display reads the buffer capture last completed. In
-    // supervisor mode, show buffer 2 (fbBase + 2*0x40000 = 0x180000) instead —
-    // the buffer the RP2040 renders the on-screen menu into via port D.
-    fbRead.io.readBuf       := Mux(kbd.io.supDisplay, U(2, 2 bits), fbWrite.io.readyBuf)
+
+    // Supervisor screen: an FPGA-native 720p text overlay (no SDRAM/scaler) whose
+    // pixels replace the Atari scaler at the DVI mux while supDisplay is set. The
+    // RP2040 writes its character grid over SPI ('T' frames -> kbd.io.txt*).
+    // NOTE: shimmers on 1080p monitors (their 1.5x upscale of sharp 720p text);
+    // unfixable on this board — see TextOverlay720 header / project memory.
+    val textOv = new TextOverlay720
+    textOv.io.clkPixel := clkPixel
+    textOv.io.wrEn     := kbd.io.txtWrEn
+    textOv.io.wrAddr   := kbd.io.txtAddr
+    textOv.io.wrChar   := kbd.io.txtChar
+    textOv.io.fg       := B(0x0F, 8 bits)   // white
+    textOv.io.bg       := B(0x00, 8 bits)   // black
 
     // Sticky probe: has the Atari (port A) ever addressed the upper SDRAM
     // regions (bit 22 set = OS/cart windows at 0x50xxxx/0x70xxxx)?
@@ -508,14 +517,18 @@ class Atari800Rp2040HdmiLgTop extends Component {
     sigmaDeltaR := sigmaDeltaR(15 downto 0).resize(17) + audioUnsignedR
 
     // Framebuffer read/scaler pixel-domain outputs (crossed to DvidOut below).
+    // Both the Atari (fbRead) and supervisor (fbReadSup) scalers; pixelArea muxes.
     val vidPix = fbRead.io.pix
     val vidDe  = fbRead.io.de
     val vidHs  = fbRead.io.hs
     val vidVs  = fbRead.io.vs
-    vidPix.addTag(crossClockDomain)
-    vidDe.addTag(crossClockDomain)
-    vidHs.addTag(crossClockDomain)
-    vidVs.addTag(crossClockDomain)
+    val vidSupPix = textOv.io.pix
+    val vidSupDe  = textOv.io.de
+    val vidSupHs  = textOv.io.hs
+    val vidSupVs  = textOv.io.vs
+    val vidSupSel = kbd.io.supDisplay
+    Seq(vidPix, vidDe, vidHs, vidVs, vidSupPix, vidSupDe, vidSupHs, vidSupVs, vidSupSel)
+      .foreach(_.addTag(crossClockDomain))
   }
 
   // Capture-window centring offset. Lives in a BOOT-reset domain (same clkSys,
@@ -551,15 +564,17 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // Real framebuffer path: palette the scaled Atari pixel; sync/DE come from
     // VideoFbRead2 (now active-low). One pixel-domain register so the encoder
     // gets registered RGB, matched by de/hs/vs delays.
+    // Select the Atari scaler or the (integer-scaled) supervisor scaler.
+    val supSel = BufferCC(sysArea.vidSupSel, False)
     val palette = new GtiaPalette
-    palette.io.atariColour := sysArea.vidPix
+    palette.io.atariColour := Mux(supSel, sysArea.vidSupPix, sysArea.vidPix)
     palette.io.pal         := True
     val r  = RegNext(palette.io.rNext)
     val g  = RegNext(palette.io.gNext)
     val b  = RegNext(palette.io.bNext)
-    val de = RegNext(sysArea.vidDe) init False
-    val hs = RegNext(sysArea.vidHs) init False
-    val vs = RegNext(sysArea.vidVs) init False
+    val de = RegNext(Mux(supSel, sysArea.vidSupDe, sysArea.vidDe)) init False
+    val hs = RegNext(Mux(supSel, sysArea.vidSupHs, sysArea.vidHs)) init False
+    val vs = RegNext(Mux(supSel, sysArea.vidSupVs, sysArea.vidVs)) init False
     // Power-on reset for the DVI encoder (held low ~256 pixel clocks).
     val por = Reg(UInt(9 bits)) init 0
     when(por =/= por.maxValue) { por := por + 1 }

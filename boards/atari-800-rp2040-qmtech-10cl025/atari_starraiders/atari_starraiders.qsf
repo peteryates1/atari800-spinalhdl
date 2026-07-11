@@ -47,3 +47,8 @@ set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_casn
 set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_wen
 set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_csn
 set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to sdram_cke
+
+# Push auto-inferred ROMs (notably the GtiaPalette RGB lookup, ~3 M9K) into
+# logic/LUTs so the M9K budget fits with the supervisor TextOverlay720 charRam.
+# LE headroom is ample (~48% used); the font ROM is already ramstyle=logic.
+set_global_assignment -name AUTO_ROM_RECOGNITION OFF

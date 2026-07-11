@@ -56,7 +56,10 @@ class SioBridge extends Component with HasBusIo {
   when(cmdFalling) { cmdByteCount := 0 }
 
   // ===== RX FIFO (16 entries × 16 bits: [15:8]=cmdByteIndex, [7:0]=data) =====
+  // ramstyle "logic": a 16-deep async-read FIFO in an M9K wastes a whole block;
+  // as a register file it's ~32 regs + a 16:1 mux. Reclaims scarce M9K.
   val rxMem   = Mem(Bits(16 bits), 16)
+  rxMem.addAttribute("ramstyle", "logic")
   val rxWrPtr = Reg(UInt(4 bits)) init 0
   val rxRdPtr = Reg(UInt(4 bits)) init 0
   val rxCount = Reg(UInt(5 bits)) init 0
@@ -80,7 +83,8 @@ class SioBridge extends Component with HasBusIo {
   bus.cmdInterrupt := cmdRising && !rxEmpty
 
   // ===== TX FIFO (16 entries × 8 bits) =====
-  val txMem   = Mem(Bits(8 bits), 16)
+  val txMem   = Mem(Bits(8 bits), 16)         // ramstyle logic: tiny, keep out of M9K
+  txMem.addAttribute("ramstyle", "logic")
   val txWrPtr = Reg(UInt(4 bits)) init 0
   val txRdPtr = Reg(UInt(4 bits)) init 0
   val txCount = Reg(UInt(5 bits)) init 0

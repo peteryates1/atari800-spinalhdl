@@ -186,6 +186,25 @@ bool fpga_fb_verify(void) {
   return (fcnt == g_fb_cnt && fsum == g_fb_sum);
 }
 
+// ---- Text-overlay grid write (see boot.h) ----
+// 'T' + cell[9:8] + cell[7:0] + glyphs...; TextOverlay720's grid pointer auto-
+// increments per glyph, so a whole row (or the whole 600-cell grid) streams in
+// one frame. No SDRAM: the FPGA rasterises the 8x16 font to 720p directly.
+void fpga_text_write(uint16_t cell, const uint8_t *chars, uint16_t n) {
+  uint8_t tx[3 + 40], rx[3 + 40];        // one row (40 cells) per frame
+  while (n) {
+    uint16_t k = n > 40 ? 40 : n;
+    tx[0] = 'T';
+    tx[1] = (uint8_t)((cell >> 8) & 0x03);
+    tx[2] = (uint8_t)(cell & 0xFF);
+    memcpy(tx + 3, chars, k);
+    fpga_spi_frame(tx, rx, 3 + k);
+    cell  += k;
+    chars += k;
+    n     -= k;
+  }
+}
+
 // ---- SioBridge register access (see fpga_link.h) ----
 void fpga_sio_write(uint8_t addr, uint16_t data) {
   uint8_t tx[4] = { 0x51, (uint8_t)(addr & 0x0F),
@@ -448,25 +467,16 @@ static void handle_console(void) {
     case 'B': do_boot(); break;   // manual re-boot (also runs automatically at power-on)
     case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
     case 'J': jtag_idcode_print(); break; // JTAG bring-up: read FPGA IDCODE (GPIO0-3 -> J10)
-    case 'V': {   // on-screen supervisor test: render menu text into the framebuffer -> HDMI
-      cdc_printf("supdisp: rendering test menu to HDMI...\r\n");
+    case 'V': {   // crispness test: dense 32-char text on every row (integer x5/x3 scaling)
+      cdc_printf("supdisp: dense fill, integer-scaled...\r\n");
       tud_cdc_write_flush(); tud_task();
-      fpga_send_control(0x20);            // supDisplay: freeze Atari capture, show buf2
+      fpga_send_control(0x20);            // supDisplay: show the integer-scaled supervisor buffer
       fbtext_colors(0x0F, 0x00);
       fbtext_clear();
-      fbtext_colors(0x3E, 0x00); fbtext_puts(0, 1, "ATARI 800 SUPERVISOR");
-      fbtext_colors(0x0F, 0x00);
-      fbtext_puts(2, 1, "machine : /atari/800");
-      fbtext_puts(3, 1, "cart    : Star Raiders");
-      fbtext_puts(4, 1, "disks   : (none)");
-      fbtext_puts(6, 1, "on-screen supervisor - text render");
-      fbtext_puts(8, 1, "0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-      fbtext_puts(9, 1, "abcdefghijklmnopqrstuvwxyz  .,:/()[]<>-");
-      fbtext_colors(0x2C, 0x00);
-      fbtext_puts(17, 1, "press 0 to return to the atari");
+      for (int r = 0; r < FBT_ROWS; r++)
+        fbtext_puts(r, 0, "0123456789ABCDEFGHIJKLMNOPQRSTUV");  // 32 chars, full width
       fbtext_flush();
-      cdc_printf("supdisp: done. loader drops = %s. '0' to return.\r\n",
-                 fpga_fb_verify() ? "NONE" : "YES (queue overflow -> stale pixels)");
+      cdc_printf("supdisp: done. Is the text crisp now (no shimmer)? '0' to return.\r\n");
       break;
     }
     case 'Y': {   // sample the scaler late-line meter over 1s (in the current display mode)
