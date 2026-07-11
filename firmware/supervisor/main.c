@@ -134,6 +134,14 @@ static void fpga_load_zero(void) {
   fpga_spi_frame(tx, rx, 1);
 }
 
+// Scaler late-line counter (MISO status outIdx 10/11 -> rx[11]/rx[12]): number
+// of display lines shown from a cache bank that wasn't holding the wanted row.
+static uint16_t fpga_meter_late(void) {
+  uint8_t tx[13] = {0}, rx[13];
+  fpga_spi_frame(tx, rx, sizeof tx);
+  return (uint16_t)rx[11] | ((uint16_t)rx[12] << 8);
+}
+
 // One 'W' frame: up to 252 data bytes (multiple of 4).
 static void fpga_load_chunk(uint32_t addr, const uint8_t *data, uint32_t len) {
   uint8_t tx[4 + 252], rx[sizeof tx];
@@ -459,6 +467,13 @@ static void handle_console(void) {
       fbtext_flush();
       cdc_printf("supdisp: done. loader drops = %s. '0' to return.\r\n",
                  fpga_fb_verify() ? "NONE" : "YES (queue overflow -> stale pixels)");
+      break;
+    }
+    case 'Y': {   // sample the scaler late-line meter over 1s (in the current display mode)
+      uint16_t a = fpga_meter_late();
+      sleep_ms(1000);
+      uint16_t b = fpga_meter_late();
+      cdc_printf("scaler: late-lines total=%u, +%u over 1s\r\n", b, (uint16_t)(b - a));
       break;
     }
     case 'W': {   // RM2 (CYW43439) connectivity smoke test via the FPGA passthrough
