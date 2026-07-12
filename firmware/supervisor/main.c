@@ -925,7 +925,7 @@ int main(void) {
       f_mount(0, "", 0);
     }
     cdc_printf("fpga: staged core = %lu bytes%s\r\n", (unsigned long)g_fpga_staged,
-               g_fpga_staged ? " (console 'F' to configure)"
+               g_fpga_staged ? " (auto-configuring)"
                              : (sd_ok ? " (no image on SD)" : " (SD not ready)"));
   }
 
@@ -946,6 +946,26 @@ int main(void) {
 #if !BISECT_CDC_ONLY
   tuh_init(1);   // host (keyboard) on PIO-USB
 #endif
+
+  // SD-side boot: override whatever the onboard EPCS config-flash brought up with
+  // the SD's /atari/800/core.rbf, so the SD card is the source of truth for the
+  // FPGA image (update the core by dropping a new .rbf on the SD; re-staged only
+  // when it changes). Volatile JTAG config — a bad/absent SD image is safe: it
+  // just leaves the EPCS bitstream running, and the next power cycle reloads EPCS
+  // and re-stages only if the SD file changed. fpga_staged_len() already rejects
+  // a corrupt staged image (magic/length), so g_fpga_staged != 0 => sane to shift.
+  // MUST run AFTER tuh_init(): the JTAG blaster and PIO-USB both claim PIO state
+  // machines, and PIO-USB needs to claim first (blaster_init grabs a free SM) —
+  // doing this before tuh_init() makes pio_usb_host_init's pio_sm_claim panic.
+  if (g_fpga_staged) {
+    cdc_printf("fpga: configuring FPGA from SD core (%lu bytes)...\r\n",
+               (unsigned long)g_fpga_staged);
+    bool ok = false;
+    for (int attempt = 0; attempt < 2 && !ok; attempt++) ok = fpga_config_from_flash();
+    cdc_printf("fpga: CONF_DONE=%d %s\r\n", ok,
+               ok ? "-- running SD core" : "-- FAILED, EPCS bitstream stays");
+    sleep_ms(50);   // let the reconfigured fabric settle before the SPI init below
+  }
 
   fpga_spi_init();
   fpga_send_control(0x00);
