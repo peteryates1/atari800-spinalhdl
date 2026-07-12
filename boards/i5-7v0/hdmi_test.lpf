@@ -1,0 +1,28 @@
+# Colorlight i5 v7.0 + ext board — 640x480 HDMI test (Atari800Ecp5HdmiTestTop)
+# Pins from wuxx/Colorlight-FPGA-Projects src/i5/hdmi_test_pattern (known-good).
+BLOCK RESETPATHS;
+BLOCK ASYNCPATHS;
+
+LOCATE COMP "clk_25mhz" SITE "P3";
+IOBUF  PORT "clk_25mhz" PULLMODE=NONE IO_TYPE=LVCMOS33;
+FREQUENCY PORT "clk_25mhz" 25 MHZ;
+
+# HDMI (i5-v6.0/v7.0 on-board) — driven P and N explicitly
+LOCATE COMP "gpdi_dp[0]" SITE "G19"; # Blue +
+LOCATE COMP "gpdi_dn[0]" SITE "H20"; # Blue -
+LOCATE COMP "gpdi_dp[1]" SITE "E20"; # Green +
+LOCATE COMP "gpdi_dn[1]" SITE "F19"; # Green -
+LOCATE COMP "gpdi_dp[2]" SITE "C20"; # Red +
+LOCATE COMP "gpdi_dn[2]" SITE "D19"; # Red -
+LOCATE COMP "gpdi_dp[3]" SITE "J19"; # Clock +
+LOCATE COMP "gpdi_dn[3]" SITE "K19"; # Clock -
+IOBUF PORT "gpdi_dp[0]" IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF PORT "gpdi_dn[0]" IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF PORT "gpdi_dp[1]" IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF PORT "gpdi_dn[1]" IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF PORT "gpdi_dp[2]" IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF PORT "gpdi_dn[2]" IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF PORT "gpdi_dp[3]" IO_TYPE=LVCMOS33 DRIVE=4;
+IOBUF PORT "gpdi_dn[3]" IO_TYPE=LVCMOS33 DRIVE=4;
+
+SYSCONFIG CONFIG_IOVOLTAGE=3.3 COMPRESS_CONFIG=ON;
