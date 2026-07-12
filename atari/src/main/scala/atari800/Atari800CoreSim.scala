@@ -8,7 +8,8 @@ import spinal.lib._
 // - No Analog inout signals
 // - Uses internal RAM (no SDRAM controller needed)
 // - Behavioral SDRAM model driven from testbench via simple interface
-class Atari800CoreSim(cartridge_rom: String = "", internal_ram: Int = 0, internal_rom: Int = 3) extends Component {
+class Atari800CoreSim(cartridge_rom: String = "", internal_ram: Int = 0, internal_rom: Int = 3,
+                      throttle: Int = 31) extends Component {
   val io = new Bundle {
     // VGA output
     val vga_r     = out Bits(4 bits)
@@ -161,7 +162,7 @@ class Atari800CoreSim(cartridge_rom: String = "", internal_ram: Int = 0, interna
   atariCore.io.PAL                       := True
   atariCore.io.HALT                      := False
   atariCore.io.TURBO_VBLANK_ONLY         := False
-  atariCore.io.THROTTLE_COUNT_6502       := B(31, 6 bits)
+  atariCore.io.THROTTLE_COUNT_6502       := B(throttle, 6 bits)
   atariCore.io.emulated_cartridge_select := B(0, 6 bits)
   atariCore.io.freezer_enable            := False
   atariCore.io.freezer_activate          := False

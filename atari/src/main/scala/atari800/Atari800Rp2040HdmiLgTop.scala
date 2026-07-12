@@ -203,7 +203,16 @@ class Atari800Rp2040HdmiLgTop extends Component {
     atari.io.RAM_SELECT                := B"011"
     // atari.io.HALT is driven below (held until SDRAM init completes)
     atari.io.TURBO_VBLANK_ONLY         := False
-    atari.io.THROTTLE_COUNT_6502       := B(31, 6 bits)
+    // 0 = real Atari 1.79 MHz (6502 loses cycles to ANTIC DMA + refresh via the
+    // memory arbiter — cycle-accurate). 31 = "run as fast as memory allows": on
+    // the old SDRAM design slow memory limited that to ~1x, but the ANTIC-jitter
+    // fix put RAM in always-ready BRAM, so 31 became ~18.8x TURBO — which bypassed
+    // the arbiter's cycle-stealing and made CPU-bound games (Defender) unplayably
+    // fast (frame-locked games masked it). Verified in sim (Atari800CpuCycleSimTb):
+    // throttle=0 -> 27554 cyc/frame = 35568 - 2808 refresh - 5206 ANTIC = real 800.
+    // Higher values = turbo (the "run faster" knob); route to a config reg if ever
+    // wanted at runtime. See project_cpu_cycle_stealing.
+    atari.io.THROTTLE_COUNT_6502       := B(0, 6 bits)
     // emulated_cartridge_select driven from cfgArea (BOOT domain) below
     atari.io.freezer_enable            := False
     atari.io.freezer_activate          := False

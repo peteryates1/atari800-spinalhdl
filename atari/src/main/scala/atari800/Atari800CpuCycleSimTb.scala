@@ -22,6 +22,7 @@ import spinal.core.sim._
 //   => speedup ≈ N_cpu / (N_cpu − N_antic)   (CPU-bound game runs this much fast)
 object Atari800CpuCycleSimTb extends App {
   val cart = if (args.nonEmpty) args(0) else "roms/Star Raiders.rom"
+  val throttle = if (args.length > 1) args(1).toInt else 31  // 31 = hardware default
 
   val compiled = SimConfig
     .withConfig(SpinalConfig(
@@ -33,7 +34,7 @@ object Atari800CpuCycleSimTb extends App {
     .addSimulatorFlag("-Wno-WIDTHTRUNC")
     .addSimulatorFlag("--x-initial-edge")
     .addSimulatorFlag("--x-assign 0")
-    .compile(new Atari800CoreSim(cartridge_rom = cart, internal_ram = 49152))
+    .compile(new Atari800CoreSim(cartridge_rom = cart, internal_ram = 49152, throttle = throttle))
 
   compiled.doSim("cpu_cycle_measure", seed = 42) { dut =>
     dut.clockDomain.forkStimulus(period = 17640)  // 56.67 MHz
@@ -54,12 +55,13 @@ object Atari800CpuCycleSimTb extends App {
     val warmupFrames = 6   // let it boot + reach a steady display
     val measureFrames = 8
 
-    var pVs = false; var pCpu = false; var pAntic = false; var pRefresh = false
+    var pVs = false; var pAntic = false; var pRefresh = false; var pRdy = false
     var frame = 0
-    var nCpu = 0; var nAntic = 0; var nRefresh = 0
-    // N_cpu measured as the arbiter's CPU memory grant (one per 6502 bus cycle) —
-    // NOT the raw combinational CPU_ENABLE, which toggles sub-cycle.
-    val results = scala.collection.mutable.ArrayBuffer[(Int, Int, Int)]()  // (cpu, antic, refresh)
+    var nInstr = 0; var nRdy = 0; var nAntic = 0; var nRefresh = 0; var lastPc = -1
+    // GROUND-TRUTH the 6502 rate: nInstr = distinct-PC transitions (instructions),
+    // nRdy = CPU_ENABLE_RDY rising edges (candidate bus-cycle count). Compare to
+    // machine-cycle budget to see if the 6502 is really ~1x or inflated.
+    val results = scala.collection.mutable.ArrayBuffer[(Int, Int, Int, Int)]()  // (instr, rdy, antic, refresh)
 
     val maxCycles = 40000000  // safety cap (~35 PAL frames)
     var done = false
@@ -72,54 +74,52 @@ object Atari800CpuCycleSimTb extends App {
       dut.io.sdramRequestComplete #= dut.io.sdramRequest.toBoolean
 
       val vs      = dut.io.videoVs.toBoolean
-      val cpu     = dut.atariCore.atari800xl.mmu1.notifyCpu.toBoolean     // true CPU bus-cycle grant
+      val rdy     = dut.atariCore.atari800xl.cpu6502.CPU_ENABLE_RDY.toBoolean
+      val pc      = dut.atariCore.atari800xl.cpu6502.debugPc.toInt
       val antic   = dut.atariCore.atari800xl.mmu1.notifyAntic.toBoolean
       val refresh = dut.io.sdramRefresh.toBoolean
 
       // frame boundary = vsync rising edge
       if (vs && !pVs) {
         if (frame >= warmupFrames && frame < warmupFrames + measureFrames)
-          results += ((nCpu, nAntic, nRefresh))
-        nCpu = 0; nAntic = 0; nRefresh = 0
+          results += ((nInstr, nRdy, nAntic, nRefresh))
+        nInstr = 0; nRdy = 0; nAntic = 0; nRefresh = 0
         frame += 1
         if (frame >= warmupFrames + measureFrames) done = true
       }
 
-      // count rising edges within the frame (only while in/after warmup)
+      // count within the frame (only while in/after warmup)
       if (frame >= warmupFrames) {
-        if (cpu && !pCpu)         nCpu += 1
+        if (pc != lastPc)         nInstr += 1
+        if (rdy && !pRdy)         nRdy += 1
         if (antic && !pAntic)     nAntic += 1
         if (refresh && !pRefresh) nRefresh += 1
       }
-      pVs = vs; pCpu = cpu; pAntic = antic; pRefresh = refresh
+      lastPc = pc
+      pVs = vs; pRdy = rdy; pAntic = antic; pRefresh = refresh
     }
 
-    // Derive from RELIABLE signals only. notifyCpu is inflated (fast BRAM re-grants
-    // the held CPU request many times/machine-cycle), but notifyAntic (transient,
-    // one per fetch) and refresh are exact. Frame geometry from refresh: real Atari
-    // does 9 refresh cycles/scanline, 114 machine cycles/scanline.
     val CYCLES_PER_LINE = 114; val REFRESH_PER_LINE = 9
-    println("=" * 72)
-    println(f"CPU cycle-stealing baseline — cart='$cart', internal_ram=49152 (BRAM)")
-    println("=" * 72)
-    println(f"${"frame"}%-6s ${"lines"}%6s ${"machCyc"}%8s ${"N_antic"}%8s ${"refresh"}%8s ${"ourCPU"}%8s ${"realCPU"}%8s ${"fast"}%7s")
-    var sumAntic = 0L; var sumRef = 0L; var sumOur = 0L; var sumReal = 0L; var sumLines = 0L
-    for (((_, antic, ref), i) <- results.zipWithIndex) {
-      val lines   = ref / REFRESH_PER_LINE
-      val machCyc = lines * CYCLES_PER_LINE
-      val ourCpu  = machCyc - ref             // today: CPU loses only refresh
-      val realCpu = machCyc - ref - antic     // real 800: also loses ANTIC DMA
-      val fast    = if (realCpu > 0) ourCpu.toDouble / realCpu else 0.0
-      println(f"${i}%-6d ${lines}%6d ${machCyc}%8d ${antic}%8d ${ref}%8d ${ourCpu}%8d ${realCpu}%8d ${fast}%6.3fx")
-      sumAntic += antic; sumRef += ref; sumOur += ourCpu; sumReal += realCpu; sumLines += lines
+    println("=" * 76)
+    println(f"CPU cycle rate — cart='$cart', internal_ram=49152 (BRAM), throttle=$throttle")
+    println("=" * 76)
+    println(f"${"frame"}%-6s ${"lines"}%6s ${"machCyc"}%8s ${"instr"}%8s ${"cpuRdy"}%8s ${"N_antic"}%8s ${"refresh"}%8s")
+    var sInstr = 0L; var sRdy = 0L; var sAntic = 0L; var sRef = 0L; var sLines = 0L
+    for (((instr, rdy, antic, ref), i) <- results.zipWithIndex) {
+      val lines = ref / REFRESH_PER_LINE
+      println(f"${i}%-6d ${lines}%6d ${lines*CYCLES_PER_LINE}%8d ${instr}%8d ${rdy}%8d ${antic}%8d ${ref}%8d")
+      sInstr += instr; sRdy += rdy; sAntic += antic; sRef += ref; sLines += lines
     }
     val n = math.max(1, results.size)
-    val aSpeedup = if (sumReal > 0) sumOur.toDouble / sumReal else 0.0
-    println("-" * 72)
-    println(f"avg    ${sumLines/n}%6d ${(sumOur+sumRef)/n}%8d ${sumAntic/n}%8d ${sumRef/n}%8d ${sumOur/n}%8d ${sumReal/n}%8d ${aSpeedup}%6.3fx")
+    val lines = sLines/n; val machCyc = lines*CYCLES_PER_LINE
+    println("-" * 76)
+    println(f"avg    ${lines}%6d ${machCyc}%8d ${sInstr/n}%8d ${sRdy/n}%8d ${sAntic/n}%8d ${sRef/n}%8d")
     println()
-    println(f"ANTIC steals ~${sumAntic/n} DMA cycles/frame that our core gives the CPU instead.")
-    println(f"CPU-bound games (Defender) run about ${aSpeedup}%.2fx too fast on this display load.")
-    println(f"(Frame-locked games are immune. Heavier displays => more ANTIC DMA => faster.)")
+    println(f"machine cycles/frame = $machCyc; refresh = ${sRef/n}; ANTIC DMA = ${sAntic/n}")
+    println(f"6502 bus cycles/frame (cpuRdy) = ${sRdy/n}  <- should be ~1 per machine cycle")
+    println(f"instructions/frame = ${sInstr/n}")
+    val ourCpu = sRdy/n; val realCpu = ourCpu - sAntic/n
+    if (realCpu > 0)
+      println(f"If cpuRdy ~= machCyc-refresh, real-800 CPU would be ~$realCpu => ${ourCpu.toDouble/realCpu}%.3fx too fast")
   }
 }
