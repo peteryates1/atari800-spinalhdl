@@ -6,10 +6,11 @@ for SD card, USB, OSD, and configuration management.
 
 > **Current focus:** the active target is the **atari-800-rp2040-qmtech-10cl025**
 > board (Cyclone 10 LP 10CL025 + RP2040-STAMP + HDMI), where an **RP2040
-> supervisor** (C firmware, not JOP) handles SD, USB keyboard, config-driven
-> auto-boot, and SIO disk emulation. See **[STATUS.md](STATUS.md)** for the
-> up-to-date snapshot. The JOP/EP4CGX150 paths below remain valid for those
-> boards.
+> supervisor** (C firmware, not JOP) **configures the FPGA from the SD card at
+> power-on** and handles USB keyboard, config-driven auto-boot, SIO disk
+> emulation, and an **on-screen (HDMI) Alt-F12 menu**. The 6502 runs at real,
+> **cycle-accurate 1.79 MHz**. See **[STATUS.md](STATUS.md)** for the up-to-date
+> snapshot. The JOP/EP4CGX150 paths below remain valid for those boards.
 
 ## Status
 
@@ -445,10 +446,12 @@ This project stands on a number of open-source works:
 - **[FatFs](http://elm-chan.org/fsw/ff/)** (1-clause BSD, ChaN) — FAT filesystem
   for reading OS/cart/disk images and JSON config from the SD card.
 
-**Tooling (planned)**
+**FPGA programming (RP2040 JTAG loader)**
 - **[dirtyJTAG](https://github.com/jeanthom/DirtyJTAG)** (GPL-2.0, Jean THOMAS) —
-  basis for the upcoming RP2040 JTAG loader that will configure the FPGA from the
-  host and from the SD card (replacing the Altera Blaster dependency).
+  reference for the RP2040 JTAG loader that now configures the FPGA both from the
+  host (via **Altera USB-Blaster emulation**, so Quartus programs a `.sof`
+  directly) and from the **SD card at power-on**, replacing the Altera Blaster
+  dependency.
 
 ## License
 

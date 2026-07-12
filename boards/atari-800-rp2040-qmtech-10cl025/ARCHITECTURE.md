@@ -3,6 +3,16 @@
 *Status as of 2026-07-05. Board: ATARI-800-RP2040-STAMP-HDMI-LG V1.0
 (QMTech Cyclone 10 LP 10CL025 core board, RP2040-STAMP supervisor, HDMI out).*
 
+> **⚠ Superseded on key points — see [../../STATUS.md](../../STATUS.md) for current
+> state.** This doc is the early SDRAM-based bring-up (kept for its debugging
+> history). Since then: the **Atari runs entirely from BRAM** (RAM+OS+cart);
+> **SDRAM carries only the framebuffer** (the ANTIC-jitter fix — `internal_rom=3`,
+> `internal_ram=49152`, not the `0/0` below). Video is **720p** (74.25/371.25 MHz),
+> not the 480p clock plan below. The RP2040 now **configures the FPGA from SD at
+> power-on** and hosts an **on-screen Alt-F12 menu**. The 6502 runs at
+> **cycle-accurate 1.79 MHz** (`THROTTLE_COUNT_6502=0`). The SPI loader/protocol,
+> refresh-timing, and pixel-sampling notes below are still accurate.
+
 ## The vision
 
 **Nothing proprietary in the bitstream.** The `.sof` contains only logic:
