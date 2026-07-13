@@ -153,11 +153,22 @@ are the FPGA link here). CD is wired (GPIO19), so card-detect can be re-enabled.
   over-voltage** on the (non-5 V-tolerant) RP2040 ADC pins. Best if that 3V3 is the ADC
   VREF rail. (5 V there would mandate dividers on all four POT lines — avoided.)
 
+### FPGA configuration (JTAG)
+Base-board **J5 → the module's own JTAG header** (flying lead, or pogo), so the RP2040
+SD-side FPGA load still works — RP2040 GPIO0–3 = TMS/TCK/TDI/TDO drive J5. JTAG can't
+run over the SODIMM: TDO/TMS/TCK are on the edge (pins 68/76/94) but **TDI is not**, so
+the module header is mandatory. **The module JTAG header is in a different physical spot
+per family**, so fixed pogos are per-module — the J5 header + flying lead is the portable
+choice:
+- **Artix i9+:** 1×4 pads on the **right edge** (between U6 SDRAM and U12 flash):
+  **J2=TDO, J3=TDI, J4=TMS, J5=TCK**.
+- **ECP5 i9 / i5:** 1×4 pads at the **top-left corner** (by U17), silk `J30 J32 J31 J27`:
+  **J30=TDO, J32=TDI, J31=TMS, J27=TCK**.
+
+Take GND from a SODIMM ground pin. (Photos: `Colorlight-FPGA-Projects/doc/
+i9plus-v6.1-top.jpg`, `I9_V7.2_top.jpg`.)
+
 ### Open items before fab
-- **FPGA configuration path:** RP2040 JTAG (GPIO0–3) reaches header **J5 only, not the
-  FPGA (CN1)** — so the current design's *RP2040-loads-FPGA-from-SD over JTAG* (SD-side
-  boot) is **not wired**. OK **if** the FPGA boots from its **on-module flash** and J5 is
-  the external JTAG programming header — confirm this is the intent.
 - **Declare the 4 TMDS pairs as length-matched 100 Ω differential pairs** in the PCB tool
   (netlist `differentialPair` list is empty; may just be absent from the export — verify).
 - **DDC (SCL/SDA) + HPD are not routed to the FPGA** → no EDID read / hot-plug sense.
