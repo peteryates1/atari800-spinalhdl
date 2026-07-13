@@ -38,6 +38,18 @@
 // Bytes of FPGA core image (/fpga/core.rbf) staged into flash at boot (0 = none).
 static uint32_t g_fpga_staged = 0;
 
+// Console-free SD bring-up self-test, read over SWD. The STAMP's native-USB console
+// is unreliable (connector damaged) and the RP2040 GPIOs only reach a header via the
+// FPGA (no free UART pins), so the debug probe is the only stable link. main() runs
+// the SD check early and records it here; `magic` is written last so a reader knows
+// the fields are settled. Read with: mdw &g_selftest 4.
+volatile struct {
+  uint32_t magic;       // 0x5E1F0001 once fully populated
+  int32_t  sd_init_rc;  // sd_init() return, 0 = OK
+  uint32_t sd_mounted;  // 1 = f_mount OK
+  uint32_t sd_blocks;   // capacity in 512-byte blocks (>0 confirms CSD read)
+} g_selftest;
+
 // ---- Board wiring ----
 #ifndef USE_USB2
 #define USE_USB2 0            // 0: USB1 (D+=7, D-=6)  1: USB2 (D+=8, D-=9)
@@ -910,14 +922,19 @@ int main(void) {
     // few hundred ms. Retry until it responds (or time out) before staging;
     // otherwise staging silently skips on every cold boot.
     bool sd_ok = false;
+    int  sd_rc = -99;
     absolute_time_t deadline = make_timeout_time_ms(2500);
     while (absolute_time_diff_us(get_absolute_time(), deadline) > 0) {
-      if (sd_card_present() && sd_init() == 0 && f_mount(&stagefs, "", 1) == FR_OK) {
+      sd_rc = sd_init();
+      if (sd_rc == 0 && f_mount(&stagefs, "", 1) == FR_OK) {
         sd_ok = true;
         break;
       }
       sleep_ms(50);
     }
+    g_selftest.sd_init_rc = sd_rc;
+    g_selftest.sd_mounted = sd_ok ? 1 : 0;
+    g_selftest.sd_blocks  = sd_ok ? sd_capacity_blocks() : 0;
     if (sd_ok) {
       char rbf[CFG_PATH_LEN];
       if (config_fpga_path(rbf, sizeof rbf))     // e.g. /atari/800/core.rbf
@@ -928,6 +945,8 @@ int main(void) {
                g_fpga_staged ? " (auto-configuring)"
                              : (sd_ok ? " (no image on SD)" : " (SD not ready)"));
   }
+
+  g_selftest.magic = 0x5E1F0001;
 
   // PIO-USB host on rhport 1
   pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;

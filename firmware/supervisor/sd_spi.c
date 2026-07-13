@@ -1,8 +1,8 @@
-// SD card, SPI mode, through the FPGA passthrough:
-//   RP2040 SPI1: GPIO10=SCK, GPIO11=TX(CMD/MOSI), GPIO12=RX(DAT0/MISO),
-//   GPIO13=CS (soft), GPIO14=card-detect (input, via FPGA).
-// The FPGA forwards these combinationally to the SD socket, adding ~tens of
-// ns each way — clocks kept conservative (400 kHz init, 4 MHz data).
+// SD card, SPI mode. On the LG V1.0 board the RP2040-STAMP is jumper-wired
+// DIRECTLY to the SD socket (bypassing the old FPGA passthrough):
+//   RP2040 SPI1: GPIO10=SCK(clk), GPIO11=TX(copi/MOSI), GPIO12=RX(cipo/MISO),
+//   GPIO13=CS (soft). No card-detect line is wired, so sd_card_present()
+//   always reports present. Clocks: 400 kHz init, 4 MHz data.
 
 #include <string.h>
 #include "pico/stdlib.h"
@@ -14,7 +14,6 @@
 #define PIN_SD_TX   11
 #define PIN_SD_RX   12
 #define PIN_SD_CS   13
-#define PIN_SD_CD   14
 
 static bool sd_is_sdhc;
 static bool sd_ready;
@@ -47,12 +46,9 @@ static uint8_t sd_cmd(uint8_t cmd, uint32_t arg, uint8_t crc) {
 }
 
 bool sd_card_present(void) {
-  gpio_init(PIN_SD_CD);
-  gpio_set_dir(PIN_SD_CD, GPIO_IN);
-  gpio_pull_up(PIN_SD_CD);
-  sleep_us(50);
-  // Most sockets: switch closes to GND when a card is inserted (active low).
-  return !gpio_get(PIN_SD_CD);
+  // Direct-wired socket with no card-detect line — assume a card is present
+  // and let sd_init() be the real "is there a working card" test.
+  return true;
 }
 
 int sd_init(void) {
