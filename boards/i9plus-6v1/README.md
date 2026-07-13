@@ -113,6 +113,59 @@ Fit for our use — **no blockers**:
 - I/O is **3.3 V** — set that FPGA bank's VCCIO to 3.3 V. 166 MHz is well above any
   clock we'd run it at.
 
+## Base-board netlist review
+
+Reviewed the exported netlist (`Netlist_Atari_800_Lite_-_Colorlight_Module-LG_*.enet`)
+for the shared i5/i9(/i9+) base board: SODIMM socket (CN1), HDMI-A (HDMI1), RP2040-Stamp
+(U1), 2× DB9 joystick (J1/J2), microSD (J8), 2× USB-A host + native USB (J4/J6), audio
+jack (J11), power (J10/U2/SW1), console keys, ESD arrays (D1/D2).
+
+### Verified good
+- **HDMI TMDS → SODIMM** matches the pin map above exactly, correct polarity on all
+  four pairs: connector → 100 nF AC-coupling cap (C1–C8) → SODIMM (CLK 71/69, TX0
+  83/79, TX1 99/95, TX2 111/109).
+- **Joysticks** dir/trigger → FPGA (CN1); **POT** lines → RP2040 ADC (GPIO26–29).
+  **Console keys** RESET/OPTION/SELECT/START → FPGA. **Audio** L/R → FPGA → J11.
+- **Native USB → J6** (real connector); **2× USB-A host** on PIO GPIO4/5 + 6/7.
+  **SWD → U3**, RESET → SW3, BOOTSEL → SW2.
+
+### RP2040 pin map on this board (differs from the QMTech board — firmware re-pin needed)
+| Function | RP2040 GPIO |
+|---|---|
+| microSD (SPI0) | CIPO=20, CS=21, SCK=22, COPI=23, **CD=19** |
+| RP2040↔FPGA link | GPIO10–18 → CN1.67/65/63/61/59/57/51/49/41 |
+| FPGA JTAG (loader) | GPIO0–3 (TMS/TCK/TDI/TDO) → header **J5** |
+| USB host (PIO) | 4/5 and 6/7 → J4 |
+| Paddle POT ADC | GPIO26–29 → J1/J2 POT |
+
+`sd_spi.c` must move from SPI1/GPIO10-13 to **SPI0/GPIO20-23** for this board (GPIO10-18
+are the FPGA link here). CD is wired (GPIO19), so card-detect can be re-enabled.
+
+### Decisions taken
+- **ESD arrays (D1/D2) moved to the connector side of the AC caps** — correct place to
+  clamp ESD at the entry point.
+- **HDMI +5 V (pin 18):** add a **ferrite bead** (≈600 Ω@100 MHz, <0.5 Ω DC, ≥0.5 A) in
+  series for EMI, plus a **resettable polyfuse, 150 mA hold (~300 mA trip), ≥6 V** for
+  short protection (spec load is ≤55 mA; a plain series R would have to be ≤5 Ω and gives
+  no fault protection). Example: Littelfuse 1206L015 / Bourns MF-MSMF015-2.
+- **Joystick pin 7 stays on 3V3** (not 5 V): paddle pots are **ratiometric**, so a 3.3 V
+  top rail swings the POT lines 0→3.3 V = full ADC scale with **no divider and no
+  over-voltage** on the (non-5 V-tolerant) RP2040 ADC pins. Best if that 3V3 is the ADC
+  VREF rail. (5 V there would mandate dividers on all four POT lines — avoided.)
+
+### Open items before fab
+- **FPGA configuration path:** RP2040 JTAG (GPIO0–3) reaches header **J5 only, not the
+  FPGA (CN1)** — so the current design's *RP2040-loads-FPGA-from-SD over JTAG* (SD-side
+  boot) is **not wired**. OK **if** the FPGA boots from its **on-module flash** and J5 is
+  the external JTAG programming header — confirm this is the intent.
+- **Declare the 4 TMDS pairs as length-matched 100 Ω differential pairs** in the PCB tool
+  (netlist `differentialPair` list is empty; may just be absent from the export — verify).
+- **DDC (SCL/SDA) + HPD are not routed to the FPGA** → no EDID read / hot-plug sense.
+  Fine for fixed-resolution output; EDID would need DDC to the FPGA with 3.3 V level
+  shifting (it's pulled to 5 V).
+- Confirm the **RP2040-Stamp 3V3 regulator** budget covers SD (~100 mA peak) + joystick
+  pull-ups; and that 2× PIO-USB host + the FPGA-config PIO coexist.
+
 ## Provenance (how the pairs were derived)
 - Artix diff pairs: Vivado `get_package_pins … DIFF_PAIR_PIN` on `xc7a50tfgg484-1`.
 - ECP5 diff pairs: prjtrellis `iodb.json` (CABGA381) — PIO A/B and C/D at the same
