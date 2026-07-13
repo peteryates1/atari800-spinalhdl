@@ -165,7 +165,14 @@ choice:
 - **ECP5 i9 / i5:** 1×4 pads at the **top-left corner** (by U17), silk `J30 J32 J31 J27`:
   **J30=TDO, J32=TDI, J31=TMS, J27=TCK**.
 
-Take GND from a SODIMM ground pin. (Photos: `Colorlight-FPGA-Projects/doc/
+**Chosen approach: a soldered flying lead from J5 to a mating connector at the module
+JTAG header** — not pogo pins. J5 already carries GND (pin 1) + TMS/TCK/TDI/TDO, so it's
+a 5-wire bundle. Reasons over pogo: no sub-mm placement accuracy needed (Colorlight
+publishes no mechanical drawing, so a pogo nest would mean reverse-measuring pad centres
+through the SODIMM seating datum), and it's portable to either module — a pogo nest would
+be per-family since the headers are in different spots. JTAG is only a few MHz, so a
+few-cm lead is fine. The module-end pad order differs per family (above), so use a
+per-module adapter or labelled leads. (Photos: `Colorlight-FPGA-Projects/doc/
 i9plus-v6.1-top.jpg`, `I9_V7.2_top.jpg`.)
 
 ### Open items before fab
