@@ -77,10 +77,18 @@ TMDS. Fine at 720p, marginal at 1080p (1.485 Gbps) over a SODIMM + base-board ho
 four pairs above give **proper differential** signaling for reliable 1080p.
 
 ### Caveats before committing copper
-- **Verify these SODIMM pins are free carrier I/O** on both modules (not tied to
-  on-module SDRAM/flash/PHY). The module tables label them with plain FPGA balls (a good
-  sign) but confirm against the schematics — the `ETH*` pairs (SODIMM 15–36), for
-  example, go to the PHY, *not* the FPGA.
+- **Free carrier I/O — VERIFIED for the i9+ (no schematic needed).** The
+  `colorlight_i9plus_v6.1.md` doc lists both the SODIMM edge pinout *and* every
+  on-module peripheral's FPGA balls (SDRAM U6, flash U12, ETH-PHY0/1, LED, clock,
+  JTAG — 135 balls). Our 8 HDMI balls (AA1/AB1/Y3/AA3/Y6/AA6/AA8/AB8) appear **only**
+  in the edge table and in **none** of the peripheral tables; they're also in the
+  opposite package corner (rows Y/AA/AB = bank 34) from the peripherals (rows A–H).
+  Source is the community reverse-engineered pinout, not Colorlight's schematic, but
+  it's internally consistent (edge vs peripheral tables agree). Unlike the `ETH*`
+  pairs (SODIMM 15–36, which go to the PHY), these are clean FPGA I/O.
+  - *Optional hardware-definitive check when the board arrives:* JTAG boundary-scan
+    (EXTEST) each ball and meter the edge pin, or toggle all 8 while SDRAM/Ethernet/
+    flash run and confirm they stay independent.
 - **Validate 1080p SI on hardware** — pseudo/true-diff TMDS through a SODIMM connector is
   worth a real test before a board spin.
 
