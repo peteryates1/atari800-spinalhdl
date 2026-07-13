@@ -25,12 +25,14 @@ boards/AC608/JopCoreForAtari.sv_*.bin
 boards/i5-7v0/build/
 boards/i9-7v2/build/
 
-# Vivado build artifacts
+# Vivado build artifacts (anywhere — Vivado can be run from any dir)
+vivado*.jou
+vivado*.log
+vivado*.str
+vivado_*.backup.*
+.Xil/
 boards/i9plus-6v1/synth_util.rpt
 boards/i9plus-6v1/synth_timing.rpt
-boards/i9plus-6v1/*.jou
-boards/i9plus-6v1/*.log
-boards/i9plus-6v1/vivado_pid*.str
 
 # Simulation
 sim_workspace/
