@@ -189,8 +189,16 @@ module's gold-finger edge** —
   stop from the connector datasheet's recommended-PCB figure).
 
 Set the connector footprint's origin to this point so its placed coordinate *is* `(Cx, Cy)`;
-otherwise add the offset from your origin to it. With the module seated **component-side up**
-(→ no mirror):
+otherwise add the offset from your origin to it.
+
+*For this board's connector (TE **1473006**, 0.6 mm-pitch 200-pos DDR2 socket — datasheet
+`Colorlight-FPGA-Projects/doc/ENG_CD_1473006_M2.pdf`, sheet 2):* `Cx` = the **CONNECTOR
+CENTER LINE** (center of symmetry — midway between the ø1.6/ø1.1 end posts and pin 1↔199;
+**NOT** the MECHANICAL KEY CENTER LINE, which is offset 3.1 mm), and `Cy` = the
+**card-seating line** ≈ midway between the two solder-pad rows (or the insertion edge of the
+sheet-1 "RECOMMENDED MATING P.C.B OUTLINE"), good to ~±1 mm.
+
+With the module seated **component-side up** (→ no mirror):
 ```
 left edge Xleft = Cx − 33.80          (½ × 67.60 mm)
 pad X = Xleft + 63.84  =  Cx + 30.04       (all four pads)
