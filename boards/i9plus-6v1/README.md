@@ -198,22 +198,30 @@ CENTER LINE** (center of symmetry — midway between the ø1.6/ø1.1 end posts a
 **card-seating line** ≈ midway between the two solder-pad rows (or the insertion edge of the
 sheet-1 "RECOMMENDED MATING P.C.B OUTLINE"), good to ~±1 mm.
 
-With the module seated **component-side up** (→ no mirror):
+The module seats **component-side up** (no mirror). Because the connector is horizontal the
+module can only sit two ways — socket mounted at 0° or 180° — and **180° is an in-plane
+point-reflection through (Cx, Cy) that flips X *and* Y together** (you can't flip one without
+the other; treating them independently is wrong):
 ```
-left edge Xleft = Cx − 33.80          (½ × 67.60 mm)
-pad X = Xleft + 63.84  =  Cx + 30.04       (all four pads)
-pad Y = Cy + 8.18 + 2.54·n             n = 0..3  →  J2, J3, J4, J5
+Orientation A (0°)  :  pad X = Cx + 30.04     pad Y = Cy + 8.18 + 2.54·n
+Orientation B (180°):  pad X = Cx − 30.04     pad Y = Cy − 8.18 − 2.54·n
+                       n = 0..3 → J2,J3,J4,J5   (30.04 = 63.84 − 33.80)
 ```
-Worked example — Cx = −11.8, Cy = −4.8 → all pads at **X = 18.24**, Y = **3.38 / 5.92 /
-8.46 / 11.00** (J2/J3/J4/J5).
+Pick the one whose pads land where the module physically sits (check the seated-module
+outline): **A** = JTAG column right & *below* the slot, **B** = left & *above*.
 
-Adjust for geometry:
-- **Component-side down** (top faces the board) → mirror X: `pad X = Cx − 30.04`.
-- **Module measured-left lands on board +X** (seats the other way) → also `Cx − 30.04`;
-  check the seated outline to pick `Cx ± 30.04`.
-- **Module extends −Y** from the slot → `pad Y = Cy − (8.18 + 2.54·n)`.
-- `Cy` must be the **card-slot seating line**; if you referenced the connector-body
-  centre, offset accordingly.
+**This board is orientation B.** Worked example — footprint recentred on the connector
+centre line, Cx = −11.8, Cy = −0.7:
+
+| Pad | Sig | Board (x, y) mm |
+|-----|-----|:---:|
+| J2  | TDO | −41.84, **−8.88**  |
+| J3  | TDI | −41.84, **−11.42** |
+| J4  | TMS | −41.84, **−13.96** |
+| J5  | TCK | −41.84, **−16.50** |
+
+(Separately: **component-side DOWN** would be a true *reflection* — additionally negate the
+X term. And `Cy` must be the **card-seating line**, not the connector-body centre.)
 
 Collision note: the pads are 8.18–15.80 mm off the slot line, so **J2/J3 typically sit in
 the connector body/latch zone** — don't place a base-board pad/pogo there (use the flying
