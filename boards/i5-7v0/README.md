@@ -3,12 +3,48 @@
 The i5 is the ECP5 member of the shared-base-board plan (same DDR2-SODIMM-200 socket as the
 i9 and the Artix i9+). On-module: LFE5U-25F, EtronTech EM638325BK-6H 8 MB SDRAM, SPI flash.
 
-## HDMI bring-up test (this folder)
-Self-contained 640×480 HDMI test (no Atari core) — hardware-verified "solid as a rock":
-`build_hdmi_test.sh` → yosys/nextpnr-ecp5/ecppack; sources `ecp5_ddr_out.v`,
-`pll_hdmi_ecp5.sv`, `hdmi_test.lpf`; generated from `Atari800Ecp5HdmiTestTop`. Programmed via
-`openFPGALoader -b colorlight-i5`. See the ECP5 HDMI notes for the full pipeline and the
-720p/1080p ladder.
+## Build & HDMI test
+
+Open-source ECP5 flow — **yosys → nextpnr-ecp5 → ecppack** (plus `sbt` for SpinalHDL→SV),
+device **`--25k --package CABGA381 --speed 6`**, programmed with **openFPGALoader
+`-b colorlight-i5`**. `nextpnr-ecp5`, `yosys`, `ecppack`, `openFPGALoader` all present.
+
+### 640×480 HDMI test — `build_hdmi_test.sh`
+Self-contained (no Atari core): 25 MHz → PLL → fixed supervisor-style text → HDMI. Used to
+eyeball jitter/shimmer on sharp text — **hardware-verified "solid as a rock", crisp**. Four
+steps:
+1. `sbt "atari/runMain atari800.Atari800Ecp5HdmiTestSv"` → generates `Atari800Ecp5HdmiTestTop.sv`
+2. `yosys synth_ecp5` over `pll_hdmi_ecp5.sv` + `ecp5_ddr_out.v` + the generated top → `build/hdmitest.json`
+3. `nextpnr-ecp5 --25k --package CABGA381 --speed 6 --lpf hdmi_test.lpf`
+4. `ecppack --compress` → `build/hdmitest.bit`
+
+Program: `openFPGALoader -b colorlight-i5 build/hdmitest.bit` (volatile SRAM) or `-f` (flash).
+
+**Clocks** (`pll_hdmi_ecp5.sv`, one `EHXPLLL`): 25 MHz in (P3) → **clkout0 = 125 MHz** (TMDS,
+5× pixel) + **clkout1 = 25 MHz** (pixel). CLKI_DIV=1, CLKOP_DIV=5, CLKOS_DIV=25, feedback CLKOP.
+
+**Pins** (`hdmi_test.lpf`, from wuxx `src/i5/hdmi_test_pattern` — known-good), **LVCMOS33
+pseudo-differential**, DRIVE=4, P and N driven explicitly by `Ecp5DvidOut`/`ecp5_ddr_out.v`
+(ODDRX1F):
+
+| Lane | + (`gpdi_dp`) | − (`gpdi_dn`) |
+|------|:---:|:---:|
+| Blue / D0  | G19 | H20 |
+| Green / D1 | E20 | F19 |
+| Red / D2   | C20 | D19 |
+| Clock      | J19 | K19 |
+
+`clk_25mhz` = P3 (LVCMOS33, 25 MHz); `SYSCONFIG CONFIG_IOVOLTAGE=3.3`.
+
+**Resource use (LFE5U-25F):** ~1382 LUT (**6 %**), 4 ODDRX1F, 1 EHXPLLL — the 125 MHz TMDS
+serial clock is well under the ODDRX1F ~195–234 MHz ceiling, so a big timing margin. (720p/
+1080p would need faster gearing — ECLKSYNCB/CLKDIVF or ODDRX2F.)
+
+### Atari-core fit-check — `Makefile`
+`make generate` (`Atari800Ecp5BramSv`) → `synth` → `pnr` → `bitstream` (top `fit_check_top`,
+same `--25k --package CABGA381 --speed 6`). Confirms the **full Atari core fits the 25F**:
+**4909 LUT4 (20 %), 34/56 DP16KD BRAM (60 %), 2763 FF (11 %), 1 EHXPLLL** — plenty of room to
+fold in the HDMI path.
 
 ## JTAG — module header location + base-board placement
 Same story as the [i9+](../i9plus-6v1/README.md#fpga-configuration-jtag): JTAG can't run over
