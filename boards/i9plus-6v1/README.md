@@ -165,6 +165,45 @@ choice:
 - **ECP5 i9 / i5:** 1×4 pads at the **top-left corner** (by U17), silk `J30 J32 J31 J27`:
   **J30=TDO, J32=TDI, J31=TMS, J27=TCK**.
 
+#### Artix i9+ module JTAG pad coordinates (measured) + board-placement formula
+Calipered on the i9+ v6.1 module, **top side, from the bottom-left corner** (gold-finger
+edge = Y datum, left edge = X datum). 1×4 column at **2.54 mm (0.1″)** pitch, **J2 nearest
+the gold-finger edge**:
+
+| Pad | Sig | Module (x, y) mm |
+|-----|-----|:---:|
+| J2  | TDO | 63.84, **8.18**  |
+| J3  | TDI | 63.84, **10.72** |
+| J4  | TMS | 63.84, **13.26** |
+| J5  | TCK | 63.84, **15.80** |
+
+*(J2 x/y measured; J3–J5 stepped +2.54 mm in +Y. Module ≈67.60 mm wide — the standard
+DDR2-SODIMM / MO-224 edge.)*
+
+**Board coordinates from an arbitrary connector location.** Let the placed SODIMM
+connector's **centerline X = Cx** and **card-slot seating line Y = Cy** (board coords),
+module seated **component-side up** (→ no mirror):
+```
+left edge Xleft = Cx − 33.80          (½ × 67.60 mm)
+pad X = Xleft + 63.84  =  Cx + 30.04       (all four pads)
+pad Y = Cy + 8.18 + 2.54·n             n = 0..3  →  J2, J3, J4, J5
+```
+Worked example — Cx = −11.8, Cy = −4.8 → all pads at **X = 18.24**, Y = **3.38 / 5.92 /
+8.46 / 11.00** (J2/J3/J4/J5).
+
+Adjust for geometry:
+- **Component-side down** (top faces the board) → mirror X: `pad X = Cx − 30.04`.
+- **Module measured-left lands on board +X** (seats the other way) → also `Cx − 30.04`;
+  check the seated outline to pick `Cx ± 30.04`.
+- **Module extends −Y** from the slot → `pad Y = Cy − (8.18 + 2.54·n)`.
+- `Cy` must be the **card-slot seating line**; if you referenced the connector-body
+  centre, offset accordingly.
+
+Collision note: the pads are 8.18–15.80 mm off the slot line, so **J2/J3 typically sit in
+the connector body/latch zone** — don't place a base-board pad/pogo there (use the flying
+lead). *These coords are the Artix i9+ module only; the ECP5 i5/i9 JTAG is at the top-left
+corner and needs its own measurement.*
+
 **Chosen approach: a soldered flying lead from J5 to a mating connector at the module
 JTAG header** — not pogo pins. J5 already carries GND (pin 1) + TMS/TCK/TDI/TDO, so it's
 a 5-wire bundle. Reasons over pogo: no sub-mm placement accuracy needed (Colorlight
