@@ -180,9 +180,17 @@ the gold-finger edge**:
 *(J2 x/y measured; J3–J5 stepped +2.54 mm in +Y. Module ≈67.60 mm wide — the standard
 DDR2-SODIMM / MO-224 edge.)*
 
-**Board coordinates from an arbitrary connector location.** Let the placed SODIMM
-connector's **centerline X = Cx** and **card-slot seating line Y = Cy** (board coords),
-module seated **component-side up** (→ no mirror):
+**Board coordinates from an arbitrary connector location.** `(Cx, Cy)` is a *specific
+physical point*, not the footprint's arbitrary origin: the **midpoint of the seated
+module's gold-finger edge** —
+- `Cx` = **slot centerline** (horizontal centre of the 200-contact array = midpoint
+  between the two end contacts; the module's width-centre sits here),
+- `Cy` = **card-seating line** (Y where the module's gold-finger edge rests — the card-edge
+  stop from the connector datasheet's recommended-PCB figure).
+
+Set the connector footprint's origin to this point so its placed coordinate *is* `(Cx, Cy)`;
+otherwise add the offset from your origin to it. With the module seated **component-side up**
+(→ no mirror):
 ```
 left edge Xleft = Cx − 33.80          (½ × 67.60 mm)
 pad X = Xleft + 63.84  =  Cx + 30.04       (all four pads)
