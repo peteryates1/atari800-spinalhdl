@@ -5,10 +5,13 @@ FPGA module: **XC7A50T-FGG484** on a **DDR2-SODIMM-200P** module (Vivado flow,
 modules — the basis for one base board that accepts either family. On-module:
 8 MB SDRAM (M12L64322A-6B, 32-bit SDR, 166 MHz), SPI flash, 2× Gigabit PHY (B50612D).
 
-The Atari core uses ~23 % LUT / 17 % BRAM here (see `synth_util.rpt`), so 1080p +
-supervisor + heavier future cores fit with room. The Artix's hard OSERDESE2 + MMCM
-do **native 1080p60** comfortably (1.485 Gbps/lane) — which the ECP5 -6 cannot
-(its PLL caps ~400 MHz and the serializer needs ~742 MHz; 720p is the ECP5 ceiling).
+The Atari core uses ~23 % LUT / 17 % BRAM here (see `synth_util.rpt`), so logic/BRAM
+are not the constraint. **HDMI resolution is, though:** Vivado place+route of a real
+OSERDESE2 10:1 serializer on the board pins shows the **XC7A50T-2 tops out at ~680 MHz
+serializer clock (~136 MHz pixel), so standard 1080p60 (148.5 MHz / 742.5 MHz) is NOT
+achievable** — it misses by ~9 %. A -3 part would make 1080p; the Colorlight module is -2.
+So the i9+ effectively caps at **720p / ~1600×900**, the same class as the ECP5 i5 — see
+[`fpga/hdmi/HDMI-TIMING.md`](../atari-800-rp2040-colorlight/fpga/hdmi/HDMI-TIMING.md).
 
 ## HDMI — differential pairs common to BOTH the ECP5 and Artix modules
 
