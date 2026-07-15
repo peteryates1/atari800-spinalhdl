@@ -64,3 +64,6 @@ java/apps/*/*.jop.link.txt
 # Colorlight FPGA fit-check outputs
 boards/atari-800-rp2040-colorlight/fpga/fit/fit.json
 boards/atari-800-rp2040-colorlight/fpga/fit/fit.config
+
+generated/h720.json
+generated/h720.config
