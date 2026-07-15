@@ -62,7 +62,7 @@ i5-ext HDMI pins are ECLK-capable so it's HW-testable on the existing i5-ext boa
 |---|---|---|
 | i9+ Artix XC7A50T-2 | ~720p (1080p60 fails −9%: OSERDES ~680 MHz) | **verified** |
 | i5 ECP5 -6, current ODDRX1F serializer | ~800×600 (720p fails: 234 vs 370 MHz) | **verified** |
-| i5 ECP5 -6, ODDRX2F rebuild | 720p | in progress |
+| i5 ECP5 -6, ODDRX2F rebuild | 720p | **feasibility PROVEN** (ECLK 370 closes, all i5-ext HDMI pins ECLK-capable in bank 2) — see `../../../i5-7v0/oddrx2f_720/` |
 | i5 ECP5 -6, 640×480 | rock-solid | **HW-verified** |
 
 **Neither chip does 1080p.** Both cap ~720p → the cheaper/smaller **i5 is primary**. 720p on the
