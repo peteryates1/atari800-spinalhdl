@@ -37,6 +37,33 @@ With 1080p out on the −2, the i9+'s only edge over the i5 (its reason to exist
 **both chips target 720p**, and the cheaper/smaller **i5 (ECP5) becomes the primary**. `oserdes10.v`
 still serves the i9+ at 720p if that module is used.
 
-## i5 (ECP5 LFE5U-25F-6) — 720p
-720p = 74.25 MHz pixel, 371.25 MHz DDR serial. Beyond the proven 640×480 (ODDRX1F @125 MHz);
-needs ODDRX2F/ECLK gearing. Verification: see the ECP5 720p test (`../../i5-7v0/`). [in progress]
+## i5 (ECP5 LFE5U-25F-6) — 720p needs an ODDRX2F rebuild
+720p = 74.25 MHz pixel, **371.25 MHz DDR serial**. Verified by pushing the real `Ecp5DvidOut`
+(ODDRX1F + 5:1 fabric gearbox) through nextpnr at 370 MHz:
+
+```
+TMDS clock (target 370 MHz):  Max frequency = 234.25 MHz  → FAIL at 370
+```
+
+So the **current ODDRX1F serializer tops out at ~234 MHz** (the primitive/fabric-gearbox
+ceiling). That covers:
+- **640×480 (125 MHz)** — proven, hardware-verified rock-solid ✅
+- up to ~**800×600** (~200 MHz) ✅
+- **720p (371 MHz) — no** (234 vs 370).
+
+**720p requires rebuilding the serializer with ODDRX2F + ECLK gearing** (fast edge-clock network
++ a lower-rate fabric gearbox). The ECP5 ECLK reaches ~400 MHz on -6, so it's very likely
+feasible — but it's new HDL, not yet built/proven. `ecp5_ddr_out.v` (ODDRX1F) would be replaced
+by an ODDRX2F/ECLKSYNCB/CLKDIVF version. **In progress** (proving the ECLK path + that the
+i5-ext HDMI pins are ECLK-capable so it's HW-testable on the existing i5-ext board).
+
+## Status summary (verified, before board spin)
+| Target | HDMI ceiling | status |
+|---|---|---|
+| i9+ Artix XC7A50T-2 | ~720p (1080p60 fails −9%: OSERDES ~680 MHz) | **verified** |
+| i5 ECP5 -6, current ODDRX1F serializer | ~800×600 (720p fails: 234 vs 370 MHz) | **verified** |
+| i5 ECP5 -6, ODDRX2F rebuild | 720p | in progress |
+| i5 ECP5 -6, 640×480 | rock-solid | **HW-verified** |
+
+**Neither chip does 1080p.** Both cap ~720p → the cheaper/smaller **i5 is primary**. 720p on the
+i5 needs the ODDRX2F serializer built + proven; 640×480 works today.
