@@ -6,10 +6,20 @@
 #include "blaster_jtag.pio.h"
 
 // This board's JTAG TAP (base J10 -> QMTech module). Same GPIOs as jtag.c.
+#ifdef BOARD_COLORLIGHT
+// Colorlight base board: JTAG on GPIO22-25 (to J5 + module pads). NOTE the board
+// routes TCK=22, TMS=23 (TMS/TCK swapped vs GPIO0-3) — the blaster PIO pin order
+// may need adjusting at runtime.
+#define TMS_PIN 23
+#define TCK_PIN 22
+#define TDI_PIN 24
+#define TDO_PIN 25
+#else
 #define TMS_PIN 0
 #define TCK_PIN 1
 #define TDI_PIN 2
 #define TDO_PIN 3
+#endif
 
 // PIO shift TCK rate = 120 MHz sysclk / (clkdiv * 4). Divider 5 -> 6 MHz, the
 // real USB-Blaster rate; conservative for the J10 flying leads (the delay-free

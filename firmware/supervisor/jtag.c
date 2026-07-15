@@ -3,10 +3,18 @@
 #include "hardware/gpio.h"
 #include "boot.h"   // cdc_printf
 
+#ifdef BOARD_COLORLIGHT
+// Colorlight base board: JTAG on GPIO22-25 (to J5 + module pads).
+#define PIN_TMS 23
+#define PIN_TCK 22
+#define PIN_TDI 24
+#define PIN_TDO 25
+#else
 #define PIN_TMS 0
 #define PIN_TCK 1
 #define PIN_TDI 2
 #define PIN_TDO 3
+#endif
 
 // Cyclone 10 LP 10CL025 shares its JTAG IDCODE with the equivalent Cyclone IV E
 // (22K LE) die. Used as a sanity check only; the raw value is always printed.

@@ -9,11 +9,21 @@
 #include "hardware/spi.h"
 #include "sd_spi.h"
 
+#ifdef BOARD_COLORLIGHT
+// Colorlight base board: SD on hardware SPI0 (GPIO4-7) + card-detect on GPIO8.
+#define SD_SPI      spi0
+#define PIN_SD_SCK  6    // CLK
+#define PIN_SD_TX   7    // COPI (MOSI)
+#define PIN_SD_RX   4    // CIPO (MISO)
+#define PIN_SD_CS   5
+#define PIN_SD_CD   8    // card-detect switch (DM3AT SW_B), active low
+#else
 #define SD_SPI      spi1
 #define PIN_SD_SCK  10
 #define PIN_SD_TX   11
 #define PIN_SD_RX   12
 #define PIN_SD_CS   13
+#endif
 
 static bool sd_is_sdhc;
 static bool sd_ready;
@@ -46,9 +56,18 @@ static uint8_t sd_cmd(uint8_t cmd, uint32_t arg, uint8_t crc) {
 }
 
 bool sd_card_present(void) {
-  // Direct-wired socket with no card-detect line — assume a card is present
-  // and let sd_init() be the real "is there a working card" test.
+#ifdef BOARD_COLORLIGHT
+  // Colorlight board wires the socket card-detect switch to GPIO8 (to GND when a
+  // card is inserted). Read it; sd_init() is still the real "working card" test.
+  gpio_init(PIN_SD_CD);
+  gpio_set_dir(PIN_SD_CD, GPIO_IN);
+  gpio_pull_up(PIN_SD_CD);
+  sleep_us(50);
+  return !gpio_get(PIN_SD_CD);
+#else
+  // Direct-wired socket with no card-detect line — assume a card is present.
   return true;
+#endif
 }
 
 int sd_init(void) {

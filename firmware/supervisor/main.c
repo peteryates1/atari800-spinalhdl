@@ -54,11 +54,21 @@ volatile struct {
 #ifndef USE_USB2
 #define USE_USB2 0            // 0: USB1 (D+=7, D-=6)  1: USB2 (D+=8, D-=9)
 #endif
+#ifdef BOARD_COLORLIGHT
+// Colorlight base board: FPGA link on SPI1 (SPI0 is the SD card). Uses 4 of the
+// GPIO9-21 lines to U4 (SODIMM); the rest are spare/control.
+#define SPI_PORT spi1
+#define PIN_SPI_RX  12        // FPGA_DO  (FPGA -> RP2040)  -> U4.61
+#define PIN_SPI_CSN 13        // FPGA_CSN (soft GPIO)       -> U4.59
+#define PIN_SPI_SCK 10        // FPGA_CLK                   -> U4.65
+#define PIN_SPI_TX  11        // FPGA_DI  (RP2040 -> FPGA)  -> U4.63
+#else
 #define SPI_PORT spi0
 #define PIN_SPI_RX  16        // FPGA_DO  (FPGA -> RP2040)
 #define PIN_SPI_CSN 17        // FPGA_CSN (soft GPIO)
 #define PIN_SPI_SCK 18        // FPGA_CLK
 #define PIN_SPI_TX  19        // FPGA_DI  (RP2040 -> FPGA)
+#endif
 
 // Ring log: everything is also kept in a buffer so boot-time events (before
 // the console attaches) can be replayed with the 'l' command.
@@ -951,10 +961,18 @@ int main(void) {
   // PIO-USB host on rhport 1
   pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
 #if USE_USB2
+#ifdef BOARD_COLORLIGHT
+  pio_cfg.pin_dp = 0;                       // USB2: D+=0, D-=1 (Colorlight)
+#else
   pio_cfg.pin_dp = 8;                       // USB2: D+=8, D-=9
+#endif
   pio_cfg.pinout = PIO_USB_PINOUT_DPDM;
 #else
+#ifdef BOARD_COLORLIGHT
+  pio_cfg.pin_dp = 3;                       // USB1: D+=3, D-=2 (Colorlight)
+#else
   pio_cfg.pin_dp = 7;                       // USB1: D+=7, D-=6
+#endif
   pio_cfg.pinout = PIO_USB_PINOUT_DMDP;
 #endif
 #if !BISECT_CDC_ONLY

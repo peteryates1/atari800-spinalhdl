@@ -3,6 +3,16 @@ cmake_minimum_required(VERSION 3.13)
 set(CMAKE_C_STANDARD 11)
 set(PICO_BOARD pico CACHE STRING "Board type")
 
+# Target base board, selected on the CLI:  cmake -DBOARD=colorlight ..  (default)
+#                                           cmake -DBOARD=qmtech ..
+# Maps to a BOARD_<UPPER> compile define used by the RP2040 pin map in
+# sd_spi.c / main.c / blaster.c / jtag.c (colorlight = the i5/i9+ base board;
+# qmtech = the older QMTech / SD-direct pinout via the #else branches).
+set(BOARD colorlight CACHE STRING "Target base board: colorlight | qmtech")
+string(TOUPPER "${BOARD}" BOARD_UC)
+add_compile_definitions(BOARD_${BOARD_UC})
+message(STATUS "Supervisor target board: ${BOARD}  (-DBOARD_${BOARD_UC})")
+
 # Pico-PIO-USB (vendored): picked up by TinyUSB's rp2040 family support
 set(PICO_PIO_USB_PATH ${CMAKE_CURRENT_LIST_DIR}/lib/Pico-PIO-USB)
 
