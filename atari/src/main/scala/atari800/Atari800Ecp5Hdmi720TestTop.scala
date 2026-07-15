@@ -38,7 +38,7 @@ class Atari800Ecp5Hdmi720TestTop extends Component {
   cg.clk25 := io.clk_25mhz
 
   val pixCd = ClockDomain(cg.pixel, config = ClockDomainConfig(resetKind = BOOT))
-  val pixArea = new ClockingArea(pixCd) { val gen = new Hdmi480pText }
+  val pixArea = new ClockingArea(pixCd) { val gen = new Hdmi720Bars }
 
   val ser = new Ecp5DvidOutX2
   ser.io.clkPixel := cg.pixel
