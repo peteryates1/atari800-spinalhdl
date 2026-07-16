@@ -39,7 +39,7 @@ class Hdmi720Bars extends Component {
               (hc >= boxX.resized) && (hc < (boxX + 80).resized)
 
   val border = (hc < 1) || (hc === (hActive - 1)) || (vc < 1) || (vc === (vActive - 1))
-  val bar    = (hc >> 7).resize(3)                       // 1280/8 = 160px bars (>>7 = /128, 10 bars; fine)
+  val bar    = (hc / 160).resize(3)                      // 8 bars of 160px across 1280
 
   val rgb = Bits(24 bits)
   when(border || inBox) {
