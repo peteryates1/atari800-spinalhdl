@@ -39,7 +39,18 @@ class Hdmi720Bars extends Component {
               (hc >= boxX.resized) && (hc < (boxX + 80).resized)
 
   val border = (hc < 1) || (hc === (hActive - 1)) || (vc < 1) || (vc === (vActive - 1))
-  val bar    = (hc / 160).resize(3)                      // 8 bars of 160px across 1280
+
+  // 8 colour bars of 160px via a registered counter — a divider (hc/160) in the pixel
+  // path is a long combinational chain that drops pixel Fmax to ~79 MHz (marginal ->
+  // glitches); this accumulator keeps it fast (~135 MHz).
+  val barPix = Reg(UInt(8 bits)) init 0
+  val bar    = Reg(UInt(3 bits)) init 0
+  when(lineEnd) {
+    barPix := 0; bar := 0
+  } otherwise {
+    when(barPix === 159) { barPix := 0; bar := bar + 1 }
+      .otherwise         { barPix := barPix + 1 }
+  }
 
   val rgb = Bits(24 bits)
   when(border || inBox) {
