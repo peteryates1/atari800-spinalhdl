@@ -1,0 +1,6 @@
+# i5-ext HDMI, true complementary (LVCMOS33D) - P pin located, tool drives the N
+LOCATE COMP "clk_25mhz" SITE "P3"; IOBUF PORT "clk_25mhz" IO_TYPE=LVCMOS33; FREQUENCY PORT "clk_25mhz" 25 MHZ;
+LOCATE COMP "gpdi[0]" SITE "G19"; IOBUF PORT "gpdi[0]" IO_TYPE=LVCMOS33D;  # blue
+LOCATE COMP "gpdi[1]" SITE "E20"; IOBUF PORT "gpdi[1]" IO_TYPE=LVCMOS33D;  # grn
+LOCATE COMP "gpdi[2]" SITE "C20"; IOBUF PORT "gpdi[2]" IO_TYPE=LVCMOS33D;  # red
+LOCATE COMP "gpdi[3]" SITE "J19"; IOBUF PORT "gpdi[3]" IO_TYPE=LVCMOS33D;  # clk

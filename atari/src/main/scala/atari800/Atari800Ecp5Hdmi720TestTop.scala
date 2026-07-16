@@ -29,8 +29,7 @@ class Oddrx2x4 extends BlackBox {
 class Atari800Ecp5Hdmi720TestTop extends Component {
   val io = new Bundle {
     val clk_25mhz = in  Bool()
-    val gpdi_dp   = out Bits(4 bits)
-    val gpdi_dn   = out Bits(4 bits)
+    val gpdi      = out Bits(4 bits)   // true (P) pin only; LVCMOS33D drives the matched N
   }
   noIoPrefix()
 
@@ -50,13 +49,9 @@ class Atari800Ecp5Hdmi720TestTop extends Component {
   ser.io.vsync := pixArea.gen.io.vs
   ser.io.de    := pixArea.gen.io.de
 
-  val oP = new Oddrx2x4          // P: {clk,red,grn,blu}
+  val oP = new Oddrx2x4          // one ODDRX2F per lane -> P pin; LVCMOS33D drives the N
   oP.nib := ser.io.nibbles; oP.eclk := cg.eclk; oP.sclk := cg.sclk
-  val oN = new Oddrx2x4          // N: complement (pseudo-diff)
-  oN.nib := ~ser.io.nibbles; oN.eclk := cg.eclk; oN.sclk := cg.sclk
-
-  io.gpdi_dp := oP.q
-  io.gpdi_dn := oN.q
+  io.gpdi := oP.q
 }
 
 object Atari800Ecp5Hdmi720TestSv extends App {
