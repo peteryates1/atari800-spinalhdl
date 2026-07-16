@@ -72,30 +72,59 @@ class Hdmi720Scaler(
   }
 
   // ---- read side (720p pixel domain) ----
+  // inLine=vc/vScale and inPix=hx/hScale are produced by INCREMENTAL phase counters, not
+  // combinational dividers: a /3 divide on the 74 MHz pixel path dropped Fmax to ~32 MHz.
   val rd = new ClockingArea(pixCd) {
-    val vsRise = BufferCC(io.inVsync, False) && !RegNext(BufferCC(io.inVsync, False)).init(False)
+    val vsSync = BufferCC(io.inVsync, False)
+    val vsRise = vsSync && !RegNext(vsSync).init(False)
 
     val hc = Reg(UInt(log2Up(hTotal) bits)) init 0
     val vc = Reg(UInt(log2Up(vTotal) bits)) init 0
     val lineEnd = hc === (hTotal - 1)
+    val vWrap   = lineEnd && vc === (vTotal - 1)
     hc := Mux(lineEnd, U(0), hc + 1)
     when(lineEnd) { vc := Mux(vc === (vTotal - 1), U(0), vc + 1) }
     when(vsRise)  { vc := 0 }                       // genlock vertical to the input frame
 
-    val de = (hc < hActive) && (vc < vActive)
-    io.outHsync := RegNext(hc >= (hActive + hFront) && hc < (hActive + hFront + hSync)) init False
-    io.outVsync := RegNext(vc >= (vActive + vFront) && vc < (vActive + vFront + vSync)) init False
+    val de  = (hc < hActive) && (vc < vActive)
+    val hsC = RegNext(hc >= (hActive + hFront) && hc < (hActive + hFront + hSync)) init False
+    val vsC = RegNext(vc >= (vActive + vFront) && vc < (vActive + vFront + vSync)) init False
 
-    val inLine = (vc / vScale).resize(log2Up(nLines) bits)    // 0..239 wrapped into nLines
-    val hx     = hc - hBorder
-    val inPix  = (hx / hScale).resize(log2Up(lineMax) bits)
+    // vertical: inLine += 1 every vScale output lines; 0 at frame top / genlock
+    val vPhase = Reg(UInt(log2Up(vScale) bits)) init 0
+    val inLine = Reg(UInt(log2Up(nLines) bits)) init 0
+    when(lineEnd) {
+      when(vWrap)                      { vPhase := 0; inLine := 0 }
+      .elsewhen(vPhase === (vScale - 1)) { vPhase := 0; inLine := inLine + 1 }
+      .otherwise                        { vPhase := vPhase + 1 }
+    }
+    when(vsRise) { vPhase := 0; inLine := 0 }
+
+    // horizontal: inPix += 1 every hScale pixels inside the centred active window
     val activeH = de && (hc >= hBorder) && (hc < (hBorder + outW))
+    val hPhase  = Reg(UInt(log2Up(hScale) bits)) init 0
+    val inPix   = Reg(UInt(log2Up(lineMax) bits)) init 0
+    when(!activeH) { hPhase := 0; inPix := 0 }
+    .otherwise {
+      when(hPhase === (hScale - 1)) { hPhase := 0; inPix := inPix + 1 }
+      .otherwise                    { hPhase := hPhase + 1 }
+    }
 
     val rdata = buf.readSync((inLine ## inPix).asUInt, clockCrossing = true)  // 1-cycle latency
     val show  = RegNext(activeH) init False
-    io.outR := Mux(show, rdata(11 downto 8) ## rdata(11 downto 8), B(0, 8 bits))
-    io.outG := Mux(show, rdata( 7 downto 4) ## rdata( 7 downto 4), B(0, 8 bits))
-    io.outB := Mux(show, rdata( 3 downto 0) ## rdata( 3 downto 0), B(0, 8 bits))
-    io.outDe := RegNext(de) init False
+    val rC = Mux(show, rdata(11 downto 8) ## rdata(11 downto 8), B(0, 8 bits))
+    val gC = Mux(show, rdata( 7 downto 4) ## rdata( 7 downto 4), B(0, 8 bits))
+    val bC = Mux(show, rdata( 3 downto 0) ## rdata( 3 downto 0), B(0, 8 bits))
+    val deC = RegNext(de) init False
+
+    // One uniform pipeline stage on all six outputs: breaks the BRAM-read -> TMDS-encoder
+    // combinational path (was the 67 MHz pixel-clock critical path) and keeps RGB aligned
+    // with the sync/de signals (all now 2-cycle latency).
+    io.outR     := RegNext(rC)  init 0
+    io.outG     := RegNext(gC)  init 0
+    io.outB     := RegNext(bC)  init 0
+    io.outDe    := RegNext(deC) init False
+    io.outHsync := RegNext(hsC) init False
+    io.outVsync := RegNext(vsC) init False
   }
 }
