@@ -62,7 +62,7 @@ i5-ext HDMI pins are ECLK-capable so it's HW-testable on the existing i5-ext boa
 |---|---|---|
 | i9+ Artix XC7A50T-2 | ~720p (1080p60 fails −9%: OSERDES ~680 MHz) | **verified** |
 | i5 ECP5 -6, current ODDRX1F serializer | ~800×600 (720p fails: 234 vs 370 MHz) | **verified** |
-| i5 ECP5 -6, ODDRX2F serializer | 720p | **HARDWARE-VERIFIED** (colour bars on the i5-ext board, TMDS locked, alignment correct) - built+timing-closed — full serializer (Ecp5DvidOutX2 + gearbox + ODDRX2F PHY) through nextpnr: SCLK 218 MHz (need 185), pixel 77 (need 74), ECLK370 dedicated. Gearbox SpinalSim-verified. See `../../../i5-7v0/oddrx2f_720/` |
+| i5 ECP5 -6, ODDRX2F serializer | 720p | **HARDWARE-VERIFIED** (clean colour bars on i5-ext, LVCMOS33D true-diff output; needed ping-pong CDC + LVCMOS33D fixes) - built+timing-closed — full serializer (Ecp5DvidOutX2 + gearbox + ODDRX2F PHY) through nextpnr: SCLK 218 MHz (need 185), pixel 77 (need 74), ECLK370 dedicated. Gearbox SpinalSim-verified. See `../../../i5-7v0/oddrx2f_720/` |
 | i5 ECP5 -6, 640×480 | rock-solid | **HW-verified** |
 
 **Neither chip does 1080p.** Both cap ~720p → the cheaper/smaller **i5 is primary**. 720p on the
