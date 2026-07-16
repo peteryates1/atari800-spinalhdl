@@ -7,8 +7,16 @@ import spinal.lib._
 // assembly, crossed to the SCLK domain and geared to 4-bit ODDRX2F nibbles.
 // Clocks are INPUTS (so the whole datapath is SpinalSim-verifiable); the top wires
 // clkPixel and clkSclk (= ECLK/2 = 2.5x pixel) from the ECLKSYNCB/CLKDIVF block, and
-// feeds io.nibbles to the ODDRX2F primitives (ecp5_oddrx2_out.v).
+// feeds io.nibbles to the ODDRX2F primitives (ecp5_oddrx2x4.v).
 //   nibbles = { clk-lane, red, green, blue } x 4 bits, SCLK domain.
+//
+// CDC: 5 SCLK == 2 pixels EXACTLY (both from the same PLL), so a free-running mod-5
+// SCLK counter stays phase-locked to the pixel pairs with zero drift (fixed offset =
+// a harmless TMDS rotation). The 2-pixel word is handed over via a PING-PONG double
+// buffer: the pixel side writes one buffer per window, the SCLK side always reads the
+// OTHER (completed, stable) buffer selected by a synchronised parity bit -> no
+// metastable edge detection, no jitter. (An earlier synchroniser-edge `load` glitched
+// occasionally on hardware.)
 class Ecp5DvidOutX2 extends Component {
   val io = new Bundle {
     val clkPixel = in  Bool()
@@ -24,7 +32,7 @@ class Ecp5DvidOutX2 extends Component {
   val pixCd  = ClockDomain(io.clkPixel, config = ClockDomainConfig(resetKind = BOOT))
   val sclkCd = ClockDomain(io.clkSclk,  config = ClockDomainConfig(resetKind = BOOT))
 
-  // ---- pixel domain: TMDS encode + assemble each lane's 2-pixel 20-bit word ----
+  // ---- pixel domain: TMDS encode + per-lane ping-pong of the 2-pixel word ----
   val pix = new ClockingArea(pixCd) {
     val encBlue = new TmdsEncoder
     encBlue.io.data := io.blue; encBlue.io.ctrl := io.vsync ## io.hsync; encBlue.io.dataEn := io.de
@@ -32,49 +40,50 @@ class Ecp5DvidOutX2 extends Component {
     encGrn.io.data := io.green; encGrn.io.ctrl := B"00"; encGrn.io.dataEn := io.de
     val encRed = new TmdsEncoder
     encRed.io.data := io.red; encRed.io.ctrl := B"00"; encRed.io.dataEn := io.de
-    val symClk = B"0000011111"                     // TMDS clock-lane pattern (LSB first)
+    val symClk = B"0000011111"                    // TMDS clock-lane pattern (LSB first)
 
-    val pp = Reg(Bool()) init False                // pixel parity: 0=even, 1=odd
+    val pp   = Reg(Bool()) init False             // pixel parity: 0=even, 1=odd
     pp := !pp
+    val wsel = Reg(Bool()) init False             // buffer written THIS 2-pixel window
+    when(pp) { wsel := !wsel }                    // flip after the odd-pixel write
 
-    // per-lane: even symbol -> lo; odd symbol -> word = {odd, even}
-    def assemble(sym: Bits): Bits = {
-      val lo   = Reg(Bits(10 bits)) init 0
-      val word = Reg(Bits(20 bits)) init 0
-      when(!pp) { lo := sym } otherwise { word := sym ## lo }
-      word
+    // even symbol -> lo; odd symbol -> {odd,even} into buf0/buf1 (ping-pong)
+    def assemble(sym: Bits): (Bits, Bits) = {
+      val lo = Reg(Bits(10 bits)) init 0
+      when(!pp) { lo := sym }
+      val b0 = Reg(Bits(20 bits)) init 0
+      val b1 = Reg(Bits(20 bits)) init 0
+      when(pp && !wsel) { b0 := sym ## lo }
+      when(pp &&  wsel) { b1 := sym ## lo }
+      (b0, b1)
     }
-    val wBlu = assemble(encBlue.io.tmdsOut)
-    val wGrn = assemble(encGrn.io.tmdsOut)
-    val wRed = assemble(encRed.io.tmdsOut)
-    val wClk = assemble(symClk)
-    val wv = Reg(Bool()) init False                // toggles when a fresh word is latched (odd pixel)
-    when(pp) { wv := !wv }
+    val (bBlu0, bBlu1) = assemble(encBlue.io.tmdsOut)
+    val (bGrn0, bGrn1) = assemble(encGrn.io.tmdsOut)
+    val (bRed0, bRed1) = assemble(encRed.io.tmdsOut)
+    val (bClk0, bClk1) = assemble(symClk)
   }
 
-  // ---- SCLK domain: detect fresh word, load the gearboxes ----
+  // ---- SCLK domain: free-running load + read the completed (stable) buffer ----
   val ser = new ClockingArea(sclkCd) {
-    val wvS  = BufferCC(pix.wv, False)
-    val wvS1 = RegNext(wvS) init False
-    val load = wvS =/= wvS1                         // one SCLK pulse per 2-pixel window
+    val wselS = BufferCC(pix.wsel, False)         // which buffer the pixel side is writing
+    val c = Reg(UInt(3 bits)) init 0              // free-running mod-5 (5 SCLK == 2 pixels)
+    c := Mux(c === 4, U(0), c + 1)
+    val load = c === 0
 
-    // words are stable for the whole 2-pixel window, so sampling them (gated by the
-    // synchronised `load`) is metastability-safe.
-    def gb(word: Bits): Bits = {
+    def gb(b0: Bits, b1: Bits): Bits = {
       val g = new TmdsGearboxX2
-      // word is held stable for the whole 2-pixel window in the pixel domain, and
-      // `load` (a synchronised pulse) only fires well after it settled -> sampling
-      // it here is a deliberate, metastability-safe multi-bit crossing.
-      val wReg = RegNextWhen(word, load) init 0
-      wReg.addTag(crossClockDomain)
-      g.io.word := wReg
+      // read the buffer NOT being written (guaranteed stable) -> metastability-safe
+      // multi-bit crossing; register it in the SCLK domain.
+      val readWord = RegNext(Mux(wselS, b0, b1)) init 0
+      readWord.addTag(crossClockDomain)
+      g.io.word := readWord
       g.io.load := load
       g.io.nibble
     }
-    val nBlu = gb(pix.wBlu)
-    val nGrn = gb(pix.wGrn)
-    val nRed = gb(pix.wRed)
-    val nClk = gb(pix.wClk)
+    val nBlu = gb(pix.bBlu0, pix.bBlu1)
+    val nGrn = gb(pix.bGrn0, pix.bGrn1)
+    val nRed = gb(pix.bRed0, pix.bRed1)
+    val nClk = gb(pix.bClk0, pix.bClk1)
     io.nibbles := nClk ## nRed ## nGrn ## nBlu
   }
 }
