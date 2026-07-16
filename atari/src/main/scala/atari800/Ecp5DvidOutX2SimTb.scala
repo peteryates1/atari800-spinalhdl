@@ -21,7 +21,7 @@ object Ecp5DvidOutX2SimTb extends App {
 
     val nibs = ArrayBuffer[Int]()
     var prev = false
-    sleep(200)                                   // settle the CDC
+    sleep(1200)   // settle the CDC + FIFO fill/start
     for (_ <- 0 until 6000) {
       sleep(1)
       val s = dut.io.clkSclk.toBoolean

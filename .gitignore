@@ -67,3 +67,8 @@ boards/atari-800-rp2040-colorlight/fpga/fit/fit.config
 
 generated/h720.json
 generated/h720.config
+
+# temp screen-capture media (HDMI bring-up)
+*.mp4
+20??-??-??_*.png
+20????_*.mp4
