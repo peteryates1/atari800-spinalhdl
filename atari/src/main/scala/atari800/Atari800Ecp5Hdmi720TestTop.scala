@@ -13,6 +13,7 @@ class ClkGen720 extends BlackBox {
   val pixel  = out Bool()
   val sclk   = out Bool()
   val eclk   = out Bool()
+  val sys    = out Bool()   // 37 MHz Atari sys clock, phase-locked to pixel (shared VCO)
   val locked = out Bool()
   noIoPrefix()
 }

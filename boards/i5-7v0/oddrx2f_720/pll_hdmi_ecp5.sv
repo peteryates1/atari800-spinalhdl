@@ -5,13 +5,15 @@
 module pll_hdmi_ecp5
 (
     input clkin, // 25 MHz, 0 deg
-    output clkout0, // 370 MHz, 0 deg
-    output clkout1, // 74 MHz, 0 deg
+    output clkout0, // 370 MHz, 0 deg (serial)
+    output clkout1, // 74 MHz, 0 deg (pixel)
+    output clkout2, // 37 MHz, 0 deg (Atari sys) - VCO=740/20, phase-locked to pixel (1:2)
     output locked
 );
 (* FREQUENCY_PIN_CLKI="25" *)
 (* FREQUENCY_PIN_CLKOP="370" *)
 (* FREQUENCY_PIN_CLKOS="74" *)
+(* FREQUENCY_PIN_CLKOS2="37" *)
 (* ICP_CURRENT="12" *) (* LPF_RESISTOR="8" *) (* MFG_ENABLE_FILTEROPAMP="1" *) (* MFG_GMCREF_SEL="2" *)
 EHXPLLL #(
         .PLLRST_ENA("DISABLED"),
@@ -31,6 +33,10 @@ EHXPLLL #(
         .CLKOS_DIV(10),
         .CLKOS_CPHASE(1),
         .CLKOS_FPHASE(0),
+        .CLKOS2_ENABLE("ENABLED"),
+        .CLKOS2_DIV(20),
+        .CLKOS2_CPHASE(1),
+        .CLKOS2_FPHASE(0),
         .FEEDBK_PATH("CLKOP"),
         .CLKFB_DIV(74)
     ) pll_i (
@@ -39,6 +45,7 @@ EHXPLLL #(
         .CLKI(clkin),
         .CLKOP(clkout0),
         .CLKOS(clkout1),
+        .CLKOS2(clkout2),
         .CLKFB(clkout0),
         .CLKINTFB(),
         .PHASESEL0(1'b0),

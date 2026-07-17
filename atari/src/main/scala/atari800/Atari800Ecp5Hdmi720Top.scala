@@ -17,21 +17,20 @@ class Atari800Ecp5Hdmi720Top extends Component {
   noIoPrefix()
 
   // ---- clocks ----
-  val pllA = new PllEcp5              // PllAtari800: 25 -> 37.5 (c0)
-  pllA.io.inclk0 := io.clk_25mhz
-  val clkSys = pllA.io.c0
-
-  val cg = new ClkGen720             // 25 -> pixel(74), sclk, eclk
+  // ONE PLL for everything: the Atari sys clock (37 MHz) shares the VCO with pixel(74)/serial(370),
+  // so sys:pixel is exactly 1:2 and phase-locked -> the Atari frame and 720p frame hold a fixed
+  // phase (no inter-PLL jitter beating the genlock -> kills the frame-to-frame edge flicker).
+  val cg = new ClkGen720             // 25 -> pixel(74), sclk, eclk, sys(37)
   cg.clk25 := io.clk_25mhz
+  val clkSys = cg.sys
 
-  // Reset: async ASSERT, SYNCHRONISED RELEASE. A raw async release of pllA.locked lets the
-  // core's registers leave reset on different clock edges (reset-tree skew) -> inconsistent
-  // state-machine start -> boot corruption (boots in sim, hangs on hardware). Two-FF sync
-  // the release in a BOOT-reset domain.
+  // Reset: async ASSERT, SYNCHRONISED RELEASE. A raw async release of cg.locked lets the core's
+  // registers leave reset on different clock edges (reset-tree skew) -> inconsistent state-machine
+  // start -> boot corruption (boots in sim, hangs on hardware). Two-FF sync the release.
   val rstSyncArea = new ClockingArea(ClockDomain(clkSys, config = ClockDomainConfig(resetKind = BOOT))) {
-    val r0 = RegNext(pllA.io.locked) init False addTag(crossClockDomain)
+    val r0 = RegNext(cg.locked) init False addTag(crossClockDomain)
     val r1 = RegNext(r0) init False
-    val rstN = pllA.io.locked & r1
+    val rstN = cg.locked & r1
   }
   val sysDomain = ClockDomain(clkSys, reset = rstSyncArea.rstN,
     config = ClockDomainConfig(clockEdge = RISING, resetKind = ASYNC, resetActiveLevel = LOW))
@@ -41,7 +40,10 @@ class Atari800Ecp5Hdmi720Top extends Component {
   // Strobe = 1 sample per hi-res pixel. NTSC line = 228 colour clocks = 456 hi-res px between
   // HSYNC edges, playfield centred by ANTIC -> centre the capture window: hStart=(456-inActive)/2.
   // inActive=352 (176 cc) x hScale 3 = 1056 wide, hBorder=112. vScale=3 = 240->720 genlock.
-  val scaler = new Hdmi720Scaler(nLines = 16, lineMax = 512, hStart = 74, inActive = 360, hScale = 3, vScale = 3)
+  // vBack=50 -> vTotal=780 > the Atari frame (~760 of our 720p-lines): the VSYNC genlock reset
+  // then always lands in the vertical blanking (invisible) instead of after a natural raster
+  // wrap (which showed ~10 extra top-lines each frame = the edge flicker).
+  val scaler = new Hdmi720Scaler(nLines = 16, lineMax = 512, hStart = 74, inActive = 360, hScale = 3, vScale = 3, vBack = 50)
   scaler.io.clkSys   := clkSys
   scaler.io.clkPixel := cg.pixel
 
@@ -86,7 +88,7 @@ class Atari800Ecp5Hdmi720Top extends Component {
     scaler.io.inHsync := atari.io.VIDEO_HS
     scaler.io.inVsync := atari.io.VIDEO_VS
 
-    io.led(0) := pllA.io.locked
+    io.led(0) := cg.locked
     io.led(1) := ~atari.io.VIDEO_BLANK
     io.led(2) := cg.locked
     io.led(3) := False
