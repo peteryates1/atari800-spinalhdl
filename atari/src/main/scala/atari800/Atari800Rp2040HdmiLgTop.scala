@@ -210,9 +210,9 @@ class Atari800Rp2040HdmiLgTop extends Component {
     // the arbiter's cycle-stealing and made CPU-bound games (Defender) unplayably
     // fast (frame-locked games masked it). Verified in sim (Atari800CpuCycleSimTb):
     // throttle=0 -> 27554 cyc/frame = 35568 - 2808 refresh - 5206 ANTIC = real 800.
-    // Higher values = turbo (the "run faster" knob); route to a config reg if ever
-    // wanted at runtime. See project_cpu_cycle_stealing.
-    atari.io.THROTTLE_COUNT_6502       := B(0, 6 bits)
+    // Higher values = turbo (the "run faster" knob); now runtime-selectable from the
+    // supervisor via 'C' control bit 6 (kbd.io.ctrlTurbo) -> set below once kbd exists.
+    // See project_cpu_cycle_stealing.
     // emulated_cartridge_select driven from cfgArea (BOOT domain) below
     atari.io.freezer_enable            := False
     atari.io.freezer_activate          := False
@@ -261,6 +261,10 @@ class Atari800Rp2040HdmiLgTop extends Component {
     atari.io.CONSOL_OPTION := ~io.consolOption | kbd.io.consolOption | kbd.io.ctrlOption
     atari.io.CONSOL_SELECT := ~io.consolSelect | kbd.io.consolSelect | kbd.io.ctrlSelect
     atari.io.CONSOL_START  := ~io.consolStart  | kbd.io.consolStart  | kbd.io.ctrlStart
+
+    // 6502 speed: 0 = real 1.79 MHz (cycle-accurate), 31 = turbo (~18.8x). Runtime-toggled
+    // from the supervisor menu via 'C' control bit 6.
+    atari.io.THROTTLE_COUNT_6502   := Mux(kbd.io.ctrlTurbo, B(31, 6 bits), B(0, 6 bits))
 
     atari.io.DMA_FETCH              := False
     atari.io.DMA_READ_ENABLE        := False

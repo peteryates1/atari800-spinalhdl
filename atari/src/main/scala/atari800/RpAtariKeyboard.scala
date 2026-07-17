@@ -16,7 +16,8 @@ import spinal.lib._
 //     0x4B 'K': bytes 1..8 = HID boot report (mods, reserved, key1..key6);
 //               committed atomically at CS rise.
 //     0x43 'C': byte 1 = control bits — 0 reset, 1 start, 2 select, 3 option,
-//               4 halt (6502 HALT while the supervisor loads/verifies SDRAM)
+//               4 halt (6502 HALT while the supervisor loads/verifies SDRAM),
+//               5 supDisplay (show the RP2040 framebuffer on HDMI), 6 turbo (6502 unthrottled)
 //               (held levels; cleared by the next 'C' frame).
 //     0x57 'W': bytes 1..3 = SDRAM byte address (23:0, 4-aligned); bytes 4..N
 //               stream data. Each 4-byte quad is written to SDRAM (32-bit,
@@ -57,6 +58,7 @@ class RpAtariKeyboard extends Component {
     val ctrlOption = out Bool()
     val ctrlHalt   = out Bool()
     val supDisplay = out Bool()          // ctrl bit 5: show the RP2040 supervisor framebuffer on HDMI
+    val ctrlTurbo  = out Bool()          // ctrl bit 6: 6502 turbo (unthrottled) when high
     // SDRAM loader port (arbiter port D; complete idles low, pulses high)
     val ldReq      = out Bool()
     val ldAddr     = out Bits(24 bits)
@@ -237,7 +239,7 @@ class RpAtariKeyboard extends Component {
   val nextSelect = Reg(Bool()) init False
   val nextOption = Reg(Bool()) init False
 
-  val ctrlBits = Reg(Bits(6 bits)) init 0
+  val ctrlBits = Reg(Bits(7 bits)) init 0
   val hStartReg   = Reg(UInt(9 bits)) init 0   // transient carriers across the frame
   val vSkipReg    = Reg(UInt(9 bits)) init 0
   val offsetWrReg = Reg(Bool()) init False
@@ -290,7 +292,7 @@ class RpAtariKeyboard extends Component {
           when(byteIdx === 1) { pixPhaseReg := byteVal(2 downto 0).asUInt; pixPhaseWrReg := True }
         }
         is(B(0x43, 8 bits)) {              // 'C': control bits
-          when(byteIdx === 1) { ctrlBits := byteVal(5 downto 0) }
+          when(byteIdx === 1) { ctrlBits := byteVal(6 downto 0) }
         }
         is(B(0x52, 8 bits)) {              // 'R': SDRAM read-back
           when(byteIdx === 1) { ldPtr(23 downto 16) := byteVal.asUInt; ldIsRead := True }
@@ -409,6 +411,7 @@ class RpAtariKeyboard extends Component {
   io.ctrlOption   := ctrlBits(3)
   io.ctrlHalt     := ctrlBits(4)
   io.supDisplay   := ctrlBits(5)
+  io.ctrlTurbo    := ctrlBits(6)
   io.txtWrEn      := txtWrReg
   io.txtAddr      := txtAddrReg
   io.txtChar      := txtCharReg

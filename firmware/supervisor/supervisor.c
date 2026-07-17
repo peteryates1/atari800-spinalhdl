@@ -13,6 +13,7 @@ static enum { PICK_NONE, PICK_CART, PICK_DISK } pending;
 static int  pendingDrive;                  // drive index while PICK_DISK
 static char names[16][CFG_NAME_LEN];       // last-listed folder names
 static int  nameCount;
+static bool g_turbo = false;               // 6502 turbo ('C' ctrl bit 6); persists pause/resume
 
 bool sup_active(void) { return active; }
 
@@ -44,6 +45,8 @@ static void fb_render(void) {
     fbtext_puts(9,  1, "[c] cart   [1-4] disk");
     fbtext_puts(10, 1, "[b] boot   [q] resume");
     fbtext_puts(11, 1, "[s] save   [r] reload");
+    snprintf(buf, sizeof buf, "[t] turbo: %s", g_turbo ? "ON" : "off");
+    fbtext_puts(12, 1, buf);
   } else {
     fbtext_colors(0x0F, 0x00);
     fbtext_puts(2, 1, pending == PICK_CART ? "Choose cart:" : "Choose disk:");
@@ -72,6 +75,7 @@ static void print_menu(void) {
   cdc_printf(" [c] cart   [1-4] disk in drive\r\n");
   cdc_printf(" [b] boot   [q] resume\r\n");
   cdc_printf(" [s] save as default   [r] reload config\r\n");
+  cdc_printf(" [t] turbo: %s\r\n", g_turbo ? "ON" : "off");
   cdc_printf("> ");
   fb_render();
 }
@@ -92,14 +96,14 @@ static void sup_enter(void) {
   config_load(&live);                      // fresh from SD, reflects current config
   active = true;
   pending = PICK_NONE;
-  fpga_send_control(0x30);                 // halt (pause) + supDisplay (show on HDMI)
+  fpga_send_control(0x30 | (g_turbo ? 0x40 : 0));   // halt(pause)+supDisplay(+turbo held)
   print_menu();                            // console + on-screen (fb_render)
 }
 
 static void sup_resume(void) {
   active = false;
   pending = PICK_NONE;
-  fpga_send_control(0x00);                  // release halt — resume the frozen Atari
+  fpga_send_control(0x00 | (g_turbo ? 0x40 : 0));   // release halt (keep turbo held)
   cdc_printf("\r\nsupervisor: resumed\r\n");
 }
 
@@ -155,6 +159,12 @@ void sup_feed_key(char c) {
       break;
     case 'r': case 'R':
       config_load(&live); cdc_printf("\r\nsupervisor: reloaded config\r\n"); print_menu();
+      break;
+    case 't': case 'T':
+      g_turbo = !g_turbo;
+      fpga_send_control(0x30 | (g_turbo ? 0x40 : 0));   // still paused; update held turbo bit
+      cdc_printf("\r\nsupervisor: turbo %s\r\n", g_turbo ? "ON" : "off");
+      print_menu();
       break;
     case '?': case 'h': print_menu(); break;
     default: break;
