@@ -24,23 +24,32 @@ class Atari800Ecp5Hdmi720Top extends Component {
   val cg = new ClkGen720             // 25 -> pixel(74), sclk, eclk
   cg.clk25 := io.clk_25mhz
 
-  val sysDomain = ClockDomain(clkSys, reset = pllA.io.locked,
+  // Reset: async ASSERT, SYNCHRONISED RELEASE. A raw async release of pllA.locked lets the
+  // core's registers leave reset on different clock edges (reset-tree skew) -> inconsistent
+  // state-machine start -> boot corruption (boots in sim, hangs on hardware). Two-FF sync
+  // the release in a BOOT-reset domain.
+  val rstSyncArea = new ClockingArea(ClockDomain(clkSys, config = ClockDomainConfig(resetKind = BOOT))) {
+    val r0 = RegNext(pllA.io.locked) init False addTag(crossClockDomain)
+    val r1 = RegNext(r0) init False
+    val rstN = pllA.io.locked & r1
+  }
+  val sysDomain = ClockDomain(clkSys, reset = rstSyncArea.rstN,
     config = ClockDomainConfig(clockEdge = RISING, resetKind = ASYNC, resetActiveLevel = LOW))
   val pixCd = ClockDomain(cg.pixel, config = ClockDomainConfig(resetKind = BOOT))
 
   // ---- Atari core + native video + palette (sys domain) ----
-  val scaler = new Hdmi720Scaler
+  // Strobe = 1 sample per hi-res pixel. NTSC line = 228 colour clocks = 456 hi-res px between
+  // HSYNC edges, playfield centred by ANTIC -> centre the capture window: hStart=(456-inActive)/2.
+  // inActive=352 (176 cc) x hScale 3 = 1056 wide, hBorder=112. vScale=3 = 240->720 genlock.
+  val scaler = new Hdmi720Scaler(nLines = 16, lineMax = 512, hStart = 74, inActive = 360, hScale = 3, vScale = 3)
   scaler.io.clkSys   := clkSys
   scaler.io.clkPixel := cg.pixel
 
   val sysArea = new ClockingArea(sysDomain) {
-    val colourEnable = Reg(Bool()) init False
-    colourEnable := ~colourEnable
-
     val atari = new Atari800CoreSimpleSdram(
       cycle_length = 21, video_bits = 8, palette = 0, internal_rom = 3,
       internal_ram = 49152, basic_in_sdram = false, cartridge_rom = "roms/Star Raiders.rom")
-    atari.io.PAL := True; atari.io.RAM_SELECT := B"011"; atari.io.HALT := False
+    atari.io.PAL := False; atari.io.RAM_SELECT := B"011"; atari.io.HALT := False  // NTSC: 60 Hz to match 720p60 genlock
     atari.io.TURBO_VBLANK_ONLY := False; atari.io.THROTTLE_COUNT_6502 := B(20, 6 bits)
     atari.io.emulated_cartridge_select := B(0, 6 bits)
     atari.io.freezer_enable := False; atari.io.freezer_activate := False
@@ -55,14 +64,22 @@ class Atari800Ecp5Hdmi720Top extends Component {
     atari.io.DMA_32BIT_WRITE_ENABLE := False; atari.io.DMA_16BIT_WRITE_ENABLE := False
     atari.io.DMA_8BIT_WRITE_ENABLE := False; atari.io.DMA_ADDR := B(0, 24 bits)
     atari.io.DMA_WRITE_DATA := B(0, 32 bits)
-    atari.io.SDRAM_REQUEST_COMPLETE := False; atari.io.SDRAM_DO := B(0, 32 bits)
+    // Sever SDRAM: complete every request immediately so the CPU never stalls (RAM/ROM are
+    // all in BRAM; SDRAM data is unused). `:= False` hangs the CPU on the first SDRAM access.
+    atari.io.SDRAM_REQUEST_COMPLETE := atari.io.SDRAM_REQUEST; atari.io.SDRAM_DO := B(0, 32 bits)
 
+    // Capture one sample per real Atari HI-RES pixel using the core's own hi-res colour clock:
+    // perfectly phase-aligned, so no undersampling/aliasing (the text jitter) and no drift.
+    // colourEnable (sys/2) oversampled & drifted; no integer sys/N divider hits the 7.16 MHz
+    // pixel rate exactly from 37.5 MHz (a wrong rate aliases and compresses the image).
+    val pixStrobe = atari.io.dbgColourClockHighres
+
+    // VIDEO_B is the 8-bit GTIA colour INDEX (VIDEO_R/G/B are ~0 with palette=0); resolve it
+    // to RGB via GtiaPalette on the write side (like the working Rp2040 top does on read).
     val pal = new GtiaPalette
     pal.io.atariColour := atari.io.VIDEO_B
     pal.io.pal := True
-
-    // drive the scaler write side (sys domain)
-    scaler.io.inStrobe := colourEnable
+    scaler.io.inStrobe := pixStrobe
     scaler.io.inR := pal.io.rNext
     scaler.io.inG := pal.io.gNext
     scaler.io.inB := pal.io.bNext

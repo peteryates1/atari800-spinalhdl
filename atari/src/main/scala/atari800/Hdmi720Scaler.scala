@@ -19,6 +19,7 @@ import spinal.lib._
 class Hdmi720Scaler(
     nLines:   Int = 8,        // circular line-buffer depth (power of 2)
     lineMax:  Int = 512,      // max input pixels captured per line (power of 2)
+    hStart:   Int = 0,        // (TUNE) strobes to skip after HSYNC before capturing (H blanking)
     inActive: Int = 336,      // (TUNE) input active pixels per line
     hScale:   Int = 3,
     vScale:   Int = 3,
@@ -59,15 +60,18 @@ class Hdmi720Scaler(
     val vsRise     = io.inVsync  && !RegNext(io.inVsync ).init(False)
 
     val wline = Reg(UInt(log2Up(nLines) bits)) init 0
-    val wx    = Reg(UInt(log2Up(lineMax) bits)) init 0
+    val wx    = Reg(UInt(log2Up(lineMax) bits)) init 0    // raw strobe counter from HSYNC
     when(strobeRise && wx =/= (lineMax - 1)) { wx := wx + 1 }
     when(hsRise) { wline := wline + 1; wx := 0 }
     when(vsRise) { wline := 0 }                     // frame top -> line 0
 
+    // Skip the first hStart strobes (H blanking) so buffer position 0 = first active pixel.
+    val inWin = (wx >= U(hStart)) && (wx < U(hStart + inActive))
+    val wpos  = (wx - U(hStart)).resize(log2Up(lineMax) bits)
     buf.write(
-      address = (wline ## wx).asUInt,
+      address = (wline ## wpos).asUInt,
       data    = io.inR(7 downto 4) ## io.inG(7 downto 4) ## io.inB(7 downto 4),
-      enable  = strobeRise && (wx < inActive)
+      enable  = strobeRise && inWin
     )
   }
 
@@ -91,7 +95,7 @@ class Hdmi720Scaler(
     val vsC = RegNext(vc >= (vActive + vFront) && vc < (vActive + vFront + vSync)) init False
 
     // vertical: inLine += 1 every vScale output lines; 0 at frame top / genlock
-    val vPhase = Reg(UInt(log2Up(vScale) bits)) init 0
+    val vPhase = Reg(UInt((log2Up(vScale) max 1) bits)) init 0
     val inLine = Reg(UInt(log2Up(nLines) bits)) init 0
     when(lineEnd) {
       when(vWrap)                      { vPhase := 0; inLine := 0 }
@@ -102,7 +106,7 @@ class Hdmi720Scaler(
 
     // horizontal: inPix += 1 every hScale pixels inside the centred active window
     val activeH = de && (hc >= hBorder) && (hc < (hBorder + outW))
-    val hPhase  = Reg(UInt(log2Up(hScale) bits)) init 0
+    val hPhase  = Reg(UInt((log2Up(hScale) max 1) bits)) init 0
     val inPix   = Reg(UInt(log2Up(lineMax) bits)) init 0
     when(!activeH) { hPhase := 0; inPix := 0 }
     .otherwise {
