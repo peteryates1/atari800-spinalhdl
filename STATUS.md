@@ -1,4 +1,4 @@
-# Project Status — 2026-07-12
+# Project Status — 2026-07-17
 
 Handoff snapshot. Board: **atari-800-rp2040-qmtech-10cl025** (QMTech Cyclone 10 LP
 10CL025 + RP2040-STAMP + HDMI). Everything below is committed and hardware-verified
@@ -12,8 +12,9 @@ only the 720p framebuffer**. The RP2040-STAMP is the **supervisor**: at power-on
 **auto-boots the Atari from a JSON config**, emulates **SIO disk drives** (D1:–D4:)
 from ATR images, and hosts an **Alt-F12 supervisor menu** (rendered on HDMI) to
 pause/live-edit/reboot. **Nothing proprietary is in the FPGA image or firmware** —
-core `.rbf`, OS, cart, and disks all live on SD. The 6502 now runs at
-**real, cycle-accurate 1.79 MHz**.
+core `.rbf`, OS, cart, and disks all live on SD. The 6502 runs at
+**real, cycle-accurate 1.79 MHz**, with an optional **runtime turbo toggle** (`[t]`
+in the supervisor menu) that unthrottles it to ~18.8×.
 
 Confirmed on hardware: **Star Raiders** (cart) and **Defender** (16K cart, correct
 speed) over 720p HDMI, **Jumpman** off an emulated SIO disk in D1:, the **Alt-F12
@@ -34,13 +35,19 @@ min-pulse-width warning on the 371 MHz TMDS clock is a known model artifact).
 Putting the Atari fully in BRAM removes the shared resource. See
 `memory/project_antic_ram_in_bram.md`.
 
-**CPU timing — cycle-accurate.** `THROTTLE_COUNT_6502 = 0` runs the 6502 at real
-1.79 MHz; the memory arbiter correctly hands ANTIC-DMA + refresh cycles away from
-the CPU. (It was `31` = "run as fast as memory allows" — fine on the old slow-SDRAM
-design, but ~18.8× **turbo** once RAM moved to always-ready BRAM, which made
-CPU-bound games like Defender unplayably fast while frame-locked games masked it.
-Sim-proven with `Atari800CpuCycleSimTb`; the throttle value doubles as a "run
-faster" knob. See `memory/project_cpu_cycle_stealing.md`.)
+**CPU timing — cycle-accurate, with a runtime turbo switch.**
+`THROTTLE_COUNT_6502 = 0` runs the 6502 at real 1.79 MHz; the memory arbiter
+correctly hands ANTIC-DMA + refresh cycles away from the CPU. (It was `31` = "run as
+fast as memory allows" — fine on the old slow-SDRAM design, but ~18.8× **turbo** once
+RAM moved to always-ready BRAM, which made CPU-bound games like Defender unplayably
+fast while frame-locked games masked it. Sim-proven with `Atari800CpuCycleSimTb`.)
+The throttle is now driven live from the supervisor: the top does
+`THROTTLE_COUNT_6502 := Mux(ctrlTurbo, 31, 0)`, where `ctrlTurbo` is control-frame
+bit 6 (see below). The **`[t]` menu toggle** flips it at runtime — 0 (real) ↔ 31
+(turbo) — and it persists across pause/resume but defaults **off** on an RP2040
+reset (not saved to config). Turbo changes **game-logic speed only**, not the frame
+rate (ANTIC/GTIA stay 60 Hz), so its effect shows in motion, not on a static screen.
+See `memory/project_cpu_cycle_stealing.md`.
 
 **Load path (supervisor → BRAM):** supervisor streams OS/cart over the SPI link
 into the RAM/ROM BRAM write ports while the Atari is halted. Loader `ldDest`
@@ -90,6 +97,8 @@ Console `'D'` prints counters. **Jumpman confirmed booting off emulated D1:.**
 **Alt-F12** (or console `'~'`) pauses the Atari and opens a menu to **live-edit**
 the boot selection — cart → none/pick, disk in D1:–D4: — then reboot. Edits are an
 **in-memory copy**; the SD JSON is untouched unless "save as default" is invoked.
+The menu also carries a **`[t]` turbo toggle** (6502 real ↔ ~18.8×), applied live
+without a reboot.
 
 **Rendered on HDMI** by an FPGA-native text overlay (`TextOverlay720.scala`, an
 8×16 font generated directly at 1280×720, no SDRAM/scaler; the RP2040 streams a
@@ -103,13 +112,19 @@ ECP5/Artix (native 1080p60). See `memory/project_supervisor_menu.md`.
 
 ## Control / SPI protocol quick reference
 
-- Control byte: bit0 reset, bit1 start, bit2 select, bit3 option, bit4 halt,
-  bit5 supDisplay (show overlay). 0x30 = halt + supDisplay (menu), 0x00 = release.
+- Control byte (`'C'`): bit0 reset, bit1 start, bit2 select, bit3 option, bit4 halt,
+  bit5 supDisplay (show overlay), **bit6 turbo (6502 unthrottled)**. 0x30 = halt +
+  supDisplay (menu), 0x00 = release; OR in 0x40 to hold turbo across either.
 - Loader `'W'`/`'R'`/`'V'`/`'B'`; SIO `'Q'`/`'S'`; overlay `'T'`; control `'C'`.
   See `firmware/supervisor/fpga_link.h` and `RpAtariKeyboard.scala`.
 
-## Recent commit trail (this session)
+## Recent commit trail
 
+- `50e1067` turbo mode: runtime 6502 speed toggle from the supervisor menu (`[t]`)
+- `13f8612` Config-driven boot, SIO disk emulator, and supervisor menu
+- `e15e68c` Add STATUS.md: handoff snapshot (Atari fully in BRAM, SDRAM fb-only)
+- `9d3192e`/`222c79f`/`853fbcf` Steps 3/2/1: migrate Atari RAM+cart+OS into BRAM,
+  sever the Atari↔SDRAM path (SDRAM becomes framebuffer-only)
 - `e5aaf33` Fix CPU turbo: THROTTLE_COUNT_6502 31→0 (real 1.79 MHz, cycle-accurate)
 - `ce849d8` sim: measure CPU bus-cycles/frame vs ANTIC DMA (cycle-stealing baseline)
 - `929c4d6` supervisor: auto-configure FPGA from SD core.rbf at boot (SD-side boot)

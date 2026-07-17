@@ -120,7 +120,7 @@ CS frame:
 | Cmd | Function |
 |---|---|
 | `K` | 8-byte USB HID boot report → Atari keyboard matrix (atomic commit) |
-| `C` | control bits: reset (stretched pulse), start/select/option, **bit 4 = 6502 HALT** |
+| `C` | control bits: reset (stretched pulse), start/select/option, **bit 4 = 6502 HALT**, bit 5 = supDisplay (overlay), **bit 6 = 6502 turbo (unthrottled)** |
 | `W` | SDRAM load: 3-byte address + data stream; every byte queued as (addr, data) into a 512-deep FIFO, drained through arbiter port D as byte writes |
 | `Z` | zero the stream counters |
 | `V` | FPGA-side content checksum: reads N bytes back through the loader port (the CPU's own access mode) and reports the 16-bit sum — immune to SPI pacing, the ground truth for "did the bytes land" |
