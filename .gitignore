@@ -72,3 +72,6 @@ generated/h720.config
 *.mp4
 20??-??-??_*.png
 20????_*.mp4
+network.txt
+firmware/rm2_test/wifi_creds.h
+firmware/**/build/
