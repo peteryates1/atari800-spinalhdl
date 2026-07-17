@@ -23,6 +23,8 @@ class Hdmi720Scaler(
     inActive: Int = 336,      // (TUNE) input active pixels per line
     hScale:   Int = 3,
     vScale:   Int = 3,
+    vLag:     Int = 0,        // reader lags the writer by vLag input lines (avoids read-during-write
+                              // when 1 input line == vScale output lines exactly, i.e. rate-locked)
     hActive: Int = 1280, hFront: Int = 110, hSync: Int = 40, hBack: Int = 220,
     vActive: Int = 720,  vFront: Int = 5,   vSync: Int = 5,  vBack: Int = 20
 ) extends Component {
@@ -88,7 +90,11 @@ class Hdmi720Scaler(
     val vWrap   = lineEnd && vc === (vTotal - 1)
     hc := Mux(lineEnd, U(0), hc + 1)
     when(lineEnd) { vc := Mux(vc === (vTotal - 1), U(0), vc + 1) }
-    when(vsRise)  { vc := 0 }                       // genlock vertical to the input frame
+    // genlock vertical to the input frame. With vLag>0 reset vc into the blanking so it wraps
+    // to 0 (top of active) vScale*vLag rows LATER -> the writer gets a vLag-line head start and
+    // the reader always reads a COMPLETED line (no dual-port read-during-write).
+    if (vLag == 0) when(vsRise) { vc := 0 }
+    else           when(vsRise) { vc := U(vTotal - vScale * vLag) }
 
     val de  = (hc < hActive) && (vc < vActive)
     val hsC = RegNext(hc >= (hActive + hFront) && hc < (hActive + hFront + hSync)) init False
@@ -102,7 +108,9 @@ class Hdmi720Scaler(
       .elsewhen(vPhase === (vScale - 1)) { vPhase := 0; inLine := inLine + 1 }
       .otherwise                        { vPhase := vPhase + 1 }
     }
-    when(vsRise) { vPhase := 0; inLine := 0 }
+    // vLag==0: snap inLine to 0 at vsRise (old behaviour). vLag>0: let inLine reset at the
+    // natural wrap (vWrap) so it aligns to vc=0 = top of active, vScale*vLag rows after vsRise.
+    if (vLag == 0) when(vsRise) { vPhase := 0; inLine := 0 }
 
     // horizontal: inPix += 1 every hScale pixels inside the centred active window
     val activeH = de && (hc >= hBorder) && (hc < (hBorder + outW))

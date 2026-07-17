@@ -40,10 +40,22 @@ class Atari800Ecp5Hdmi720Top extends Component {
   // Strobe = 1 sample per hi-res pixel. NTSC line = 228 colour clocks = 456 hi-res px between
   // HSYNC edges, playfield centred by ANTIC -> centre the capture window: hStart=(456-inActive)/2.
   // inActive=352 (176 cc) x hScale 3 = 1056 wide, hBorder=112. vScale=3 = 240->720 genlock.
-  // vBack=50 -> vTotal=780 > the Atari frame (~760 of our 720p-lines): the VSYNC genlock reset
-  // then always lands in the vertical blanking (invisible) instead of after a natural raster
-  // wrap (which showed ~10 extra top-lines each frame = the edge flicker).
-  val scaler = new Hdmi720Scaler(nLines = 16, lineMax = 512, hStart = 74, inActive = 360, hScale = 3, vScale = 3, vBack = 50)
+  // The Atari frame = 627228 sys = 1,254,456 pixel clocks. Choose hTotal/vTotal so that equals
+  // an EXACT integer number of output lines: 1,254,456 = 1596 x 786. Then the VSYNC genlock
+  // reset lands at the identical vc every frame (constant back porch) instead of a fractional
+  // 760.3 lines that drifts a line every ~4 frames -> that drift was the vertical wobble.
+  //   hTotal 1596 = 1280 + 88 + 40 + 188 ;  vTotal 786 = 720 + 5 + 5 + 56
+  // Star Raiders' title uses the Atari WIDE playfield (192 colour clocks = 384 hi-res px,
+  // centred in the line -> hires [36,420]); with the ~+6 HSYNC offset -> hStart=42, inActive=384.
+  // 384x3 = 1152 wide, hBorder=64, playfield centre -> column 640. (Normal 320 content sits
+  // inside this with a little border each side.)
+  // vLag=4: since 1 Atari line == 3 output lines exactly (rate-locked), the reader would read a
+  // line as it's written (read-during-write glitch = the "split" char); lag it 4 lines so it
+  // always reads a completed line. 4 < nLines=16 -> no overwrite.
+  // centred when hStart = 254 - inActive/2 (empirical): inActive=384 -> hStart=62.
+  val scaler = new Hdmi720Scaler(nLines = 16, lineMax = 512, hStart = 62, inActive = 384, hScale = 3, vScale = 3, vLag = 4,
+    hActive = 1280, hFront = 88, hSync = 40, hBack = 188,
+    vActive = 720,  vFront = 5,  vSync = 5,  vBack = 56)
   scaler.io.clkSys   := clkSys
   scaler.io.clkPixel := cg.pixel
 
