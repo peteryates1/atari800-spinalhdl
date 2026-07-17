@@ -981,7 +981,25 @@ int main(void) {
 
   tud_init(0);   // device (CDC console) on native USB
 #if !BISECT_CDC_ONLY
-  tuh_init(1);   // host (keyboard) on PIO-USB
+  tuh_init(1);   // host (keyboard) on PIO-USB -> root port 0 (primary, per USE_USB2)
+  // Bring up the OTHER USB-A connector as a SECOND root port so BOTH hosts are live.
+  // add_port reuses the shared tx/rx state machines (no extra PIO SM -> no clash with the
+  // JTAG blaster); it must run AFTER tuh_init(1). PINOUT matches each connector's D+/D- order
+  // (DMDP = D+ on the higher GPIO, DPDM = normal). Root-port polling loops both ports.
+#if USE_USB2                                  // primary=USB2 -> second port = USB1
+#ifdef BOARD_COLORLIGHT
+  int usb_p1 = pio_usb_host_add_port(3, PIO_USB_PINOUT_DMDP);   // USB1: D+=3, D-=2
+#else
+  int usb_p1 = pio_usb_host_add_port(7, PIO_USB_PINOUT_DMDP);   // USB1: D+=7, D-=6
+#endif
+#else                                         // primary=USB1 -> second port = USB2
+#ifdef BOARD_COLORLIGHT
+  int usb_p1 = pio_usb_host_add_port(0, PIO_USB_PINOUT_DPDM);   // USB2: D+=0, D-=1
+#else
+  int usb_p1 = pio_usb_host_add_port(8, PIO_USB_PINOUT_DPDM);   // USB2: D+=8, D-=9
+#endif
+#endif
+  cdc_printf("usb: second host root port %s\r\n", usb_p1 == 0 ? "added" : "FAILED");
 #endif
 
   // SD-side boot: override whatever the onboard EPCS config-flash brought up with
