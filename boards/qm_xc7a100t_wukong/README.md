@@ -44,6 +44,34 @@ real work is swapping their I/O framework (MiST ARM / MiSTer HPS `sys`) for our 
 converting **Altera primitives** (`altsyncram`, ALTPLL, `altddio`) to Xilinx (BRAM, MMCM, OSERDES,
 MIG). The Wukong just removes the *hardware* unknowns so that port can be tackled on real silicon.
 
+## Programming & supervisor (Pico / Pico W via JTAG)
+
+The Wukong is **Xilinx Artix-7**, so the existing supervisor's Altera USB-Blaster loader
+(`firmware/supervisor/jtag.c` hard-codes `IDCODE_10CL025 = 0x020F30DD`; `fpga_config.c` uses
+Cyclone config constants) does **not** apply. But the Xilinx JTAG config is already solved in two
+local tools — the JTAG *plumbing* (PIO bit-bang, TAP nav) carries over; only the config layer differs:
+
+- **`~/pico-dirtyJtag`** — Pico as a **USB JTAG cable** driven by **openFPGALoader** on a host PC.
+  Proven Artix-7 path (repo doc `jop-spinalhdl/docs/pico-dirtyjtag-setup.md`), wired
+  TCK=GP2 / TMS=GP3 / TDI=GP4 / TDO=GP5. Use for **bench programming now** —
+  `openfpgaloader --cable dirtyJtag <bitstream>.bit`. Host-driven, **not autonomous**.
+
+- **`~/pico-pio-uart-jtag`** — the base for the **autonomous supervisor**. Its
+  `jtag/fpga_xilinx.c` implements **on-device Xilinx 7-series configuration**
+  (`JPROGRAM 0x0B` / `CFG_IN 0x05` / `JSTART 0x0C` + `.bit` header parsing) — the Pico programs a
+  `.bit` itself, no host. Vendor auto-detect by IDCODE (Altera / Xilinx / Lattice), SVF player,
+  runs on RP2040 **and** RP2350. JTAG on GP2–5.
+
+**Supervisor plan (use a Pico W):** reuse `pico-pio-uart-jtag`'s `jtag/` core
+(`jtag_tap.c` + `fpga_xilinx.c` + `svf_player.c`) inside the supervisor firmware, but feed the
+`.bit` from **SD via FatFs** instead of USB — the autonomous SD-boot analog of the Altera flow, with
+the Xilinx config sequence already written (so no port of openFPGALoader's flow needed). A **Pico W**
+is preferred because its onboard **CYW43439 is the RM2 wireless on a proper PCB** — wireless for
+free, sidestepping the jumper-wire signal-integrity saga. Mind the Pico W's reserved
+**GPIO23/24/25/29** (CYW43 WL_ON/DATA/CS/CLK) and that its LED is on the radio chip, not a GPIO;
+JTAG (GP2–5) + PIO-USB host + SD fit around them. USB-keyboard host (PIO-USB → Atari matrix) and
+FatFs/config-boot/menu/SIO all carry over from the existing supervisor.
+
 ## Reference designs (`Software/XC7A100T/`)
 
 - **Test06_HDMI_OUT** — TMDS_33 HDMI out + video PLL (authoritative HDMI pinout).
