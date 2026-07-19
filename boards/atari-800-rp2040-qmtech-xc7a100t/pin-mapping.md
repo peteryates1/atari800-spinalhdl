@@ -95,8 +95,9 @@ POTs go to the RP2040 ADC (see below).
   Half-duplex single DATA on GPIO15. The supervisor firmware needs a `-DBOARD=xc7a100t` pin set with
   the CYW43 overrides ON=13/CS=14/DATA=15/CLK=16, PIO-USB bases at GPIO4 & 6, SPI1 SD on GPIO8–12.
 - **SD is RP2040-mastered** on SPI1 (J3 microSD).
-- **3V3 budget:** the board 3V3 rail is sourced only by the core-board regulator (the STAMP's own
-  3.3 V out is left NC). Confirm it covers the RM2 WiFi-on peak (~250–400 mA).
+- **3V3 for RM2:** RM2 can be fed from its **own dedicated DSN-MINI-360 buck (3.3 V)** *or* the
+  core-board 3V3 rail — both optional/selectable — so the RM2 WiFi-on peak (~250–400 mA) need not
+  load the core-board regulator. (Good call: RM2 power integrity was the earlier failure mode.)
 
 ## Debug / programming
 
@@ -105,7 +106,10 @@ POTs go to the RP2040 ADC (see below).
   board had these swapped; that bug is fixed here. See `memory/project_rp2040_qmtech_swd_swap_bug`.)
 - **BOOTSEL** = SW2, **RESET** = SW3 (on the RP2040).
 - **FPGA JTAG** is not on the 128-pin bus — RP2040 GPIO0–3 come out to **J10** (GND/TMS/TCK/TDI/TDO);
-  cable J10 → the core board's 6-pin JTAG header for RP2040-driven FPGA configuration.
+  a short cable joins J10 → the core board's own **6-pin JTAG header** for RP2040-driven FPGA config.
+  The header's 6th pin (VCC/VREF, 3V3) is intentionally **not** on J10 — not needed, since the RP2040
+  bit-bangs JTAG at 3.3 V and the FPGA JTAG bank is 3.3 V (no VREF sense / level translation). The
+  four JTAG signals + GND are the complete set.
 
 ## TODO (later phases)
 
