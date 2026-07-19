@@ -2191,46 +2191,6 @@
                 }
             }
         },
-        "gge245": {
-            "props": {
-                "Add into BOM": "yes",
-                "Convert to PCB": "yes",
-                "Designator": "D2",
-                "Symbol": "25cb860aabad42ee9773240844de2b15",
-                "Name": "",
-                "Device": "fdba1ce54b9c45f4bedc6be7fd796a52",
-                "Reuse Block": "",
-                "Group ID": "",
-                "Channel ID": "$1e63099",
-                "Unique ID": "gge245",
-                "Footprint": "b00eff7962fe4be5a4880cda6327e7f8",
-                "3D Model": "5b3b7cda27504ef2b3675db5909648b1",
-                "3D Model Title": "LED0805-RD_GREEN",
-                "3D Model Transform": "79.527,49.2125,0,0,0,0,0,0,0",
-                "Supplier Footprint": "0805",
-                "Description": "",
-                "DeviceName": "LED_0805-R",
-                "FootprintName": "LED0805-R-RD"
-            },
-            "pinInfoMap": {
-                "1": {
-                    "name": "A",
-                    "number": "1",
-                    "net": "$1N52273",
-                    "props": {
-                        "Pin Number": "1"
-                    }
-                },
-                "2": {
-                    "name": "C",
-                    "number": "2",
-                    "net": "GND",
-                    "props": {
-                        "Pin Number": "2"
-                    }
-                }
-            }
-        },
         "gge235": {
             "props": {
                 "Add into BOM": "yes",
@@ -3426,60 +3386,6 @@
                 }
             }
         },
-        "gge220_3": {
-            "props": {
-                "Add into BOM": "yes",
-                "Convert to PCB": "yes",
-                "Symbol": "d94b16babe36479ba9a01804af1aa5be",
-                "Designator": "R1",
-                "Name": "={Value}",
-                "Device": "d4c235282c2745748a79e21651b8f47c",
-                "Reuse Block": "",
-                "Group ID": "",
-                "Channel ID": "$1e91181",
-                "Unique ID": "gge220_3",
-                "LCSC Part Name": "1kΩ ±1% 125mW 厚膜电阻",
-                "Supplier Part": "C17513",
-                "Manufacturer": "UNI-ROYAL(厚声)",
-                "Manufacturer Part": "0805W8F1001T5E",
-                "Supplier Footprint": "0805",
-                "JLCPCB Part Class": "Basic Part",
-                "Datasheet": "https://atta.szlcsc.com/upload/public/pdf/source/20200306/C422600_1E6D84923E4A46A82E41ADD87F860B5C.pdf",
-                "Supplier": "LCSC",
-                "Footprint": "ac3e22637c2148b7869e26fbcf05ba69",
-                "3D Model": "b83c7c5430874b8eb2319a65d9433429",
-                "3D Model Title": "R0805_L2.0-W1.3-H0.6",
-                "3D Model Transform": "78.74,51.181,0,0,0,0,0,-0.0005,0",
-                "Type": "Thick Film Resistors",
-                "Value": "1kΩ",
-                "Tolerance": "±1%",
-                "Power(Watts)": "",
-                "Overload Voltage (Max)": "",
-                "Temperature Coefficient": "±100ppm/℃",
-                "Operating Temperature Range": "-55℃~+155℃",
-                "Description": "Type:Thick Film Resistors Resistance:1kΩ Tolerance:±1% Tolerance:±1% Power(Watts): Overload Voltage (Max): Temperature Coefficient:±100ppm/℃ Temperature Coefficient:±100ppm/℃ Operating Temperature Range:-55℃~+155℃ Operating Temperature Range:-55℃~+155℃",
-                "DeviceName": "0805W8F1001T5E",
-                "FootprintName": "R0805"
-            },
-            "pinInfoMap": {
-                "1": {
-                    "name": "1",
-                    "number": "1",
-                    "net": "$1N52273",
-                    "props": {
-                        "Pin Number": "1"
-                    }
-                },
-                "2": {
-                    "name": "2",
-                    "number": "2",
-                    "net": "3V3",
-                    "props": {
-                        "Pin Number": "2"
-                    }
-                }
-            }
-        },
         "gge261_1": {
             "props": {
                 "Add into BOM": "yes",
@@ -3613,7 +3519,7 @@
                 "14": {
                     "name": "VDDIO/3.3V",
                     "number": "14",
-                    "net": "3V3",
+                    "net": "RM_3V3",
                     "props": {
                         "Pin Number": "14"
                     }
@@ -3629,7 +3535,7 @@
                 "16": {
                     "name": "Vin",
                     "number": "16",
-                    "net": "3V3",
+                    "net": "RM_3V3",
                     "props": {
                         "Pin Number": "16"
                     }
@@ -4943,7 +4849,7 @@
                 "2": {
                     "name": "2",
                     "number": "2",
-                    "net": "3V3",
+                    "net": "RM_3V3",
                     "props": {
                         "Pin Number": "2"
                     }
@@ -4994,7 +4900,7 @@
                 "2": {
                     "name": "2",
                     "number": "2",
-                    "net": "3V3",
+                    "net": "RM_3V3",
                     "props": {
                         "Pin Number": "2"
                     }
@@ -5306,6 +5212,68 @@
                     }
                 }
             }
+        },
+        "gge0737b150028c934f_1": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Symbol": "c35b0efb3f0d4c0eba78f0e68709d3ab",
+                "Designator": "U5",
+                "Footprint": "96aac7f341cc4f9b8c421f153b2a4541",
+                "Origin Footprint": "DSN-MINI-360",
+                "Unique ID": "gge0737b150028c934f_1",
+                "Device": "63658856ee2b40a1aad62b6f17d1ca14",
+                "Name": "DSN-MINI-360",
+                "Manufacturer": "",
+                "Manufacturer Part": "",
+                "Supplier": "",
+                "Supplier Part": "",
+                "link": "",
+                "Contributor": "peteryates1",
+                "spicePre": "U",
+                "spiceSymbolName": "DSN-MINI-360",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99508",
+                "Check": "false",
+                "Description": "",
+                "DeviceName": "DSN-MINI-360",
+                "FootprintName": "DSN-MINI-360"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "+IN",
+                    "number": "1",
+                    "net": "VIN",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "GND",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                },
+                "3": {
+                    "name": "OUT+",
+                    "number": "3",
+                    "net": "RM_3V3",
+                    "props": {
+                        "Pin Number": "3"
+                    }
+                },
+                "4": {
+                    "name": "GND",
+                    "number": "4",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "4"
+                    }
+                }
+            }
         }
     },
     "designRule": {
@@ -5510,12 +5478,6 @@
                     "TrackPhysics": ""
                 }
             },
-            "$1N52273": {
-                "net": "$1N52273",
-                "ruleMap": {
-                    "TrackPhysics": ""
-                }
-            },
             "SW_START": {
                 "net": "SW_START",
                 "ruleMap": {
@@ -5638,6 +5600,12 @@
             },
             "TDO": {
                 "net": "TDO",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "RM_3V3": {
+                "net": "RM_3V3",
                 "ruleMap": {
                     "TrackPhysics": ""
                 }
