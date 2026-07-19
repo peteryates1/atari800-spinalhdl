@@ -14,6 +14,14 @@ boards/**/*.qws
 boards/**/*.cdf
 boards/**/*.sv.bak
 boards/**/*_assignment_defaults.qdf
+# Quartus stragglers left outside output_files/ (JIC/programming flow, build logs)
+boards/**/*.map
+boards/**/*.cof
+boards/**/*.jic
+boards/**/*.log
+
+# Firmware build/tool logs (build dirs are covered by firmware/**/build/ below)
+firmware/**/*.log
 
 # Quartus-copied generated files (from make quartus-prep)
 boards/AC608/Atari800JopTop.sv
@@ -21,9 +29,8 @@ boards/AC608/Atari800JopTop.sv_*.bin
 boards/AC608/JopCoreForAtari.sv
 boards/AC608/JopCoreForAtari.sv_*.bin
 
-# ECP5 build artifacts
-boards/i5-7v0/build/
-boards/i9-7v2/build/
+# ECP5 / nextpnr build dirs — any board (supersedes the old per-board lines)
+boards/**/build/
 
 # Vivado build artifacts (anywhere — Vivado can be run from any dir)
 vivado*.jou
@@ -71,7 +78,9 @@ generated/h720.config
 # temp screen-capture media (HDMI bring-up)
 *.mp4
 20??-??-??_*.png
+20??-??-??_*.jpg
 20????_*.mp4
+20????_*.jpg
 network.txt
 firmware/rm2_test/wifi_creds.h
 firmware/**/build/
