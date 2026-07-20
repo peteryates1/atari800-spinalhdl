@@ -230,6 +230,7 @@ class RpAtariKeyboard extends Component {
   val startKey     = Reg(Bool()) init False
   val selectKey    = Reg(Bool()) init False
   val optionKey    = Reg(Bool()) init False
+  val resetKey     = Reg(Bool()) init False   // F8 -> Atari SYSTEM RESET
 
   val nextKeys   = Reg(Bits(64 bits)) init 0
   val nextShift  = Reg(Bool()) init False
@@ -238,6 +239,7 @@ class RpAtariKeyboard extends Component {
   val nextStart  = Reg(Bool()) init False
   val nextSelect = Reg(Bool()) init False
   val nextOption = Reg(Bool()) init False
+  val nextReset  = Reg(Bool()) init False
 
   val ctrlBits = Reg(Bits(7 bits)) init 0
   val hStartReg   = Reg(UInt(9 bits)) init 0   // transient carriers across the frame
@@ -267,6 +269,7 @@ class RpAtariKeyboard extends Component {
             nextStart  := False
             nextSelect := False
             nextOption := False
+            nextReset  := False
             nextBreak  := False
           }
           when(byteIdx >= 3 && byteIdx <= 8) {   // key codes 1..6
@@ -274,6 +277,7 @@ class RpAtariKeyboard extends Component {
             when(keyCode === 0x3E) { nextStart  := True }
             when(keyCode === 0x3F) { nextSelect := True }
             when(keyCode === 0x40) { nextOption := True }
+            when(keyCode === 0x41) { nextReset  := True }   // F8 -> SYSTEM RESET
             when(keyCode === 0x48) { nextBreak  := True }
             val mapped = hidMap.readAsync(keyCode.resize(7))
             when(mapped(6)) {
@@ -399,13 +403,15 @@ class RpAtariKeyboard extends Component {
     startKey     := nextStart
     selectKey    := nextSelect
     optionKey    := nextOption
+    resetKey     := nextReset
     frameCnt     := frameCnt + 1
   }
 
   io.consolStart  := startKey
   io.consolSelect := selectKey
   io.consolOption := optionKey
-  io.ctrlReset    := ctrlBits(0)
+  // SYSTEM RESET: the supervisor 'C' command bit 0, OR the F8 key.
+  io.ctrlReset    := ctrlBits(0) | resetKey
   io.ctrlStart    := ctrlBits(1)
   io.ctrlSelect   := ctrlBits(2)
   io.ctrlOption   := ctrlBits(3)
