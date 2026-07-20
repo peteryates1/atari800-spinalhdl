@@ -495,6 +495,27 @@ static void handle_console(void) {
       break;
     }
     case 'B': do_boot(); break;   // manual re-boot (also runs automatically at power-on)
+    case 'T': {   // SD write self-test: write a file via FatFs, read it back, verify
+      static FATFS tff;
+      if (f_mount(&tff, "", 1) != FR_OK) { cdc_printf("wtest: mount fail\r\n"); break; }
+      FIL wf;
+      FRESULT r = f_open(&wf, "/wtest.bin", FA_WRITE | FA_CREATE_ALWAYS);
+      if (r != FR_OK) { cdc_printf("wtest: open-w fail fr=%d (writable=%d)\r\n", r, !sio_any_mounted()); break; }
+      static uint8_t wb[4096];
+      for (int i = 0; i < 4096; i++) wb[i] = (uint8_t)(i * 7 + 3);
+      UINT wr = 0; FRESULT rw = f_write(&wf, wb, sizeof wb, &wr);
+      FRESULT rc = f_close(&wf);
+      cdc_printf("wtest: write fr=%d wr=%u close=%d\r\n", rw, wr, rc);
+      FIL rf;
+      if (f_open(&rf, "/wtest.bin", FA_READ) == FR_OK) {
+        static uint8_t rb[4096]; UINT rd = 0; f_read(&rf, rb, sizeof rb, &rd);
+        uint32_t sz = f_size(&rf); f_close(&rf);
+        int mism = 0; for (UINT i = 0; i < rd; i++) if (rb[i] != wb[i]) mism++;
+        cdc_printf("wtest: read rd=%u size=%lu mismatch=%d -> %s\r\n",
+                   rd, (unsigned long)sz, mism, (rd == sizeof wb && mism == 0) ? "WRITE PATH OK" : "WRITE PATH BAD");
+      } else cdc_printf("wtest: reopen-read fail\r\n");
+      break;
+    }
     case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
     case 'J': jtag_idcode_print(); break; // JTAG bring-up: read FPGA IDCODE (GPIO0-3 -> J10)
     case 'V': {   // crispness test: dense 32-char text on every row (integer x5/x3 scaling)
@@ -523,13 +544,23 @@ static void handle_console(void) {
                  ok ? "-- ALIVE" : "-- no/invalid response");
       break;
     }
-    case 'F': {   // configure the FPGA from the staged /fpga/core.rbf (SD-side load)
+    case 'F': {   // configure the FPGA from SD
+#ifdef BOARD_WUKONG
+      static FATFS ff; f_mount(&ff, "", 1);
+      char bp[CFG_PATH_LEN];
+      if (!config_fpga_path(bp, sizeof bp)) { cdc_printf("fpga: no /config.json core path\r\n"); break; }
+      cdc_printf("fpga: configuring Artix from SD %s ...\r\n", bp);
+      tud_cdc_write_flush(); tud_task();
+      bool ok = fpga_config_from_sd(bp);
+      cdc_printf("fpga: config %s (run 'B' to boot)\r\n", ok ? "done" : "FAILED");
+#else
       uint32_t n = fpga_staged_len();
       if (n == 0) { cdc_printf("fpga: no staged core (put /fpga/core.rbf on SD, reset to stage)\r\n"); break; }
       cdc_printf("fpga: configuring from staged %lu-byte .rbf ...\r\n", (unsigned long)n);
       tud_cdc_write_flush(); tud_task();
       bool ok = fpga_config_from_flash();
       cdc_printf("fpga: CONF_DONE=%d %s\r\n", ok, ok ? "-- configured (run 'B' to boot the Atari)" : "-- FAILED");
+#endif
       break;
     }
     case 'w': {   // SDRAM load channel self-test: 1 KB pattern @ 0x300000
@@ -1036,6 +1067,23 @@ int main(void) {
                ok ? "-- running SD core" : "-- FAILED, EPCS bitstream stays");
     sleep_ms(50);   // let the reconfigured fabric settle before the SPI init below
   }
+
+#ifdef BOARD_WUKONG
+  // Wukong: no config flash for the Artix here — configure it from the SD .bit over
+  // JTAG (streamed; the SD is local to the Pico so it stays readable during reconfig).
+  // MUST run after tuh_init() (PIO-USB claims its SMs before the blaster — see above).
+  {
+    static FATFS wkfs;
+    char bitpath[CFG_PATH_LEN];
+    if (f_mount(&wkfs, "", 1) == FR_OK && config_fpga_path(bitpath, sizeof bitpath)) {
+      bool ok = fpga_config_from_sd(bitpath);
+      cdc_printf("fpga: config %s\r\n", ok ? "done" : "FAILED");
+      sleep_ms(50);
+    } else {
+      cdc_printf("fpga: no SD /config.json core (.bit) to configure\r\n");
+    }
+  }
+#endif
 
   fpga_spi_init();
   fpga_send_control(0x00);

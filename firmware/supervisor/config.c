@@ -99,7 +99,11 @@ bool config_fpga_path(char *out, int outlen) {
   char machine[CFG_PATH_LEN];
   if (!j_str(j_find(root, rend, "default"), rend, machine, sizeof machine))
     return false;
-  snprintf(out, outlen, "%s/core.rbf", machine);
+#ifdef BOARD_WUKONG
+  snprintf(out, outlen, "%s/core.bit", machine);   // Xilinx Artix-7 (.bit)
+#else
+  snprintf(out, outlen, "%s/core.rbf", machine);   // Altera Cyclone (.rbf)
+#endif
   return true;
 }
 

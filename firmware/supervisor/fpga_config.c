@@ -1,5 +1,6 @@
 #include "fpga_config.h"
 #include "blaster.h"
+#include "boot.h"     // cdc_printf
 #include "pico/stdlib.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
@@ -207,3 +208,145 @@ bool fpga_config_from_flash(void) {
     blaster_process(&rd, 1, buf);
     return (buf[0] & 1) != 0;
 }
+
+#ifdef BOARD_WUKONG
+// ---------------------------------- Xilinx 7-series (Artix-7) config -------
+// Same blaster-byte primitives as above (jtag_reset/tck_rti/enter_shift_dr/
+// exit_shift_dr/bb), but IR is 6 bits and the flow is JPROGRAM/CFG_IN/JSTART.
+// The bitstream is STREAMED from SD (not flash-staged): the Wukong's SD hangs off
+// the Pico directly, and the ~3.8 MB config won't fit the 1 MB stage region.
+#define XIR_LEN       6
+#define XIR_JPROGRAM  0x0B
+#define XIR_CFG_IN    0x05
+#define XIR_JSTART    0x0C
+#define XIR_BYPASS    0x3F
+
+// Xilinx wants the config bitstream MSB-first; the blaster shift is LSB-first, so
+// reverse each byte (this is exactly openFPGALoader's reverse=true for MEM_MODE).
+static uint8_t reverse_byte(uint8_t b) {
+    b = (uint8_t)((b & 0xF0) >> 4 | (b & 0x0F) << 4);
+    b = (uint8_t)((b & 0xCC) >> 2 | (b & 0x33) << 2);
+    b = (uint8_t)((b & 0xAA) >> 1 | (b & 0x55) << 1);
+    return b;
+}
+
+// IR scan with the 6-bit Xilinx IR length (RTI -> Shift-IR -> RTI).
+static void scan_ir_x(int ir) {
+    uint8_t c[64];
+    int p = 0;
+    c[p++] = 0x22; c[p++] = 0x23;
+    c[p++] = 0x22; c[p++] = 0x23;
+    c[p++] = 0x20; c[p++] = 0x21;
+    c[p++] = 0x20; c[p++] = 0x21;
+    for (int i = 0; i < XIR_LEN; i++) {
+        uint8_t tdi = (ir >> i) & 1 ? 0x10 : 0x00;
+        uint8_t tms = (i == XIR_LEN - 1) ? 0x02 : 0x00;
+        c[p++] = 0x20 | tdi | tms;
+        c[p++] = 0x21 | tdi | tms;
+    }
+    c[p++] = 0x22; c[p++] = 0x23;
+    c[p++] = 0x20; c[p++] = 0x21;
+    bb(c, p);
+}
+
+// Shift n (already bit-reversed) bytes into DR, LSB-first, staying in Shift-DR.
+static void shift_dr_bytes(const uint8_t *buf, uint32_t n) {
+    uint8_t chunk[64];
+    uint32_t pos = 0;
+    while (pos < n) {
+        int k = (n - pos) < 63 ? (int)(n - pos) : 63;
+        chunk[0] = 0x80 | k;
+        memcpy(chunk + 1, buf + pos, (size_t)k);
+        bb(chunk, 1 + k);
+        pos += (uint32_t)k;
+    }
+}
+
+// Shift the final byte (already reversed) with TMS=1 on the last bit -> Exit1-DR.
+static void shift_dr_last(uint8_t b) {
+    uint8_t lc[16];
+    int lp = 0;
+    for (int i = 0; i < 8; i++) {
+        uint8_t tdi = (b >> i) & 1 ? 0x10 : 0x00;
+        uint8_t tms = (i == 7) ? 0x02 : 0x00;
+        lc[lp++] = 0x20 | tdi | tms;
+        lc[lp++] = 0x21 | tdi | tms;
+    }
+    bb(lc, lp);
+}
+
+bool fpga_config_from_sd(const char *path) {
+    FIL f;
+    FRESULT fr = f_open(&f, path, FA_READ);
+    if (fr != FR_OK) { cdc_printf("fpga: f_open(%s) failed fr=%d\r\n", path, fr); return false; }
+
+    // Parse the .bit header to find the raw config data (field 'e').
+    uint8_t hdr[256];
+    UINT rd = 0;
+    fr = f_read(&f, hdr, sizeof hdr, &rd);
+    if (fr != FR_OK || rd < 64) {
+        cdc_printf("fpga: %s header read failed (fr=%d rd=%u size=%lu)\r\n",
+                   path, fr, rd, (unsigned long)f_size(&f));
+        f_close(&f); return false;
+    }
+    uint32_t pos = 2 + (((uint32_t)hdr[0] << 8) | hdr[1]) + 2;   // initial field + 0x00 0x01
+    uint32_t data_off = 0, data_len = 0;
+    while (pos + 5 < rd) {
+        uint8_t key = hdr[pos++];
+        if (key == 'e') {
+            data_len = ((uint32_t)hdr[pos] << 24) | ((uint32_t)hdr[pos+1] << 16) |
+                       ((uint32_t)hdr[pos+2] << 8) | hdr[pos+3];
+            pos += 4; data_off = pos; break;
+        }
+        pos += 2 + (((uint32_t)hdr[pos] << 8) | hdr[pos+1]);     // 'a'..'d': 2-byte len + string
+    }
+    if (data_len == 0 || f_lseek(&f, data_off) != FR_OK) {
+        cdc_printf("fpga: %s: no bitstream data field\r\n", path);
+        f_close(&f); return false;
+    }
+    cdc_printf("fpga: %s (%lu-byte .bit) -> shifting %lu config bytes over JTAG (~10s)...\r\n",
+               path, (unsigned long)f_size(&f), (unsigned long)data_len);
+
+    blaster_reset();               // init JTAG pins / PIO shift engine
+    jtag_reset();
+    scan_ir_x(XIR_JPROGRAM);
+    sleep_ms(100);                 // INIT_B: config memory clear (generous for XC7A100T)
+    tck_rti(10000);
+    scan_ir_x(XIR_CFG_IN);
+    enter_shift_dr();
+
+    // Stream data_len bytes: all but the very last via shift commands (staying in
+    // Shift-DR), the final byte bit-banged with TMS=1 to leave via Exit1-DR.
+    static uint8_t buf[4096];
+    uint32_t remaining = data_len;
+    bool ok = true;
+    while (remaining > 0) {
+        UINT want = remaining < sizeof buf ? remaining : (UINT)sizeof buf;
+        UINT got = 0;
+        if (f_read(&f, buf, want, &got) != FR_OK || got == 0) { ok = false; break; }
+        for (UINT i = 0; i < got; i++) buf[i] = reverse_byte(buf[i]);
+        remaining -= got;
+        if (remaining == 0) {                 // this chunk holds the final byte
+            if (got > 1) shift_dr_bytes(buf, got - 1);
+            shift_dr_last(buf[got - 1]);
+        } else {
+            shift_dr_bytes(buf, got);
+        }
+    }
+    f_close(&f);
+    if (!ok) { exit_shift_dr(); return false; }
+
+    exit_shift_dr();
+    scan_ir_x(XIR_JSTART);
+    tck_rti(64);                    // startup sequence (>=32 TCK)
+    scan_ir_x(XIR_BYPASS);
+    tck_rti(64);
+    jtag_reset();
+
+    // DONE isn't directly readable via this blaster path; the real proof is the
+    // Atari booting from the SPI link afterwards. Success here means the whole
+    // bitstream streamed cleanly from SD.
+    cdc_printf("fpga: config done (%lu bytes shifted)\r\n", (unsigned long)data_len);
+    return true;
+}
+#endif // BOARD_WUKONG

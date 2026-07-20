@@ -31,4 +31,14 @@ uint32_t fpga_staged_len(void);
 // Returns true if CONF_DONE asserted afterwards.
 bool fpga_config_from_flash(void);
 
+#ifdef BOARD_WUKONG
+// Configure a Xilinx 7-series FPGA (Artix-7) over JTAG by STREAMING a .bit from
+// the SD card (the Wukong's SD is local to the Pico, so it stays readable during
+// reconfig, and the ~3.8 MB bitstream won't fit flash-staging). Parses the .bit
+// header, bit-reverses each config byte (Xilinx MSB-first vs the LSB-first blaster
+// shift), runs JPROGRAM/CFG_IN/JSTART. SD must be mounted. Returns true if the
+// sequence completed and the TAP is alive afterwards.
+bool fpga_config_from_sd(const char *path);
+#endif
+
 #endif // FPGA_CONFIG_H
