@@ -1,5 +1,6 @@
 #ifdef HAVE_WIFI
 #include "wifi.h"
+#include "httpsrv.h"
 #include "boot.h"            // cdc_printf
 #include "pico/cyw43_arch.h"
 #include "lwip/netif.h"
@@ -55,11 +56,13 @@ bool wifi_on(void) {
     if (r) { cdc_printf("wifi: join FAILED (%d)\r\n", r); return false; }
     s_up = true;
     cdc_printf("wifi: connected, IP %s\r\n", wifi_ip());
+    httpsrv_start();            // SD manager web UI at http://<ip>/
     return true;
 }
 
 void wifi_off(void) {
     if (!s_inited) return;
+    httpsrv_stop();
     if (s_up) cyw43_arch_disable_sta_mode();
     cyw43_arch_deinit();
     s_inited = false;
