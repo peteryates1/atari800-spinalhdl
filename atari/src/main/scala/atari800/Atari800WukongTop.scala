@@ -168,9 +168,10 @@ class Atari800WukongTop extends Component {
     val sdramReady = BufferCC(sdramCtrl.io.reset_client_n, False)
     atari.io.HALT := ~sdramReady | kbd.io.ctrlHalt   // supervisor menu can pause the 6502
 
-    // Port B — framebuffer write (capture raw 8-bit GTIA index).
+    // Port B — framebuffer write (capture raw 8-bit GTIA index). Paused while the
+    // supervisor overlay is shown (the Atari is halted then anyway); resumes on exit.
     val fbWrite = new VideoFbWrite(fbBase = 0x100000, width = 384, strideLog2 = 9, height = 288, addrWidth = 24, clearOnReset = true)
-    fbWrite.io.enable := sdramReady
+    fbWrite.io.enable := sdramReady && !kbd.io.supDisplay
     val capHsPrev = Reg(Bool()) init False
     capHsPrev := atari.io.VIDEO_HS
     val pixDiv = Reg(UInt(3 bits)) init 0
@@ -243,23 +244,42 @@ class Atari800WukongTop extends Component {
     sdramCtrl.io.SDRAM_DQ_IN := io.sdram_dq
     when(sdramCtrl.io.SDRAM_DQ_OE) { io.sdram_dq := sdramCtrl.io.SDRAM_DQ_OUT }
 
-    // scaler pixel-domain outputs, crossed to pixelArea below
+    // Supervisor screen: an FPGA-native 1080p text overlay (no SDRAM/scaler) whose
+    // pixels replace the Atari scaler at the DVI mux while supDisplay is set. The
+    // supervisor writes its 40x15 character grid over SPI ('T' frames -> kbd.io.txt*).
+    // Native 1080p60 here — crisp, no monitor-upscale shimmer (cf. TextOverlay720).
+    val textOv = new TextOverlay1080
+    textOv.io.clkPixel := clkPixel
+    textOv.io.wrEn     := kbd.io.txtWrEn
+    textOv.io.wrAddr   := kbd.io.txtAddr
+    textOv.io.wrChar   := kbd.io.txtChar
+    textOv.io.fg       := B(0x0F, 8 bits)   // white
+    textOv.io.bg       := B(0x00, 8 bits)   // black
+
+    // scaler pixel-domain outputs, crossed to pixelArea below. Both the Atari scaler
+    // (fbRead) and the supervisor overlay (textOv); pixelArea muxes on supDisplay.
     val vidPix = fbRead.io.pix; val vidDe = fbRead.io.de
     val vidHs  = fbRead.io.hs;  val vidVs = fbRead.io.vs
-    Seq(vidPix, vidDe, vidHs, vidVs).foreach(_.addTag(crossClockDomain))
+    val vidSupPix = textOv.io.pix; val vidSupDe = textOv.io.de
+    val vidSupHs  = textOv.io.hs;  val vidSupVs = textOv.io.vs
+    val vidSupSel = kbd.io.supDisplay
+    Seq(vidPix, vidDe, vidHs, vidVs, vidSupPix, vidSupDe, vidSupHs, vidSupVs, vidSupSel)
+      .foreach(_.addTag(crossClockDomain))
   }
 
   // ---- pixel domain: palette + register -> rgb2dvi ----
   val pixelArea = new ClockingArea(ClockDomain(clkPixel, config = ClockDomainConfig(resetKind = BOOT))) {
+    // Select the Atari scaler or the supervisor text overlay (supDisplay, sys->pix).
+    val supSel = BufferCC(sysArea.vidSupSel, False)
     val palette = new GtiaPalette
-    palette.io.atariColour := sysArea.vidPix
+    palette.io.atariColour := Mux(supSel, sysArea.vidSupPix, sysArea.vidPix)
     palette.io.pal := True
     val r  = RegNext(palette.io.rNext)
     val g  = RegNext(palette.io.gNext)
     val b  = RegNext(palette.io.bNext)
-    val de = RegNext(sysArea.vidDe) init False
-    val hs = RegNext(sysArea.vidHs) init False
-    val vs = RegNext(sysArea.vidVs) init False
+    val de = RegNext(Mux(supSel, sysArea.vidSupDe, sysArea.vidDe)) init False
+    val hs = RegNext(Mux(supSel, sysArea.vidSupHs, sysArea.vidHs)) init False
+    val vs = RegNext(Mux(supSel, sysArea.vidSupVs, sysArea.vidVs)) init False
     val por = Reg(UInt(9 bits)) init 0
     when(por =/= por.maxValue) { por := por + 1 }
     val rstN = por.msb
