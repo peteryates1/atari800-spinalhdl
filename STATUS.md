@@ -1,8 +1,14 @@
-# Project Status — 2026-07-17
+# Project Status — 2026-07-20
 
-Handoff snapshot. Board: **atari-800-rp2040-qmtech-10cl025** (QMTech Cyclone 10 LP
-10CL025 + RP2040-STAMP + HDMI). Everything below is committed and hardware-verified
-unless noted.
+Handoff snapshot. There are now **two hardware-verified Atari boards**:
+
+- **atari-800-rp2040-qmtech-10cl025** — QMTech Cyclone 10 LP + RP2040-STAMP + HDMI,
+  **720p**. The original; detailed below.
+- **atari-800-wukong-1080** — QMTech Wukong (Xilinx Artix-7 XC7A100T) + Pico 2 W,
+  **native 1080p60** and a fully self-contained SD appliance. Summarised in the next
+  section; full details in `boards/atari-800-wukong-1080/README.md`.
+
+Everything below is committed and hardware-verified unless noted.
 
 ## TL;DR — current state
 
@@ -22,6 +28,26 @@ supervisor menu on HDMI**, and **SD-side FPGA boot** surviving a cold power cycl
 
 Resource use: logic ~45%, BRAM **66/66 M9K**, timing clean (the −10.7 ns
 min-pulse-width warning on the 371 MHz TMDS clock is a known model artifact).
+
+## Second board — QMTech Wukong (native 1080p60 appliance)
+
+`boards/atari-800-wukong-1080/` (Xilinx Artix-7 XC7A100T + **Pico 2 W** supervisor).
+Same core + video pipeline as the 10CL025, retargeted to Artix and **native
+1920×1080p60** (Digilent rgb2dvi/OSERDESE2), so the supervisor text is crisp with no
+monitor-upscale shimmer. Reuses the memory split (Atari fully in BRAM, W9825 SDRAM =
+framebuffer only) and the cycle-accurate 1.79 MHz 6502 with runtime turbo.
+
+**It is a fully self-contained SD appliance.** On a cold power-on the Pico
+**JTAG-configures the Artix from `/atari/800/core.bit` on the SD**, then loads the
+OS + cart + disks from SD into BRAM and boots the Atari — **no host, no cable,
+nothing proprietary in the bitstream**. USB keyboard (incl. F5–F7 = Start/Select/
+Option, **F8 = SYSTEM RESET**), SIO disk emulation, and an on-screen Alt-F12 menu all
+work. Hardware-verified: Star Raiders / Pole Position (carts), DOS 2.5 off emulated
+D1:, and a self-booting cold power cycle from the card alone.
+
+Dev loop is `make atari` (build → push the `.bit` to SD → supervisor configures +
+boots it, all over USB). See the board README for architecture, wiring, the deploy
+tool (`push_file.py` / `make push-core`), and the supervisor console commands.
 
 ## Architecture
 

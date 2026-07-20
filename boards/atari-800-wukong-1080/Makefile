@@ -1,10 +1,15 @@
-# QMTech Wukong (XC7A100T) — Phase 0: SpinalHDL 1080p60 HDMI colour bars.
-# Parallel to the 10CL025 / ECP5 builds. Flow: generate (sbt) -> create + build
-# (Vivado) -> program (dirtyJtag via the Pico 2 W).
+# QMTech Wukong (XC7A100T) — Atari 800 at native 1080p60. See README.md.
 #
-#   make all        # generate + create + build + program
-#   make build      # up to the bitstream
-#   make program    # program the built bitstream over dirtyJtag
+# Two build families share this Makefile:
+#   Phase 0 (colour bars):  make build / make program   (bring-up only)
+#   Atari appliance:        make atari / make deploy-core / make push-core
+#
+#   make atari         # build .bit -> push to SD -> supervisor configs + boots it
+#                      #   (full deploy over USB; no JTAG cable needed)
+#   make deploy-core   # build-atari + push-core (update SD core, no activate)
+#   make push-core     # push an already-built .bit to the SD core slot
+#   make build-atari   # up to the bitstream only
+#   make program-atari # direct SRAM load over a JTAG cable (CABLE=dirtyJtag)
 
 REPO_ROOT := $(shell cd ../.. && pwd)
 VIVADO    ?= /opt/xilinx/2025.2/Vivado/bin/vivado
@@ -13,7 +18,9 @@ BUILD     := $(VDIR)/build/wukong_1080
 BIT       := $(BUILD)/wukong_1080.runs/impl_1/Atari800Wukong1080Top.bit
 CABLE     := dirtyJtag
 
-.PHONY: generate create build program all
+.PHONY: generate create build program all \
+        generate-atari create-atari build-atari program-atari atari \
+        push-core deploy-core
 
 generate:
 	cd $(REPO_ROOT) && sbt "atari/runMain atari800.Atari800Wukong1080Sv"

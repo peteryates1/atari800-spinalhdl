@@ -10,6 +10,12 @@ Source material (QMTech, read-only): `/srv/git/qmtech/QM_XC7A100T_WUKONG_BOARD/V
 hardware/experiment manuals, datasheets, and **Vivado reference designs** (see below), which give
 authoritative pinouts and working MIG/HDMI/SDRAM examples. Pinouts extracted into `pin-mapping.md`.
 
+> **Status:** the first core is done — a full **Atari 800 at native 1080p60** with a Pico 2 W
+> supervisor and complete SD appliance boot (FPGA config + OS/cart/disks all from the card). That
+> design, its build/deploy flow (`make atari`), and the supervisor firmware live in
+> **`boards/atari-800-wukong-1080/`** (see its README). This file stays the board-level hardware
+> reference (memory, pinouts, reference designs, Pico wiring). MiST/MiSTer ports are the next use.
+
 ## Why the Wukong for MiST/MiSTer (see the memory discussion)
 
 MiST cores run the emulated machine's RAM out of **SDR SDRAM**; MiSTer keeps most cores' main RAM on
