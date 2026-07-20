@@ -65,12 +65,23 @@ local tools — the JTAG *plumbing* (PIO bit-bang, TAP nav) carries over; only t
 **Supervisor plan (use a Pico W):** reuse `pico-pio-uart-jtag`'s `jtag/` core
 (`jtag_tap.c` + `fpga_xilinx.c` + `svf_player.c`) inside the supervisor firmware, but feed the
 `.bit` from **SD via FatFs** instead of USB — the autonomous SD-boot analog of the Altera flow, with
-the Xilinx config sequence already written (so no port of openFPGALoader's flow needed). A **Pico W**
-is preferred because its onboard **CYW43439 is the RM2 wireless on a proper PCB** — wireless for
-free, sidestepping the jumper-wire signal-integrity saga. Mind the Pico W's reserved
-**GPIO23/24/25/29** (CYW43 WL_ON/DATA/CS/CLK) and that its LED is on the radio chip, not a GPIO;
+the Xilinx config sequence already written (so no port of openFPGALoader's flow needed). A **Pico 2 W (RP2350)**
+is the preferred supervisor: `pico-pio-uart-jtag` supports RP2350, its extra PIO block eases the
+CYW43 + PIO-USB + JTAG budget, and its onboard **CYW43439 is the RM2 wireless on a proper PCB** —
+wireless for free, sidestepping the jumper-wire signal-integrity saga. Mind the reserved
+**GPIO23/24/25/29** (CYW43 WL_ON/DATA/CS/CLK) and that the LED is on the radio chip, not a GPIO;
 JTAG (GP2–5) + PIO-USB host + SD fit around them. USB-keyboard host (PIO-USB → Atari matrix) and
 FatFs/config-boot/menu/SIO all carry over from the existing supervisor.
+
+**Flashing the supervisor (Pico 2 W) — Raspberry Pi debug probe over SWD.** Standard RP
+debug-connector order **SWCLK / GND / SWDIO**; the probe's **"D"** port ↔ the Pico 2 W's on-board
+3-pin debug connector (the **"U"** port is UART — a common mix-up). Test the link with
+`openocd -f interface/cmsis-dap.cfg -f <path>/target/rp2350.cfg -c "init; targets; shutdown"` — a
+healthy link reads the RP2350 DPIDR; **`Error connecting DP: cannot read IDR`** means the SWD wires
+are wrong (swapped SWCLK/SWDIO, cable in the "U" port, or unseated). *Verified 2026-07-20: after
+correcting a reversed SWCLK/SWDIO, DPIDR `0x4c013477`, dual Cortex-M33 examined OK.* This openocd needs **rp2350.cfg**
+(`/usr/local/share/openocd/.../rp2350.cfg` or `~/raspberrypi-openocd/tcl/target/rp2350.cfg`) — the
+distro `/usr/share/openocd` only ships `rp2040.cfg`.
 
 ## Reference designs (`Software/XC7A100T/`)
 
