@@ -45,3 +45,16 @@ program-atari:
 	openFPGALoader --cable $(CABLE) $(ABIT)
 
 atari: build-atari program-atari
+
+# === Push the built core onto the SD card over USB (no MSC/eject) ===
+# Streams the bitstream to the supervisor's 'U' command, which writes it to the
+# SD as the config-boot core. Reliable and progress-reporting; the supervisor
+# JTAG-configures the Artix from this file at power-on (Phase 2b).
+PUSH        := python3 $(REPO_ROOT)/firmware/supervisor/tools/push_file.py
+CORE_SDPATH ?= /atari/800/core.bit
+
+push-core:
+	$(PUSH) $(ABIT) $(CORE_SDPATH)
+
+# Build the bitstream and push it straight onto the SD card in one step.
+deploy-core: build-atari push-core

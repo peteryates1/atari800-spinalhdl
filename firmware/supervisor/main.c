@@ -436,6 +436,63 @@ static void do_boot(void) {
   boot_run(&cfg);
 }
 
+// Read a '\n'-terminated line from the CDC (pumping USB), stripping trailing CR.
+// Returns the line length, or -1 on timeout. Used by the 'P' file-push command.
+static int cdc_read_line(char *buf, int max, uint32_t timeout_ms) {
+  int n = 0;
+  absolute_time_t dl = make_timeout_time_ms(timeout_ms);
+  while (absolute_time_diff_us(get_absolute_time(), dl) > 0) {
+    tud_task();
+    uint8_t c;
+    if (tud_cdc_available() && tud_cdc_read(&c, 1) == 1) {
+      if (c == '\n') { while (n > 0 && buf[n-1] == '\r') n--; buf[n] = 0; return n; }
+      if (n < max - 1) buf[n++] = (char)c;
+      dl = make_timeout_time_ms(timeout_ms);
+    }
+  }
+  return -1;
+}
+
+// Receive a file over USB and write it to SD: host sends "U<path>\n<length>\n" then
+// <length> raw bytes. Deterministic and progress-reporting (host side) — the reliable
+// way to update /atari/800/core.bit and other SD files without the MSC cache/eject
+// footgun. See tools/push_file.py + the board Makefile 'push-core' target.
+static void cmd_push_file(void) {
+  char path[CFG_PATH_LEN], lenbuf[16];
+  if (cdc_read_line(path, sizeof path, 5000) <= 0) { cdc_printf("push: no path\r\n"); return; }
+  if (cdc_read_line(lenbuf, sizeof lenbuf, 5000) <= 0) { cdc_printf("push: no length\r\n"); return; }
+  uint32_t total = (uint32_t)strtoul(lenbuf, NULL, 10);
+  static FATFS pff; f_mount(&pff, "", 1);
+  FIL f;
+  FRESULT r = f_open(&f, path, FA_WRITE | FA_CREATE_ALWAYS);
+  if (r != FR_OK) { cdc_printf("push: open %s fail fr=%d (writable=%d)\r\n", path, r, !sio_any_mounted()); return; }
+  cdc_printf("push: receiving %lu bytes -> %s\r\n", (unsigned long)total, path);
+  tud_cdc_write_flush();
+
+  static uint8_t pb[4096];
+  uint32_t got = 0; bool ok = true;
+  absolute_time_t dl = make_timeout_time_ms(15000);
+  while (got < total) {
+    tud_task();
+    uint32_t avail = tud_cdc_available();
+    if (avail == 0) {
+      if (absolute_time_diff_us(get_absolute_time(), dl) < 0) { cdc_printf("push: timeout at %lu\r\n", (unsigned long)got); ok = false; break; }
+      continue;
+    }
+    uint32_t want = total - got;
+    if (want > sizeof pb) want = sizeof pb;
+    if (want > avail)     want = avail;
+    uint32_t nr = tud_cdc_read(pb, want);
+    UINT wr = 0;
+    if (f_write(&f, pb, nr, &wr) != FR_OK || wr != nr) { cdc_printf("push: SD write err at %lu\r\n", (unsigned long)got); ok = false; break; }
+    got += nr;
+    dl = make_timeout_time_ms(15000);
+  }
+  FRESULT rc = f_close(&f);
+  cdc_printf("push: %s %lu/%lu bytes (close=%d)\r\n", (ok && got == total && rc == FR_OK) ? "DONE" : "FAILED",
+             (unsigned long)got, (unsigned long)total, rc);
+}
+
 static void handle_console(void) {
   if (!tud_cdc_available()) return;
   uint8_t ch;
@@ -516,6 +573,7 @@ static void handle_console(void) {
       } else cdc_printf("wtest: reopen-read fail\r\n");
       break;
     }
+    case 'U': cmd_push_file(); break;     // upload/push a file over USB -> SD (see tools/push_file.py)
     case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
     case 'J': jtag_idcode_print(); break; // JTAG bring-up: read FPGA IDCODE (GPIO0-3 -> J10)
     case 'V': {   // crispness test: dense 32-char text on every row (integer x5/x3 scaling)
