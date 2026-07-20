@@ -6,12 +6,34 @@ modules — the basis for one base board that accepts either family. On-module:
 8 MB SDRAM (M12L64322A-6B, 32-bit SDR, 166 MHz), SPI flash, 2× Gigabit PHY (B50612D).
 
 The Atari core uses ~23 % LUT / 17 % BRAM here (see `synth_util.rpt`), so logic/BRAM
-are not the constraint. **HDMI resolution is, though:** Vivado place+route of a real
-OSERDESE2 10:1 serializer on the board pins shows the **XC7A50T-2 tops out at ~680 MHz
-serializer clock (~136 MHz pixel), so standard 1080p60 (148.5 MHz / 742.5 MHz) is NOT
-achievable** — it misses by ~9 %. A -3 part would make 1080p; the Colorlight module is -2.
-So the i9+ effectively caps at **720p / ~1600×900**, the same class as the ECP5 i5 — see
-[`fpga/hdmi/HDMI-TIMING.md`](../atari-800-rp2040-colorlight/fpga/hdmi/HDMI-TIMING.md).
+are not the constraint.
+
+**HDMI 1080p60 — achievable on a -2 module (corrected 2026-07-20).** An earlier note
+here claimed the 50T "caps at 720p, needs a -3." That was wrong — it read a
+*conservative* clock spec as a hard wall. A real OSERDESE2 10:1 serializer (the same
+Digilent `rgb2dvi` we run at 1080p on the Wukong) placed+routed on the i9+ bank-34
+pins at 1080p60 (742.5 MHz serial) shows the **only failing check is the BUFG
+min-period on the serial clock — not the OSERDES, not the SODIMM pins:**
+
+| Part | Serial-clock min-period slack | Note |
+|---|---|---|
+| XC7A50T **-1** | **−0.808 ns** (BUFG rated ~464 MHz) | ~60 % over spec — marginal |
+| XC7A50T **-2** | **−0.246 ns** | matches the Wukong |
+| XC7A100T **-2** (Wukong, 1080p verified in HW) | **−0.245 ns** | conservative flag; runs fine |
+
+The -2 i9+ has the **same serial-clock margin as the proven Wukong**, whose identical
+−0.245 ns "violation" is a known conservative BUFG min-period model — 1080p60 works in
+hardware. So a **-2 i9+ does 1080p60**; a **-1** is genuinely marginal (would need a
+BUFIO/BUFR serial-clock topology to sidestep the BUFG limit, or fall back to 720p).
+Reproduce with `hdmi_test/build_hdmi.tcl` (`-tclargs xc7a50tfgg484-{1,2} s{1,2}`).
+
+**Two things still to confirm before trusting 1080p on this board:** (1) the module's
+**actual speed grade** — this doc's pinout note says -2, but verify the chip marking
+(`synth_check.tcl` had defaulted to -1); (2) **signal integrity** of 1.485 Gbps through
+the SODIMM + base-board + AC-coupling caps — the FPGA closes timing, but the analog
+path over the connector is a separate hardware validation (see the differential-pair /
+length-match notes below). At -2 with clean SI, the i9+ is a 1080p60 board like the
+Wukong; if SI proves marginal, 720p is the safe fallback (same class as the ECP5 i5).
 
 ## HDMI — differential pairs common to BOTH the ECP5 and Artix modules
 
