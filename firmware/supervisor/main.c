@@ -1056,10 +1056,10 @@ int main(void) {
 
   // Auto-boot: load the OS + default cart from SD into blank BRAM and run.
   // Same sequence as the console 'B' command; 'B' re-runs it on demand.
-  // (Wukong Phase 2a: OS/cart baked into the FPGA (internal_rom=3) -> nothing to load.)
-#ifndef BOARD_WUKONG
+  // (Wukong Phase 2c: FPGA is internal_rom=5 (blank loadable) — config-boot from SD.
+  // At cold boot the FPGA may not be JTAG-programmed yet, so this can fail harmlessly;
+  // re-run with 'B' once the bitstream is loaded and the SPI link is up.)
   do_boot();
-#endif
 
   absolute_time_t next_beat = make_timeout_time_ms(3000);
   while (true) {

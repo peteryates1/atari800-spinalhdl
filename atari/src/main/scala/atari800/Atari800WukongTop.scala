@@ -4,10 +4,13 @@ import spinal.core._
 import spinal.lib._
 
 // ============================================================================
-// Phase 1: Atari 800 on the QMTech Wukong (XC7A100T) at native 1080p60.
+// Phase 2c: Atari 800 on the QMTech Wukong (XC7A100T) at native 1080p60, with the
+// Pico 2 W supervisor doing SD config-boot (nothing proprietary in the bitstream).
 //
-// Standalone (no supervisor yet): the 800 OS + a cartridge are baked into BRAM
-// (internal_rom=3), 48 KB Atari RAM in BRAM, so the machine boots on its own.
+// BRAM is BLANK loadable (internal_rom=5, 48 KB Atari RAM in BRAM); the supervisor
+// streams the 800 OS + cart from the SD card into BRAM via the core LOAD port, and
+// serves disk images to the SIO drive emulator (SioBridge). USB keyboard + control
+// + an on-screen 1080p text overlay come over the same SPI link (RpAtariKeyboard).
 // Video is captured to the on-board W9825 SDRAM framebuffer and upscaled to
 // 1920x1080 -> Digilent rgb2dvi -> HDMI. Reuses the LG pipeline as-is
 // (SdramStatemachine / SdramArbiter3 / VideoFbWrite / VideoFbRead2 / GtiaPalette);
@@ -68,11 +71,20 @@ class Atari800WukongTop extends Component {
   val clkPixel = vmc.clk_pix
 
   // ---- system reset: async assert, release synced to clkSys ----
+  // Also resettable by the supervisor: ctrlReset (the 'C' 0x11 command) is raised
+  // in sysArea (kbd.io.ctrlReset) and stretched here in the un-resettable BOOT
+  // domain (~1.1 ms, like a button press) so config-boot can restart the 6502
+  // into the freshly-loaded OS. Assigned after sysArea below.
+  val rpResetReq = Bool()
   val sysResetRawN = amc.locked & io.rst_n
   val rstSyncArea = new ClockingArea(ClockDomain(clkSys, config = ClockDomainConfig(resetKind = BOOT))) {
     val r0 = RegNext(sysResetRawN) init False addTag(crossClockDomain)
     val r1 = RegNext(r0) init False
-    val rstN = sysResetRawN & r1
+    val rpReq  = BufferCC(rpResetReq, False)
+    val rpHold = Reg(UInt(17 bits)) init 0
+    when(rpReq) { rpHold := U(0x1FFFF) }
+      .elsewhen(rpHold =/= 0) { rpHold := rpHold - 1 }
+    val rstN = sysResetRawN & r1 & (rpHold === 0)
   }
   val sysDomain = ClockDomain(
     clock = clkSys, reset = rstSyncArea.rstN,
@@ -86,21 +98,20 @@ class Atari800WukongTop extends Component {
       cycle_length   = 32,
       video_bits     = 8,
       palette        = 0,
-      internal_rom   = 3,                 // 800 OS embedded (+ cart below)
-      internal_ram   = 49152,             // 48 KB RAM in BRAM
+      internal_rom   = 5,                 // 800 OS in BLANK loadable BRAM (SD-loaded)
+      internal_ram   = 49152,             // 48 KB RAM in BRAM (blank, non-proprietary)
       basic_in_sdram = false,
-      cartridge_rom  = "roms/Star Raiders.rom"
+      cartridge_rom  = ""                 // cart streamed from SD, not baked
     )
     atari.io.PAL                := True
     atari.io.RAM_SELECT         := B"011"
     atari.io.TURBO_VBLANK_ONLY  := False
-    atari.io.THROTTLE_COUNT_6502 := B(0, 6 bits)   // real 1.79 MHz
+    // THROTTLE_COUNT_6502, emulated_cartridge_select, and the LOAD port are driven
+    // below (need kbd / cfgArea): turbo from the menu, cart + load from the SD boot.
     atari.io.freezer_enable     := False
     atari.io.freezer_activate   := False
     atari.io.atari800mode       := True
     atari.io.HIRES_ENA          := False
-    atari.io.emulated_cartridge_select := B(0, 6 bits)
-    atari.io.LOAD_REQUEST       := False           // nothing to load (ROM baked)
 
     // No inputs yet (Phase 2 = supervisor). Joysticks/console idle-high, no key.
     atari.io.JOY1_n := B"11111"; atari.io.JOY2_n := B"11111"
@@ -118,20 +129,34 @@ class Atari800WukongTop extends Component {
     kbd.io.spiCsN  := io.fpga_spi_csn
     io.fpga_spi_miso := kbd.io.spiMiso
     kbd.io.keyboardScan := atari.io.KEYBOARD_SCAN
-    kbd.io.ldRdData  := B(0, 32 bits)
-    kbd.io.ldComplete := False
+    // Loader/SIO read-backs are driven below; meters unused on the Wukong.
     kbd.io.meterLate := U(0, 16 bits)
     kbd.io.meterDrop := U(0, 16 bits)
     kbd.io.bbMinX := U(0, 9 bits); kbd.io.bbMaxX := U(0, 9 bits)
     kbd.io.bbMinY := U(0, 9 bits); kbd.io.bbMaxY := U(0, 9 bits)
     kbd.io.aMaxWait  := U(0, 10 bits)
-    kbd.io.sioRdData := B(0, 32 bits)
 
     atari.io.KEYBOARD_RESPONSE := kbd.io.keyboardResponse
     atari.io.CONSOL_OPTION := kbd.io.consolOption | kbd.io.ctrlOption
     atari.io.CONSOL_SELECT := kbd.io.consolSelect | kbd.io.ctrlSelect
     atari.io.CONSOL_START  := kbd.io.consolStart  | kbd.io.ctrlStart
-    atari.io.SIO_RXD := True                       // no SIO disk (Phase 2c)
+
+    // 6502 speed: real 1.79 MHz (0), or turbo (31) toggled from the menu ('C' bit 6).
+    atari.io.THROTTLE_COUNT_6502 := Mux(kbd.io.ctrlTurbo, B(31, 6 bits), B(0, 6 bits))
+
+    // SIO disk-drive emulator: the supervisor watches the SIO command bus and
+    // injects drive responses through the SioBridge serializer, over the SPI link
+    // ('Q' write / 'S' read). Disk images are mounted on SD by the supervisor.
+    val sioBridge = new SioBridge
+    sioBridge.io.sioCommand  := atari.io.SIO_COMMAND
+    sioBridge.io.sioTxd      := atari.io.SIO_TXD
+    sioBridge.io.sioClockout := atari.io.SIO_CLOCKOUT
+    atari.io.SIO_RXD         := sioBridge.io.sioRxd
+    sioBridge.bus.addr   := kbd.io.sioAddr
+    sioBridge.bus.rd     := kbd.io.sioRd
+    sioBridge.bus.wr     := kbd.io.sioWr
+    sioBridge.bus.wrData := kbd.io.sioWrData.resize(32)
+    kbd.io.sioRdData     := sioBridge.bus.rdData
 
     atari.io.DMA_FETCH := False
     atari.io.DMA_READ_ENABLE := False
@@ -211,10 +236,30 @@ class Atari800WukongTop extends Component {
     arb.io.c.wideAccess := fbRead.io.rdWide
     fbRead.io.rdData := arb.io.c.wideOut
 
-    // Port D — unused (no supervisor loader).
-    arb.io.d.request := False; arb.io.d.readEnable := False; arb.io.d.writeEnable := False
-    arb.io.d.addr := B(0, 24 bits); arb.io.d.dataIn := B(0, 32 bits)
-    arb.io.d.byteAccess := False; arb.io.d.wordAccess := False; arb.io.d.longwordAccess := False
+    // Supervisor loader (kbd 'B' command): OS ROM (ldDest 1) / RAM (ldDest 2) / cart
+    // stream into BRAM via the core LOAD port; ldDest 0 = SDRAM via arbiter port D
+    // (kept wired for completeness — the Wukong menu uses the FPGA-native overlay,
+    // not a supervisor SDRAM framebuffer, so ldDest 0 is normally unused).
+    val ldToBram  = kbd.io.ldDest =/= B(0, 2 bits)
+    val ldToSdram = kbd.io.ldDest === B(0, 2 bits)
+    arb.io.d.request        := kbd.io.ldReq && ldToSdram
+    arb.io.d.readEnable     := ~kbd.io.ldWrite
+    arb.io.d.writeEnable    := kbd.io.ldWrite
+    arb.io.d.addr           := kbd.io.ldAddr
+    arb.io.d.dataIn         := kbd.io.ldData
+    kbd.io.ldRdData         := arb.io.d.dataOut
+    arb.io.d.byteAccess     := True
+    arb.io.d.wordAccess     := False
+    arb.io.d.longwordAccess := False
+
+    // Core BRAM load port, fed by the same loader when ldToBram.
+    atari.io.LOAD_ENABLE     := ldToBram && kbd.io.ctrlHalt   // drive the bus only while halted
+    atari.io.LOAD_TARGET_ROM := kbd.io.ldDest === B(1, 2 bits)
+    atari.io.LOAD_ADDR       := kbd.io.ldAddr(21 downto 0)
+    atari.io.LOAD_DATA       := kbd.io.ldData(7 downto 0)
+    atari.io.LOAD_WE         := kbd.io.ldReq && kbd.io.ldWrite && ldToBram
+    atari.io.LOAD_REQUEST    := kbd.io.ldReq && ldToBram
+    kbd.io.ldComplete        := Mux(ldToBram, atari.io.LOAD_COMPLETE, arb.io.d.complete)
 
     // Arbiter -> SdramStatemachine
     sdramCtrl.io.READ_EN := arb.io.sdram.readEnable
@@ -266,6 +311,19 @@ class Atari800WukongTop extends Component {
     Seq(vidPix, vidDe, vidHs, vidVs, vidSupPix, vidSupDe, vidSupHs, vidSupVs, vidSupSel)
       .foreach(_.addTag(crossClockDomain))
   }
+
+  // Cart select lives in the un-resettable BOOT domain so it survives the
+  // supervisor reset that config-boot issues (set via the 'X' command just before
+  // the reset). Capture offsets stay at the fbWrite defaults (4/21) = the values
+  // the supervisor sends, so the 'G' offset command is a no-op here for now.
+  val cfgArea = new ClockingArea(ClockDomain(clkSys, config = ClockDomainConfig(resetKind = BOOT))) {
+    val cart = Reg(Bits(6 bits)) init 0
+    when(sysArea.kbd.io.cartWr) { cart := sysArea.kbd.io.cartSel }
+  }
+  sysArea.atari.io.emulated_cartridge_select := cfgArea.cart
+
+  // Supervisor reset ('C' 0x11) -> stretched sys-domain reset (see rstSyncArea).
+  rpResetReq := sysArea.kbd.io.ctrlReset
 
   // ---- pixel domain: palette + register -> rgb2dvi ----
   val pixelArea = new ClockingArea(ClockDomain(clkPixel, config = ClockDomainConfig(resetKind = BOOT))) {
