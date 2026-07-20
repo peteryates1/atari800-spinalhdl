@@ -51,26 +51,30 @@ The Wukong is **Xilinx Artix-7**, so the existing supervisor's Altera USB-Blaste
 Cyclone config constants) does **not** apply. But the Xilinx JTAG config is already solved in two
 local tools — the JTAG *plumbing* (PIO bit-bang, TAP nav) carries over; only the config layer differs:
 
-- **`~/pico-dirtyJtag`** — Pico as a **USB JTAG cable** driven by **openFPGALoader** on a host PC.
-  Proven Artix-7 path (repo doc `jop-spinalhdl/docs/pico-dirtyjtag-setup.md`), wired
-  TCK=GP2 / TMS=GP3 / TDI=GP4 / TDO=GP5. Use for **bench programming now** —
-  `openfpgaloader --cable dirtyJtag <bitstream>.bit`. Host-driven, **not autonomous**.
+- **`~/pico-dirtyJtag` — WORKING bench path (verified 2026-07-20).** Pico as a **USB JTAG cable**
+  driven by **openFPGALoader**. Built for **`pico2_w`** on a **Pico 2 W**, JTAG wired to the Wukong
+  header as **TCK=GP0, TDO=GP1, TMS=GP2, TDI=GP3** (+ GND); `dirtyJtagConfig.h` set accordingly
+  (LED=-1 for Pico 2 W, UART0 moved off GP0/1 → GP12/13). `openFPGALoader --cable dirtyJtag --detect`
+  reads **`idcode 0x3631093` → xilinx artix a7 100t (xc7a100), irlength 6**. Program with
+  `openFPGALoader --cable dirtyJtag <bitstream>.bit` (add `-f` to write the on-board SPI flash).
+  Single-core, so it runs fine on RP2350. Host-driven, **not autonomous**.
 
-- **`~/pico-pio-uart-jtag`** — the base for the **autonomous supervisor**. Its
-  `jtag/fpga_xilinx.c` implements **on-device Xilinx 7-series configuration**
-  (`JPROGRAM 0x0B` / `CFG_IN 0x05` / `JSTART 0x0C` + `.bit` header parsing) — the Pico programs a
-  `.bit` itself, no host. Vendor auto-detect by IDCODE (Altera / Xilinx / Lattice), SVF player,
-  runs on RP2040 **and** RP2350. JTAG on GP2–5.
+- **`~/pico-pio-uart-jtag`** — intended base for the **autonomous supervisor**: its
+  `jtag/fpga_xilinx.c` already does **on-device Xilinx 7-series config**
+  (`JPROGRAM 0x0B` / `CFG_IN 0x05` / `JSTART 0x0C` + `.bit` parsing), IDCODE vendor auto-detect, SVF
+  player. **BUT it HANGS on RP2350 (2026-07-20):** it launches **core1** (for per-core JOP UARTs) and
+  the RP2350 multicore launch stalls **before USB enumeration** — the flashed image boots (BOOTSEL
+  `2e8a:000f` and SWD both fine; CFSR clean) but never enumerates. Deferred for the supervisor until
+  the core1 launch is fixed or made single-core. Still the tool of choice for JOP multi-UART on
+  RP2040.
 
-**Supervisor plan (use a Pico W):** reuse `pico-pio-uart-jtag`'s `jtag/` core
-(`jtag_tap.c` + `fpga_xilinx.c` + `svf_player.c`) inside the supervisor firmware, but feed the
-`.bit` from **SD via FatFs** instead of USB — the autonomous SD-boot analog of the Altera flow, with
-the Xilinx config sequence already written (so no port of openFPGALoader's flow needed). A **Pico 2 W (RP2350)**
-is the preferred supervisor: `pico-pio-uart-jtag` supports RP2350, its extra PIO block eases the
-CYW43 + PIO-USB + JTAG budget, and its onboard **CYW43439 is the RM2 wireless on a proper PCB** —
-wireless for free, sidestepping the jumper-wire signal-integrity saga. Mind the reserved
-**GPIO23/24/25/29** (CYW43 WL_ON/DATA/CS/CLK) and that the LED is on the radio chip, not a GPIO;
-JTAG (GP2–5) + PIO-USB host + SD fit around them. USB-keyboard host (PIO-USB → Atari matrix) and
+**Supervisor plan (Pico 2 W):** reuse `pico-pio-uart-jtag`'s `jtag/` core
+(`jtag_tap.c` + `fpga_xilinx.c` + `svf_player.c`) inside the supervisor firmware — but **first
+resolve its RP2350 multicore hang** (or start from single-core dirtyJtag's `pio_jtag` + graft the
+`fpga_xilinx.c` config on top). Feed the `.bit` from **SD via FatFs** instead of USB — the autonomous
+SD-boot analog of the Altera flow. A **Pico 2 W (RP2350)** is preferred: onboard **CYW43439 = RM2
+wireless on a proper PCB** (wireless for free, no jumper-wire SI). Mind reserved **GPIO23/24/25/29**
+(CYW43) and that the LED is on the radio chip. USB-keyboard host (PIO-USB → Atari matrix) and
 FatFs/config-boot/menu/SIO all carry over from the existing supervisor.
 
 **Flashing the supervisor (Pico 2 W) — Raspberry Pi debug probe over SWD.** Standard RP
