@@ -108,10 +108,19 @@ static void sup_resume(void) {
 }
 
 static void sup_boot(void) {
+#ifdef BOARD_WUKONG
+  // Wukong Phase 2a/b: OS + cart are baked into the FPGA (internal_rom=3) and the
+  // SDRAM loader is tied off, so there is nothing to load — boot_run() would wait
+  // on ldComplete forever and hang. Stay in the menu with a note until the loader
+  // path lands (Phase 2c: internal_rom=5 + SD config-boot). Use [q] to resume.
+  cdc_printf("\r\nsupervisor: boot-from-SD not wired yet (ROM baked); use [q] to resume\r\n");
+  fb_render();
+#else
   active = false;
   pending = PICK_NONE;
   cdc_printf("\r\nsupervisor: booting selection...\r\n");
   boot_run(&live);                          // applies live cart/disks + reset
+#endif
 }
 
 // Map a listing tag char ('0'..'9','a'..'f') to an index, or -1.

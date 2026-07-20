@@ -17,6 +17,14 @@
 #define PIN_SD_RX   4    // CIPO (MISO)
 #define PIN_SD_CS   5
 #define PIN_SD_CD   8    // card-detect switch (DM3AT SW_B), active low
+#elif defined(BOARD_WUKONG)
+// QMTech Wukong (Pico 2 W supervisor): SD on its OWN peripheral SPI0 (GP16-19) so
+// it never contends with the FPGA control link on SPI1 (GP12-15). No card-detect.
+#define SD_SPI      spi0
+#define PIN_SD_RX   16   // CIPO (MISO)
+#define PIN_SD_CS   17
+#define PIN_SD_SCK  18   // CLK
+#define PIN_SD_TX   19   // COPI (MOSI)
 #else
 #define SD_SPI      spi1
 #define PIN_SD_SCK  10
