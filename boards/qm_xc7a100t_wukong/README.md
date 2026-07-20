@@ -72,7 +72,9 @@ local tools — the JTAG *plumbing* (PIO bit-bang, TAP nav) carries over; only t
 (`jtag_tap.c` + `fpga_xilinx.c` + `svf_player.c`) inside the supervisor firmware — but **first
 resolve its RP2350 multicore hang** (or start from single-core dirtyJtag's `pio_jtag` + graft the
 `fpga_xilinx.c` config on top). Feed the `.bit` from **SD via FatFs** instead of USB — the autonomous
-SD-boot analog of the Altera flow. A **Pico 2 W (RP2350)** is preferred: onboard **CYW43439 = RM2
+SD-boot analog of the Altera flow. **The supervisor JTAG-configures the FPGA from SD every boot, so
+the on-board N25Q064 SPI flash is NOT used for the application bitstream** — nothing proprietary lives
+on the board (`.bit`, OS, cart, disks all stay on SD). A **Pico 2 W (RP2350)** is preferred: onboard **CYW43439 = RM2
 wireless on a proper PCB** (wireless for free, no jumper-wire SI). Mind reserved **GPIO23/24/25/29**
 (CYW43) and that the LED is on the radio chip. USB-keyboard host (PIO-USB → Atari matrix) and
 FatFs/config-boot/menu/SIO all carry over from the existing supervisor.
