@@ -24,6 +24,9 @@
 #include "pio_usb.h"
 #include "tusb.h"
 #include "sd_spi.h"
+#ifdef HAVE_WIFI
+#include "wifi.h"
+#endif
 #include "lib/fatfs/source/ff.h"
 #include "config.h"
 #include "sio.h"
@@ -574,6 +577,13 @@ static void handle_console(void) {
       break;
     }
     case 'U': cmd_push_file(); break;     // upload/push a file over USB -> SD (see tools/push_file.py)
+#ifdef HAVE_WIFI
+    case 'N':   // toggle WiFi (station mode) + show IP
+      if (wifi_is_up()) wifi_off(); else wifi_on();
+      cdc_printf("wifi: %s  SSID \"%s\"  IP %s\r\n",
+                 wifi_is_up() ? "ON" : "off", wifi_ssid(), wifi_ip());
+      break;
+#endif
     case 'D': sio_stats_print(); break;   // SIO disk-drive activity counters
     case 'J': jtag_idcode_print(); break; // JTAG bring-up: read FPGA IDCODE (GPIO0-3 -> J10)
     case 'V': {   // crispness test: dense 32-char text on every row (integer x5/x3 scaling)
@@ -1176,6 +1186,9 @@ int main(void) {
 #endif
     handle_console();
     if (sio_any_mounted()) sio_poll();   // service SIO disk commands (D1:..)
+#ifdef HAVE_WIFI
+    wifi_poll();                         // pump cyw43 + lwIP (no-op while WiFi is off)
+#endif
     if (absolute_time_diff_us(get_absolute_time(), next_beat) < 0) {
       next_beat = make_timeout_time_ms(3000);
       int mounted = 0;

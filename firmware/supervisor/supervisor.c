@@ -2,6 +2,9 @@
 #include "config.h"
 #include "boot.h"
 #include "fbtext.h"
+#ifdef HAVE_WIFI
+#include "wifi.h"
+#endif
 #include <string.h>
 #include <stdio.h>
 
@@ -47,6 +50,11 @@ static void fb_render(void) {
     fbtext_puts(11, 1, "[s] save   [r] reload");
     snprintf(buf, sizeof buf, "[t] turbo: %s", g_turbo ? "ON" : "off");
     fbtext_puts(12, 1, buf);
+#ifdef HAVE_WIFI
+    snprintf(buf, sizeof buf, "[w] wifi: %s %s", wifi_is_up() ? "ON" : "off",
+             wifi_is_up() ? wifi_ip() : "");
+    fbtext_puts(13, 1, buf);
+#endif
   } else {
     fbtext_colors(0x0F, 0x00);
     fbtext_puts(2, 1, pending == PICK_CART ? "Choose cart:" : "Choose disk:");
@@ -76,6 +84,9 @@ static void print_menu(void) {
   cdc_printf(" [b] boot   [q] resume\r\n");
   cdc_printf(" [s] save as default   [r] reload config\r\n");
   cdc_printf(" [t] turbo: %s\r\n", g_turbo ? "ON" : "off");
+#ifdef HAVE_WIFI
+  cdc_printf(" [w] wifi: %s  %s\r\n", wifi_is_up() ? "ON " : "off", wifi_is_up() ? wifi_ip() : "");
+#endif
   cdc_printf("> ");
   fb_render();
 }
@@ -166,6 +177,12 @@ void sup_feed_key(char c) {
       cdc_printf("\r\nsupervisor: turbo %s\r\n", g_turbo ? "ON" : "off");
       print_menu();
       break;
+#ifdef HAVE_WIFI
+    case 'w': case 'W':
+      if (wifi_is_up()) wifi_off(); else wifi_on();
+      print_menu();
+      break;
+#endif
     case '?': case 'h': print_menu(); break;
     default: break;
   }

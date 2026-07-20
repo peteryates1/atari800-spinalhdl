@@ -57,4 +57,13 @@ target_link_libraries(supervisor PRIVATE
     tinyusb_pico_pio_usb
 )
 
+# WiFi (Pico W / Pico 2 W only): on-demand HTTP SD manager. cyw43_arch in poll
+# mode fits the single-core cooperative loop; lwIP config is lwipopts.h.
+if(PICO_BOARD MATCHES "_w$")
+    message(STATUS "Supervisor: WiFi enabled for ${PICO_BOARD}")
+    target_sources(supervisor PRIVATE wifi.c)
+    target_link_libraries(supervisor PRIVATE pico_cyw43_arch_lwip_poll)
+    target_compile_definitions(supervisor PRIVATE HAVE_WIFI=1)
+endif()
+
 pico_add_extra_outputs(supervisor)

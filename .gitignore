@@ -84,3 +84,4 @@ generated/h720.config
 network.txt
 firmware/rm2_test/wifi_creds.h
 firmware/**/build/
+wifi.txt
