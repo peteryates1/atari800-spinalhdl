@@ -1,0 +1,6 @@
+# Regenerable Vivado outputs from build_hdmi.tcl
+timing_*.rpt
+clockInfo.txt
+*.jou
+*.log
+.Xil/
