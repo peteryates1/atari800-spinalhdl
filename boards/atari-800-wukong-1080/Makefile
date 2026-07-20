@@ -28,3 +28,20 @@ program:
 	openFPGALoader --cable $(CABLE) $(BIT)
 
 all: build program
+
+# === Phase 1: Atari at 1080p ===
+ABIT := $(VDIR)/build/wukong_atari/wukong_atari.runs/impl_1/Atari800WukongTop.bit
+
+generate-atari:
+	cd $(REPO_ROOT) && sbt "atari/runMain atari800.Atari800WukongSv"
+
+create-atari: generate-atari
+	$(VIVADO) -mode batch -source $(VDIR)/tcl/create_atari.tcl
+
+build-atari: create-atari
+	$(VIVADO) -mode batch -source $(VDIR)/tcl/build_atari.tcl
+
+program-atari:
+	openFPGALoader --cable $(CABLE) $(ABIT)
+
+atari: build-atari program-atari

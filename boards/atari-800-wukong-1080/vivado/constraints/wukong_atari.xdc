@@ -1,0 +1,65 @@
+# QMTech Wukong (XC7A100T) — Phase 1 Atari-at-1080p.
+# Clock + HDMI (bank 35, TMDS_33) + reset + on-board W9825 SDRAM.
+# SDRAM pins from QMTech's Test10_SDRAM reference; HDMI from Test06.
+
+set_property CFGBVS VCCO [current_design]
+set_property CONFIG_VOLTAGE 3.3 [current_design]
+
+# --- 50 MHz oscillator + reset button ---
+set_property -dict {PACKAGE_PIN M21 IOSTANDARD LVCMOS33} [get_ports clk_in]
+create_clock -period 20.000 -name clk_in [get_ports clk_in]
+set_property -dict {PACKAGE_PIN H7  IOSTANDARD LVCMOS33} [get_ports rst_n]
+
+# --- HDMI TMDS (bank 35, TMDS_33) ---
+set_property -dict {PACKAGE_PIN D4 IOSTANDARD TMDS_33} [get_ports tmds_clk_p]
+set_property -dict {PACKAGE_PIN C4 IOSTANDARD TMDS_33} [get_ports tmds_clk_n]
+set_property -dict {PACKAGE_PIN E1 IOSTANDARD TMDS_33} [get_ports {tmds_data_p[0]}]
+set_property -dict {PACKAGE_PIN D1 IOSTANDARD TMDS_33} [get_ports {tmds_data_n[0]}]
+set_property -dict {PACKAGE_PIN F2 IOSTANDARD TMDS_33} [get_ports {tmds_data_p[1]}]
+set_property -dict {PACKAGE_PIN E2 IOSTANDARD TMDS_33} [get_ports {tmds_data_n[1]}]
+set_property -dict {PACKAGE_PIN G2 IOSTANDARD TMDS_33} [get_ports {tmds_data_p[2]}]
+set_property -dict {PACKAGE_PIN G1 IOSTANDARD TMDS_33} [get_ports {tmds_data_n[2]}]
+
+# --- W9825G6KH SDRAM (LVCMOS33) ---
+set_property IOSTANDARD LVCMOS33 [get_ports -regexp {sdram_.*}]
+set_property PACKAGE_PIN G22 [get_ports sdram_clk]
+set_property PACKAGE_PIN H22 [get_ports sdram_cke]
+set_property PACKAGE_PIN L25 [get_ports sdram_csn]
+set_property PACKAGE_PIN K26 [get_ports sdram_rasn]
+set_property PACKAGE_PIN K25 [get_ports sdram_casn]
+set_property PACKAGE_PIN J26 [get_ports sdram_wen]
+set_property PACKAGE_PIN M25 [get_ports {sdram_ba[0]}]
+set_property PACKAGE_PIN M26 [get_ports {sdram_ba[1]}]
+set_property PACKAGE_PIN J25 [get_ports {sdram_dqm[0]}]
+set_property PACKAGE_PIN K23 [get_ports {sdram_dqm[1]}]
+# Address A0..A12
+set_property PACKAGE_PIN R26 [get_ports {sdram_addr[0]}]
+set_property PACKAGE_PIN P25 [get_ports {sdram_addr[1]}]
+set_property PACKAGE_PIN P26 [get_ports {sdram_addr[2]}]
+set_property PACKAGE_PIN N26 [get_ports {sdram_addr[3]}]
+set_property PACKAGE_PIN M24 [get_ports {sdram_addr[4]}]
+set_property PACKAGE_PIN M22 [get_ports {sdram_addr[5]}]
+set_property PACKAGE_PIN L24 [get_ports {sdram_addr[6]}]
+set_property PACKAGE_PIN L23 [get_ports {sdram_addr[7]}]
+set_property PACKAGE_PIN L22 [get_ports {sdram_addr[8]}]
+set_property PACKAGE_PIN K21 [get_ports {sdram_addr[9]}]
+set_property PACKAGE_PIN R25 [get_ports {sdram_addr[10]}]
+set_property PACKAGE_PIN K22 [get_ports {sdram_addr[11]}]
+set_property PACKAGE_PIN J21 [get_ports {sdram_addr[12]}]
+# Data D0..D15
+set_property PACKAGE_PIN D25 [get_ports {sdram_dq[0]}]
+set_property PACKAGE_PIN D26 [get_ports {sdram_dq[1]}]
+set_property PACKAGE_PIN E25 [get_ports {sdram_dq[2]}]
+set_property PACKAGE_PIN E26 [get_ports {sdram_dq[3]}]
+set_property PACKAGE_PIN F25 [get_ports {sdram_dq[4]}]
+set_property PACKAGE_PIN G25 [get_ports {sdram_dq[5]}]
+set_property PACKAGE_PIN G26 [get_ports {sdram_dq[6]}]
+set_property PACKAGE_PIN H26 [get_ports {sdram_dq[7]}]
+set_property PACKAGE_PIN J24 [get_ports {sdram_dq[8]}]
+set_property PACKAGE_PIN J23 [get_ports {sdram_dq[9]}]
+set_property PACKAGE_PIN H24 [get_ports {sdram_dq[10]}]
+set_property PACKAGE_PIN H23 [get_ports {sdram_dq[11]}]
+set_property PACKAGE_PIN G24 [get_ports {sdram_dq[12]}]
+set_property PACKAGE_PIN F24 [get_ports {sdram_dq[13]}]
+set_property PACKAGE_PIN F23 [get_ports {sdram_dq[14]}]
+set_property PACKAGE_PIN E23 [get_ports {sdram_dq[15]}]
