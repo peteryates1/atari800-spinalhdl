@@ -19,6 +19,14 @@ The MIG reference clocks DDR3 from an internal 166.666 MHz (MMCM from the 50 MHz
 
 On-board HDMI connector; drive `OBUFDS` + `OSERDESE2`, `IOSTANDARD TMDS_33`.
 
+> **Hardware-verified 2026-07-20:** QMTech's `Test06_HDMI_OUT/top.bit` loaded via
+> `openFPGALoader --cable dirtyJtag` (Pico 2 W on GP0–3) configured with `done 1` and produced
+> **solid colour bars at native 1080p60** on a monitor — the design's `video_define.v` selects
+> `VIDEO_1920_1080` and the MMCM makes a ~148.4 MHz pixel clock (1920×1080@60; TMDS ~1.485 Gbps/ch).
+> This confirms the bank-35 TMDS_33 output path on real silicon **and that this FPGA/board does
+> native 1080p60** — the whole reason for the Artix move (the 10CL025 capped at 720p60). Also
+> de-risks the same bank-35 choice on the custom baseboard.
+
 | HDMI signal | **P** ball | **N** ball |
 |---|---|---|
 | TMDS Clock  | **D4** | **C4** |
