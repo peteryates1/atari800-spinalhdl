@@ -19,11 +19,16 @@ def find_port():
     return None
 
 def main():
-    if len(sys.argv) < 3:
-        print("usage: push_file.py <local-file> <sd-path> [serial-port]", file=sys.stderr)
+    args = sys.argv[1:]
+    # --activate: after pushing, tell the supervisor to configure the FPGA from the
+    # freshly-pushed SD core ('F') and boot the Atari ('B') — the full over-USB deploy.
+    activate = "--activate" in args
+    args = [a for a in args if a != "--activate"]
+    if len(args) < 2:
+        print("usage: push_file.py <local-file> <sd-path> [serial-port] [--activate]", file=sys.stderr)
         return 2
-    local, sdpath = sys.argv[1], sys.argv[2]
-    port = sys.argv[3] if len(sys.argv) > 3 else find_port()
+    local, sdpath = args[0], args[1]
+    port = args[2] if len(args) > 2 else find_port()
     if not port:
         print("push: no supervisor serial port found (pass one explicitly)", file=sys.stderr)
         return 1
@@ -67,19 +72,32 @@ def main():
     dt = time.time() - t0
     print(f"\rpush: sent {sent} bytes in {dt:.1f}s ({sent/1024/max(dt,0.001):.0f} KB/s)      ")
 
-    # Drain the firmware's result line(s).
-    end = time.time() + 4
-    out = b""
-    while time.time() < end:
-        chunk = p.read(4096)
-        if chunk:
-            out += chunk
-            end = time.time() + 0.5
-    p.close()
-    text = out.decode(errors="replace").strip()
+    def drain(seconds):
+        end = time.time() + seconds
+        out = b""
+        while time.time() < end:
+            chunk = p.read(4096)
+            if chunk:
+                out += chunk
+                end = time.time() + 0.5
+        return out.decode(errors="replace").strip()
+
+    # Drain the firmware's push result.
+    text = drain(4)
     if text:
         print(text)
-    return 0 if ("DONE" in text) else 1
+    ok = "DONE" in text
+
+    if activate and ok:
+        # Configure the FPGA from the SD core we just pushed, then boot the Atari.
+        print("push: activating (F: config from SD, then B: boot)...")
+        p.write(b"F"); p.flush()
+        print(drain(16))          # ~10s JTAG shift + result
+        p.write(b"B"); p.flush()
+        print(drain(6))
+
+    p.close()
+    return 0 if ok else 1
 
 if __name__ == "__main__":
     sys.exit(main())

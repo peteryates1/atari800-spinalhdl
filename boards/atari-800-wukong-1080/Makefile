@@ -41,10 +41,10 @@ create-atari: generate-atari
 build-atari: create-atari
 	$(VIVADO) -mode batch -source $(VDIR)/tcl/build_atari.tcl
 
+# Direct SRAM program over a JTAG cable (dirtyJtag / usb-blaster). Immediate but
+# volatile, and needs a cable; the SD deploy below is the appliance path.
 program-atari:
 	openFPGALoader --cable $(CABLE) $(ABIT)
-
-atari: build-atari program-atari
 
 # === Push the built core onto the SD card over USB (no MSC/eject) ===
 # Streams the bitstream to the supervisor's 'U' command, which writes it to the
@@ -58,3 +58,8 @@ push-core:
 
 # Build the bitstream and push it straight onto the SD card in one step.
 deploy-core: build-atari push-core
+
+# Main target: build, push the core to SD, then have the supervisor configure the
+# Artix from it and boot the Atari — the full deploy entirely over USB (no cable).
+atari: build-atari
+	$(PUSH) $(ABIT) $(CORE_SDPATH) --activate
