@@ -58,6 +58,31 @@ in `Test04_DDR3_MIG/.../mig_7series_0/user_design/constraints/mig_7series_0.xdc`
 `ddr3_reset_n = H17`, `ddr3_ck_p/n = F18/F19`; MemoryDevice `MT41K128M16XX-15E`, DataWidth 16,
 PHYRatio 4:1, input 166.666 MHz. Role = framebuffer / scaler / bulk (latency-tolerant).
 
+## Pico 2 W supervisor wiring (Phase 2)
+
+The Pico 2 W (RP2350) is the supervisor, wired to the Wukong via the JTAG header and
+an expansion header (J11). RP2350 hardware-function pins:
+
+| Function | Pico 2 W GPIO | → Wukong |
+|---|---|---|
+| **FPGA JTAG** (dirtyJtag) | GP0=TCK, GP1=TDO, GP2=TMS, GP3=TDI | JTAG header (see Programming section) |
+| **USB keyboard** (PIO-USB host) | GP4 = D−, GP5 = D+ | USB-A socket |
+| **FPGA SPI link** (SPI1) | GP12=RX/CIPO, GP13=CSn, GP14=SCK, GP15=TX/COPI | J11: D5, G5, G7, G8 |
+| **SD card** (SPI0) | GP16=RX, GP17=CS, GP18=SCK, GP19=TX | microSD (no card yet) |
+| CYW43 wireless (on-board) | GP23/24/25/29 | — (reserved) |
+
+FPGA-SPI mapping detail: GP12(SPI1 RX/CIPO)=FPGA_DO→D5, GP13(CSn)→G5, GP14(SCK)→G7,
+GP15(TX/COPI)=FPGA_DI→G8. This is the `RpAtariKeyboard` link (keyboard matrix + control
++ loader), to be re-added to the Wukong top for Phase 2 (Phase 1 baked the ROM instead).
+
+**Phase 2 firmware plan** (`firmware/supervisor/`, add a `BOARD_WUKONG` branch):
+supervisor is **single-core** → safe on RP2350; reuse SD/FatFs, USB-HID host, config-boot,
+menu, SIO. New work: (1) the `BOARD_WUKONG` pin map above; (2) build for **`pico2_w`**;
+(3) **Xilinx FPGA config** — the Altera `jtag.c`/`blaster.c`/`fpga_config.c` don't apply;
+graft `pico-pio-uart-jtag`'s `jtag/fpga_xilinx.c` (JPROGRAM/CFG_IN/JSTART + `.bit`) fed from
+SD. HDL side: re-add `RpAtariKeyboard` on SPI1 + switch the top to `internal_rom=5` (blank
+loadable) so the supervisor loads OS/cart/disks from SD instead of baking them.
+
 ## Other
 
 - **Gigabit Ethernet (GMII)** — pinout in Test08 (`GMII_ETH.xdc`).
