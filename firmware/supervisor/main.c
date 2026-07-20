@@ -54,7 +54,15 @@ volatile struct {
 #ifndef USE_USB2
 #define USE_USB2 0            // 0: USB1 (D+=7, D-=6)  1: USB2 (D+=8, D-=9)
 #endif
-#ifdef BOARD_COLORLIGHT
+#ifdef BOARD_WUKONG
+// QMTech Wukong (Pico 2 W supervisor): FPGA link on SPI1 -> J10 bank 35, SD on
+// SPI0 (GP16-19). GP12=RX/CIPO->D5, GP13=CSn->G5, GP14=SCK->G7, GP15=TX/COPI->G8.
+#define SPI_PORT spi1
+#define PIN_SPI_RX  12        // FPGA_DO  (FPGA -> Pico)  -> D5
+#define PIN_SPI_CSN 13        // FPGA_CSN                 -> G5
+#define PIN_SPI_SCK 14        // FPGA_CLK                 -> G7
+#define PIN_SPI_TX  15        // FPGA_DI  (Pico -> FPGA)  -> G8
+#elif defined(BOARD_COLORLIGHT)
 // Colorlight base board: FPGA link on SPI1 (SPI0 is the SD card). Uses 4 of the
 // GPIO9-21 lines to U4 (SODIMM); the rest are spare/control.
 #define SPI_PORT spi1
@@ -925,6 +933,8 @@ int main(void) {
   // image from SD into flash IF it changed, so it can be JTAG-loaded later
   // independent of the SD card (which is offline during reconfiguration). Only
   // rewrites flash when the SD file's size/mtime differ -> no wear per boot.
+  // (Wukong Phase 2a: FPGA is dirtyJtag-programmed + OS/cart baked -> skip SD staging.)
+#ifndef BOARD_WUKONG
   {
     static FATFS stagefs;
     // On a cold power-on the FPGA is still loading from config-flash, so the SD
@@ -955,6 +965,7 @@ int main(void) {
                g_fpga_staged ? " (auto-configuring)"
                              : (sd_ok ? " (no image on SD)" : " (SD not ready)"));
   }
+#endif  // !BOARD_WUKONG (SD FPGA-staging)
 
   g_selftest.magic = 0x5E1F0001;
 
@@ -968,7 +979,9 @@ int main(void) {
 #endif
   pio_cfg.pinout = PIO_USB_PINOUT_DPDM;
 #else
-#ifdef BOARD_COLORLIGHT
+#if defined(BOARD_WUKONG)
+  pio_cfg.pin_dp = 5;                       // USB: D+=5, D-=4 (Wukong / Pico 2 W)
+#elif defined(BOARD_COLORLIGHT)
   pio_cfg.pin_dp = 3;                       // USB1: D+=3, D-=2 (Colorlight)
 #else
   pio_cfg.pin_dp = 7;                       // USB1: D+=7, D-=6
@@ -986,6 +999,7 @@ int main(void) {
   // add_port reuses the shared tx/rx state machines (no extra PIO SM -> no clash with the
   // JTAG blaster); it must run AFTER tuh_init(1). PINOUT matches each connector's D+/D- order
   // (DMDP = D+ on the higher GPIO, DPDM = normal). Root-port polling loops both ports.
+#ifndef BOARD_WUKONG                           // Wukong: single USB keyboard port only
 #if USE_USB2                                  // primary=USB2 -> second port = USB1
 #ifdef BOARD_COLORLIGHT
   int usb_p1 = pio_usb_host_add_port(3, PIO_USB_PINOUT_DMDP);   // USB1: D+=3, D-=2
@@ -1000,6 +1014,7 @@ int main(void) {
 #endif
 #endif
   cdc_printf("usb: second host root port %s\r\n", usb_p1 == 0 ? "added" : "FAILED");
+#endif  // !BOARD_WUKONG (second USB port)
 #endif
 
   // SD-side boot: override whatever the onboard EPCS config-flash brought up with
@@ -1041,7 +1056,10 @@ int main(void) {
 
   // Auto-boot: load the OS + default cart from SD into blank BRAM and run.
   // Same sequence as the console 'B' command; 'B' re-runs it on demand.
+  // (Wukong Phase 2a: OS/cart baked into the FPGA (internal_rom=3) -> nothing to load.)
+#ifndef BOARD_WUKONG
   do_boot();
+#endif
 
   absolute_time_t next_beat = make_timeout_time_ms(3000);
   while (true) {

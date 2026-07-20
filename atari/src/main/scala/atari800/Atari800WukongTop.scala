@@ -32,6 +32,11 @@ class Atari800WukongTop extends Component {
   val io = new Bundle {
     val clk_in      = in  Bool()             // 50 MHz oscillator (M21)
     val rst_n       = in  Bool()             // reset button, active-low (H7)
+    // Supervisor SPI link (Pico 2 W SPI1 -> J10/bank35): keyboard, control, etc.
+    val fpga_spi_sck  = in  Bool()           // G7  <- Pico GP14 (SCK)
+    val fpga_spi_mosi = in  Bool()           // G8  <- Pico GP15 (TX)
+    val fpga_spi_csn  = in  Bool()           // G5  <- Pico GP13 (CSn)
+    val fpga_spi_miso = out Bool()           // D5  -> Pico GP12 (RX)
     // HDMI
     val tmds_clk_p  = out Bool()
     val tmds_clk_n  = out Bool()
@@ -104,11 +109,29 @@ class Atari800WukongTop extends Component {
     atari.io.PADDLE2 := S(0, 8 bits); atari.io.PADDLE3 := S(0, 8 bits)
     atari.io.PADDLE4 := S(0, 8 bits); atari.io.PADDLE5 := S(0, 8 bits)
     atari.io.PADDLE6 := S(0, 8 bits); atari.io.PADDLE7 := S(0, 8 bits)
-    atari.io.KEYBOARD_RESPONSE := B"11"            // no key pressed
-    atari.io.CONSOL_OPTION := True
-    atari.io.CONSOL_SELECT := True
-    atari.io.CONSOL_START  := True
-    atari.io.SIO_RXD := True                       // no SIO disk
+    // Supervisor SPI link (Pico 2 W SPI1): USB keyboard + console keys + control,
+    // decoded in the FPGA by RpAtariKeyboard. Phase 2a = keyboard only; loader/SIO/
+    // overlay/meter inputs tied off.
+    val kbd = new RpAtariKeyboard
+    kbd.io.spiSck  := io.fpga_spi_sck
+    kbd.io.spiMosi := io.fpga_spi_mosi
+    kbd.io.spiCsN  := io.fpga_spi_csn
+    io.fpga_spi_miso := kbd.io.spiMiso
+    kbd.io.keyboardScan := atari.io.KEYBOARD_SCAN
+    kbd.io.ldRdData  := B(0, 32 bits)
+    kbd.io.ldComplete := False
+    kbd.io.meterLate := U(0, 16 bits)
+    kbd.io.meterDrop := U(0, 16 bits)
+    kbd.io.bbMinX := U(0, 9 bits); kbd.io.bbMaxX := U(0, 9 bits)
+    kbd.io.bbMinY := U(0, 9 bits); kbd.io.bbMaxY := U(0, 9 bits)
+    kbd.io.aMaxWait  := U(0, 10 bits)
+    kbd.io.sioRdData := B(0, 32 bits)
+
+    atari.io.KEYBOARD_RESPONSE := kbd.io.keyboardResponse
+    atari.io.CONSOL_OPTION := kbd.io.consolOption | kbd.io.ctrlOption
+    atari.io.CONSOL_SELECT := kbd.io.consolSelect | kbd.io.ctrlSelect
+    atari.io.CONSOL_START  := kbd.io.consolStart  | kbd.io.ctrlStart
+    atari.io.SIO_RXD := True                       // no SIO disk (Phase 2c)
 
     atari.io.DMA_FETCH := False
     atari.io.DMA_READ_ENABLE := False
@@ -143,7 +166,7 @@ class Atari800WukongTop extends Component {
     arb.io.a.refresh := vblankCnt >= 2048
 
     val sdramReady = BufferCC(sdramCtrl.io.reset_client_n, False)
-    atari.io.HALT := ~sdramReady
+    atari.io.HALT := ~sdramReady | kbd.io.ctrlHalt   // supervisor menu can pause the 6502
 
     // Port B — framebuffer write (capture raw 8-bit GTIA index).
     val fbWrite = new VideoFbWrite(fbBase = 0x100000, width = 384, strideLog2 = 9, height = 288, addrWidth = 24, clearOnReset = true)

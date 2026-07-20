@@ -9,6 +9,12 @@
 #define PIN_TCK 22
 #define PIN_TDI 24
 #define PIN_TDO 25
+#elif defined(BOARD_WUKONG)
+// Wukong: JTAG matches the dirtyJtag wiring — TCK=GP0, TDO=GP1, TMS=GP2, TDI=GP3.
+#define PIN_TCK 0
+#define PIN_TDO 1
+#define PIN_TMS 2
+#define PIN_TDI 3
 #else
 #define PIN_TMS 0
 #define PIN_TCK 1

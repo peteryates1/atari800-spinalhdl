@@ -20,6 +20,13 @@ set_property -dict {PACKAGE_PIN E2 IOSTANDARD TMDS_33} [get_ports {tmds_data_n[1
 set_property -dict {PACKAGE_PIN G2 IOSTANDARD TMDS_33} [get_ports {tmds_data_p[2]}]
 set_property -dict {PACKAGE_PIN G1 IOSTANDARD TMDS_33} [get_ports {tmds_data_n[2]}]
 
+# --- Supervisor SPI link (Pico 2 W SPI1 -> J11 bank 35, LVCMOS33) ---
+# J11 pins: 1=H4(GP12 MISO), 2=F4(GP13 CSn), 3=A4(GP14 SCK), 4=A5(GP15 MOSI)
+set_property -dict {PACKAGE_PIN A4 IOSTANDARD LVCMOS33} [get_ports fpga_spi_sck]
+set_property -dict {PACKAGE_PIN A5 IOSTANDARD LVCMOS33} [get_ports fpga_spi_mosi]
+set_property -dict {PACKAGE_PIN F4 IOSTANDARD LVCMOS33} [get_ports fpga_spi_csn]
+set_property -dict {PACKAGE_PIN H4 IOSTANDARD LVCMOS33} [get_ports fpga_spi_miso]
+
 # --- W9825G6KH SDRAM (LVCMOS33) ---
 set_property IOSTANDARD LVCMOS33 [get_ports -regexp {sdram_.*}]
 set_property PACKAGE_PIN G22 [get_ports sdram_clk]
