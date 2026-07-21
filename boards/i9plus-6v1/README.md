@@ -8,6 +8,9 @@ modules — the basis for one base board that accepts either family. On-module:
 The Atari core uses roughly a quarter of the LUTs and well under a fifth of the
 BRAM here, so logic/BRAM are not the constraint.
 
+Module pinouts and schematics are from
+[wuxx/Colorlight-FPGA-Projects](https://github.com/wuxx/Colorlight-FPGA-Projects).
+
 **HDMI 1080p60 — achievable on a -2 module (corrected 2026-07-20).** An earlier note
 here claimed the 50T "caps at 720p, needs a -3." That was wrong — it read a
 *conservative* clock spec as a hard wall. A real OSERDESE2 10:1 serializer (the same

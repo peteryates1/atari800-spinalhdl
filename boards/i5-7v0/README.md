@@ -3,6 +3,9 @@
 The i5 is the ECP5 member of the shared-base-board plan (same DDR2-SODIMM-200 socket as the
 i9 and the Artix i9+). On-module: LFE5U-25F, EtronTech EM638325BK-6H 8 MB SDRAM, SPI flash.
 
+Module pinouts, schematics, and the open-source flow come from
+[wuxx/Colorlight-FPGA-Projects](https://github.com/wuxx/Colorlight-FPGA-Projects).
+
 ## Build & HDMI test
 
 Open-source ECP5 flow — **yosys → nextpnr-ecp5 → ecppack** (plus `sbt` for SpinalHDL→SV),

@@ -273,6 +273,10 @@ This project builds on a number of open-source works:
   RAM, DDR for the framebuffer/scaler — is exactly the arrangement the Wukong
   board (W9825 SDR + MT41K DDR3) was chosen to provide, and the reference for
   eventually porting MiST/MiSTer cores to this Xilinx + Pico-supervisor world.
+- **[wuxx/Colorlight-FPGA-Projects](https://github.com/wuxx/Colorlight-FPGA-Projects)**
+  — the community reference for the Colorlight i5 / i9 (ECP5) and i9+ (Artix) SODIMM
+  modules: pinouts, schematics, and the open-source (yosys/nextpnr) flow that the
+  `i5-7v0/`, `i9plus-6v1/`, and `rp2040-colorlight/` boards build on.
 
 **RP2040 / Pico supervisor firmware** (`firmware/supervisor/`)
 - **[Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk)**

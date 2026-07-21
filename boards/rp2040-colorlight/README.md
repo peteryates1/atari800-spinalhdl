@@ -5,6 +5,9 @@ SODIMM module (U4). RP2040-STAMP supervisor (U1) + HDMI + 2× DB9 joystick + mic
 host + native USB + audio + optional 1 Mbit SRAM (U10). Design source: the `Netlist_*.enet`
 EasyEDA export in this folder.
 
+The Colorlight i5 / i9 / i9+ module pinouts and schematics are from
+[wuxx/Colorlight-FPGA-Projects](https://github.com/wuxx/Colorlight-FPGA-Projects).
+
 ## Building for a specific board (CLI switches)
 
 ### Supervisor firmware (RP2040)
