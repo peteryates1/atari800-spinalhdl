@@ -1,4 +1,4 @@
-# Project Status — 2026-07-20
+# Project Status — 2026-07-21
 
 Handoff snapshot. There are now **two hardware-verified Atari boards**:
 
@@ -48,6 +48,33 @@ D1:, and a self-booting cold power cycle from the card alone.
 Dev loop is `make atari` (build → push the `.bit` to SD → supervisor configures +
 boots it, all over USB). See the board README for architecture, wiring, the deploy
 tool (`push_file.py` / `make push-core`), and the supervisor console commands.
+
+## Supervisor UX + network SD manager
+
+Improvements to the supervisor, verified on **both** boards unless noted:
+- **Cart/disk pickers are A-Z sorted + type-to-filter** (Alt-F12 → `[c]` / `[1-4]`):
+  type letters to narrow the list, a digit picks (`0` = none, `1-9` = filtered item),
+  Enter picks the top match, Backspace edits, ESC clears then cancels. Scales past a
+  screenful. Same behaviour on the console and the on-screen (USB-keyboard) menu.
+- **F8 → SYSTEM RESET** (in `RpAtariKeyboard`), joining F5/F6/F7 = Start/Select/Option.
+- Turbo toggle, pause/resume, live cart/disk edit, save/reload config — as before.
+
+**Network SD manager — Pico 2 W only** (uses the on-board CYW43439; compile-gated to
+`_w` boards). Toggle WiFi from the menu `[w]` or console `N` — it shows "connecting…"
+then the IP. While up, a small **HTTP web UI at `http://<ip>/`** browses the SD
+(clickable breadcrumb path), uploads carts/disks (drag-drop, streamed straight to SD),
+creates folders, deletes, and filters the current folder. Credentials live in
+`/wifi.txt` on the SD (line 1 SSID, line 2 password). Off by default. **Not available
+on the RP2040-STAMP** (no radio).
+
+**Cross-board note (2026-07-21):** the shared firmware (sort + type-to-filter) and the
+FPGA F8 reset both regression-pass on the original **10CL025 + RP2040-STAMP**. That
+STAMP's **native-USB connector physically broke**, so on that board there is no CDC
+console / MSC drive / USB-Blaster: flash the firmware over **SWD** (`rp2040.cfg`;
+`build/` = BOARD=qmtech, PICO_BOARD=pico) and update the SD with a **card reader**.
+Rebuild its Altera FPGA for F8 in
+`boards/atari-800-rp2040-qmtech-10cl025/atari_starraiders` (`make build` →
+`quartus_cpf -o bitstream_compression=off *.sof *.rbf` → copy to SD `/atari/800/core.rbf`).
 
 ## Architecture
 

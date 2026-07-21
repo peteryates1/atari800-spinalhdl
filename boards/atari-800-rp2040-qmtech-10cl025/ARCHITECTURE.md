@@ -242,3 +242,25 @@ console switches.
 **Roadmap**: supervisor overlay/menu UI (it can already take the screen),
 disk images via SIO, RP2040→FPGA configuration from SD (the last step to
 a fully self-contained SD-boot board), JOP integration for the 10CL025.
+
+---
+
+## Update (2026-07-21) — this doc is an early snapshot; see `STATUS.md`
+
+Most of the roadmap above is **done** and hardware-verified — SD-side FPGA config,
+config-boot from SD, SIO disk images, the Alt-F12 supervisor menu on HDMI, turbo
+toggle, F8 → SYSTEM RESET, and an A-Z + type-to-filter cart/disk picker. The
+top-level **`STATUS.md`** is the current handoff (this board is the "original" of
+two; the Wukong Artix board is the 1080p sibling).
+
+**Hardware note — the RP2040-STAMP's native-USB connector physically broke.** So on
+this board there is **no CDC console / MSC drive / USB-Blaster**. It doesn't stop the
+machine (config-boot, USB-*host* keyboard, SPI-to-FPGA, SIO all work):
+- **Flash the STAMP firmware over SWD** (Raspberry Pi debug probe): `openocd -f
+  interface/cmsis-dap.cfg -c "adapter speed 5000" -f target/rp2040.cfg -c "program
+  firmware/supervisor/build/supervisor.elf verify reset exit"` (RP2040 → `rp2040.cfg`).
+- **Update the SD** (`core.rbf`, config, carts, disks) with a **physical card reader**
+  (no MSC/WiFi paths on this board).
+- **Rebuild the Altera FPGA** in `atari_starraiders/` (`make build` → `quartus_cpf -o
+  bitstream_compression=off output_files/*.sof output_files/*.rbf` → SD
+  `/atari/800/core.rbf`) when the RTL changes (e.g. to get F8).

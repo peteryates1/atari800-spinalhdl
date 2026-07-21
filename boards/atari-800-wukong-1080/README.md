@@ -112,10 +112,27 @@ Access with a terminal that asserts DTR (raw `cat`/`head` hang on flow control).
 | `F` | Configure the Artix from the SD `/atari/800/core.bit` on demand |
 | `B` | Config-boot the Atari (load OS/cart/disks from SD) |
 | `U` | Receive a file over USB and write it to SD (used by `push_file.py`) |
+| `N` | Toggle WiFi (join / disconnect) and show the IP |
 | `T` | SD write self-test (proves the write path) |
 | `i` / `d` | SD init/info / mount + list |
 | `J` | Read the FPGA JTAG IDCODE |
 | `~` | Open the supervisor menu over the console |
+
+## Network SD manager (WiFi + web UI)
+
+The Pico 2 W's **on-board CYW43439** hosts an optional web UI for managing the SD over
+WiFi — no card-pulling, no MSC/eject. **Off by default**; bring it up from the menu
+`[w]` or console `N` (shows "connecting…", then the IP). It uses the standard
+`pico_cyw43_arch_lwip_poll` and is compile-gated to `_w` boards (`HAVE_WIFI`).
+
+- **Credentials:** `/wifi.txt` on the SD — line 1 SSID, line 2 password (empty = open).
+- **Web UI** at `http://<ip>/` (raw-lwIP-TCP server, `httpsrv.c`): browse the card with a
+  clickable breadcrumb path + per-folder filter, **drag-drop upload** carts/disks
+  (streamed straight to FatFs), **create folders**, and delete files.
+- **API:** `GET /api/list?dir=`, `POST /api/upload?path=` (raw body), `POST
+  /api/delete?path=`, `POST /api/mkdir?path=`.
+- The **type-to-filter cart/disk picker** (Alt-F12 menu, A-Z sorted) is separate and
+  works on all boards — see the top-level `STATUS.md`.
 
 ## Key files
 
@@ -126,7 +143,9 @@ Access with a terminal that asserts DTR (raw `cat`/`head` hang on flow control).
 - RTL: `atari/src/main/scala/atari800/Atari800WukongTop.scala` (top),
   `TextOverlay1080.scala`, `RpAtariKeyboard.scala`, and the shared LG video pipeline
 - Firmware: `firmware/supervisor/` (`-DBOARD=wukong`), notably `fpga_config.c`
-  (`fpga_config_from_sd`), `main.c` (config-boot, `U`/`F`/`T`), `sd_spi.c`
+  (`fpga_config_from_sd`), `main.c` (config-boot, `U`/`F`/`T`/`N`), `sd_spi.c`,
+  `wifi.c` + `httpsrv.c` + `lwipopts.h` (WiFi + web UI, `_w` boards only),
+  `supervisor.c` (menu + type-to-filter picker)
 - Deploy tool: `firmware/supervisor/tools/push_file.py`
 
 ## Known notes
