@@ -63,9 +63,10 @@ bool wifi_on(void) {
 void wifi_off(void) {
     if (!s_inited) return;
     httpsrv_stop();
+    // Disconnect but keep cyw43 initialised — cyw43_arch_deinit() in poll mode can
+    // hang the cooperative loop (it left the console dead once). "off" = not joined,
+    // not serving; wifi_poll() stays a cheap no-op poll. wifi_on() re-joins.
     if (s_up) cyw43_arch_disable_sta_mode();
-    cyw43_arch_deinit();
-    s_inited = false;
     s_up = false;
     cdc_printf("wifi: off\r\n");
 }
