@@ -109,11 +109,14 @@ tools/
 
 ### Prerequisites
 
-- JDK 11+
-- SBT 1.9+
-- Intel Quartus Prime 25.1+ (Lite Edition) — for Cyclone 10 LP build
-- yosys + nextpnr-ecp5 + ecppack — for ECP5 build (distro packages sufficient)
-- Vivado 2025.2 — for Artix-7 build
+- **JDK 11+** and **SBT 1.9+** — SpinalHDL (generates the SystemVerilog)
+- **FPGA toolchain** for your board:
+  - Intel Quartus Prime 25.1+ (Lite) — Cyclone 10 LP (10CL025)
+  - Vivado 2025.2 — Artix-7 (Wukong, i9+)
+  - yosys + nextpnr-ecp5 + ecppack — ECP5 (Colorlight i5/i9)
+- **Supervisor firmware:** the Raspberry Pi **Pico SDK** + CMake (arm-none-eabi
+  toolchain), and **`pyserial`** for the host deploy tools (`push_file.py`, the
+  console scripts). `Pico-PIO-USB` is a submodule (USB-host keyboard).
 
 ### Clone with submodule
 
@@ -177,31 +180,21 @@ Each active board builds from its own directory:
 OS, cartridge, and disk images come from the SD card (a JSON config), not baked
 into the bitstream.
 
-### ECP5 synthesis (Colorlight i5 — LFE5U-25F)
+### Other board targets (Colorlight)
 
-```sh
-cd boards/i5-7v0
-make generate   # SpinalHDL → generated/Atari800Ecp5BramTop.sv
-make synth      # yosys synthesis + utilisation report
-make pnr        # nextpnr place-and-route + timing
-make bitstream
-```
+- **ECP5 720p (Colorlight i5, hardware-verified)** — `Atari800Ecp5Hdmi720Top`,
+  built via `boards/i5-7v0/oddrx2f_720/build_atari720.sh` (yosys → nextpnr-ecp5 →
+  ecppack). The i9 module (LFE5U-45F) shares the flow with more headroom.
+- **Colorlight base board** (`boards/atari-800-rp2040-colorlight/`) — one RP2040
+  supervisor board taking either a Colorlight i5/i9 (ECP5) or i9+ (Artix XC7A50T)
+  SODIMM module; FPGA pin constraints under `fpga/`.
+- **Artix-7 i9+ 1080p HDMI timing probe** — `boards/i9plus-6v1/hdmi_test/`
+  (`build_hdmi.tcl`), the OSERDES-on-real-pins check behind the i9+ 1080p analysis
+  in that board's `README.md`.
 
-### ECP5 synthesis (Colorlight i9 module — LFE5U-45F)
-
-```sh
-cd boards/i9-7v2
-make synth    # synthesis (device-agnostic; 39% LUT utilisation)
-make pnr      # requires colorlight_i9.lpf pin assignments
-```
-
-### Vivado synthesis (Colorlight i9+ — XC7A50T)
-
-```sh
-cd boards/i9plus-6v1
-/opt/xilinx/2025.2/Vivado/bin/vivado -mode batch -source synth_check.tcl
-# Reports: synth_util.rpt, synth_timing.rpt
-```
+*(The older top-level `i5-7v0/Makefile`, `i9-7v2/Makefile`, and `i9plus-6v1/
+synth_check.tcl` were JOP/BRAM-only fit-checks and no longer build — the tops they
+referenced were removed.)*
 
 ## Simulation
 
@@ -215,11 +208,12 @@ The testbench (`Atari800CoreSimTb`) provides:
 - **Cartridge ROM loading** — any 8K `.rom` file loaded at elaboration time
   into the $A000-$BFFF cartridge slot
 
-Configuration in `Atari800CoreSim.scala`:
+Configuration (`Atari800CoreSimTb` constructs `Atari800CoreSim`):
 - `cycle_length = 32` — simulation speed (32 main clocks per colour clock)
 - `internal_rom = 3` — Atari 800 OS (atariosb.rom + atarios2.rom)
-- `internal_ram = 16384` — 16K internal RAM (48K total with SDRAM model)
-- `cartridge_rom` — path to 8K/16K ROM file (empty = no cartridge)
+- `internal_ram = 0` — all 48K RAM served by the behavioral SDRAM model (this is
+  the core-in-isolation sim; the boards run RAM from BRAM instead)
+- `cartridge_rom` — path to an 8K/16K ROM (default `roms/Star Raiders.rom`)
 
 ## Architecture
 
@@ -248,43 +242,19 @@ mode 2 (ANTIC's 40-column text mode). Fix: `Gtia.scala` lines 611-612.
 
 ## Resource Utilisation
 
-The Atari (RAM + OS + cart) lives entirely in BRAM; the SDRAM carries only the
-video framebuffer. OS/cart/disk images load from the SD card at runtime.
+The Atari (RAM + OS + cart) is entirely in BRAM; SDRAM carries only the video
+framebuffer. OS/cart/disk load from SD at runtime. The Atari core itself is small
+— the SDRAM framebuffer/scaler + on-screen overlay dominate the video path.
 
-### Cyclone 10 LP — 10CL025 (10CL025 + RP2040-STAMP, 720p)
-
-The Atari-in-BRAM + the SDRAM framebuffer scaler + the on-screen text overlay fit
-the 10CL025 at **66 / 66 M9K** — the block-RAM budget is the tight constraint on
-this part (see the M9K-budget notes in `STATUS.md`). Logic ~45%.
-
-### ECP5 — LFE5U-25F (Colorlight i5)
-
-| Resource | Used | Available | % |
-|---|---|---|---|
-| LUT4 | 17,221 | 24,000 | 72% |
-| DP16KD BRAM | 19 | 56 | 34% |
-| TRELLIS_FF | 7,619 | — | — |
-
-### ECP5 — LFE5U-45F (Colorlight i9 module)
-
-Same synthesis result as i5 (synth_ecp5 is device-agnostic); more headroom:
-
-| Resource | Used | Available | % |
-|---|---|---|---|
-| LUT4 | 17,221 | 44,000 | 39% |
-| DP16KD BRAM | 19 | 108 | 18% |
-| TRELLIS_FF | 7,619 | — | — |
-
-Note: i9 has 32-bit wide SDRAM (M12L64322A). SdramStatemachine configured for
-16-bit; full 32-bit width support is pending.
-
-### Artix-7 — XC7A50T (Colorlight i9+)
-
-| Resource | Used | Available | % |
-|---|---|---|---|
-| Slice LUTs | 7,649 | 32,600 | 23% |
-| BRAM Tiles | ~20 | 75 | ~27% |
-| DSP48E1 | 5 | 120 | 4% |
+- **Cyclone 10 LP 10CL025** (720p, hardware-verified) — block RAM is the tight
+  constraint: **66 / 66 M9K**; logic ~45%. See the M9K-budget notes in `STATUS.md`.
+- **Artix-7 XC7A100T** (Wukong, 1080p, from the routed build) — **~4,192 LUT
+  (6.6%), ~4,868 FF (3.8%), 22 BRAM36 (16%)**, 3 MMCM, 8 OSERDESE2, 0 DSP.
+- **Artix-7 XC7A50T** (i9+) — the same core is die-independent in LUT/FF/BRAM, so
+  it lands at **~13% LUT / ~29% BRAM** — comfortable. (The 1080p HDMI *timing*
+  question for this part is analysed in `boards/i9plus-6v1/README.md`.)
+- **ECP5** (Colorlight i5/i9, 720p) — fits with headroom; re-synthesise
+  `Atari800Ecp5Hdmi720Top` for exact numbers.
 
 ## Acknowledgements
 
