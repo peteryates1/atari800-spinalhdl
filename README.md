@@ -31,30 +31,12 @@ All ANTIC display modes, GTIA colour rendering (including highres mode 2),
 DMA pipeline, NMI/IRQ handling, and the 6502 CPU are verified working.
 Frame capture produces correct PAL-palette colour output.
 
-**Hardware verified** — memo pad and Star Raiders confirmed running on
-QMTECH EP4CGX150 + DB_FPGA daughter board v4 (VGA output, 56.67 MHz). See
-`boards/db_fpga_v4/qmtech-ep4cgx150/` for the DB_FPGA build path and
-`boards/atari800-lg-v1/` for the in-progress ATARI-800-LG-V1 base-board path.
-
-### Dual-PLL build
-
-JOP supervisor at 80 MHz + Atari core at 56.67 MHz using two independent PLLs
-with clock domain crossing. JOP has its own 32 MB SDRAM (W9825G6JH6) via
-BmbSdramCtrl32; Atari runs BRAM-only (48K user space, with cart ROM
-auto-replacing upper RAM). JOP handles USB keyboard (CH376S via SPI),
-serial keyboard relay, joystick input, console keys, SIO disk emulation
-(in progress), and cold reset.
-
-DB_FPGA v4 wiring (`boards/db_fpga_v4/qmtech-ep4cgx150/atari_ep4cgx150_dualpll/`):
-- **PMOD J10**: Joystick 1 (active low, DB-9)
-- **PMOD J11**: CH376S SPI module (USB keyboard + SD card host)
-- **UART**: CP2102N on DB_FPGA v4 — JOP serial boot (2 Mbaud) + keyboard relay
-
-ATARI-800-LG-V1 base board wiring (`boards/atari800-lg-v1/qmtech-ep4cgx150/atari800_lg_v1/`):
-- **DB-9 J3/J4**: Joysticks 1 and 2 directly on the base board
-- **CH340 USB-serial**: onboard, JOP serial boot
-- **CH376T x2**: keyboard CH376T + SD-card CH376T, both on base-board pins
-- **VGA, audio, console keys**: 5-bit RGB DAC, sigma-delta audio, 4 console buttons
+**Hardware verified on the two active boards** (see **[STATUS.md](STATUS.md)**):
+- **10CL025 + RP2040-STAMP** (720p): Star Raiders / Pole Position carts, DOS 2.5
+  off an emulated SIO disk, the Alt-F12 on-screen menu, and SD-side FPGA boot.
+- **Wukong (Artix-7) + Pico 2 W** (native 1080p60): a fully self-contained SD
+  appliance — the Pico JTAG-configures the FPGA from the card, then loads OS +
+  cart + disks from SD; plus an optional WiFi web UI for managing the card.
 
 ## Origins
 
@@ -107,41 +89,18 @@ boards/
   atari-800-wukong-1080/            ACTIVE: QMTech Wukong (Artix-7) + Pico 2 W, 1080p60
     vivado/                           Vivado project (rgb2dvi HDMI, W9825 SDRAM); Makefile
     README.md                         board doc (architecture, wiring, make atari / push-core)
-  common/                       Shared per-FPGA-family entities (PLLs, etc.)
-    cyclone4/ cyclone10/          PLL primitives
-  db_fpga_v4/qmtech-ep4cgx150/  HISTORICAL: QMTECH EP4CGX150 (Cyclone IV GX) — JOP-era,
-                                tops removed; hardware/pin reference only
-  atari800-lg-v1/               ATARI-800-LG-V1 base board (CH340 UART, CH376T USB/SD, VGA, joysticks)
-    qmtech-ep4cgx150/             EP4CGX150 core builds for V1 base board
-      atari800_lg_v1/                Dual-PLL Atari + JOP (uses Atari800Ep4cgx150DualPllTop)
-      atari800_lg_v1_bram/           BRAM-only build (no JOP, no SDRAM)
-      ch376_test/                    CH376T standalone bring-up test
-      vga_test/                      VGA test pattern (no SpinalHDL)
-    qmtech-10cl025/               10CL025 core build for V1 base board
-      atari800_lg_v1_10cl025/        BRAM-only build (40K RAM + cart + OS = 58 of 66 M9K)
-  atari800-lg-v1.1/             ATARI-800-LG-V1.1 base board layout (next-rev hardware)
-    pin-mapping.md                  U9 connector → FPGA pin cross-reference for all 3 cores
-    {ep4cgx150,10cl025}/            v1_1_pins.tcl — Quartus pin assignment scripts
-    xc7a100t/                       v1_1_pins.xdc — Vivado pin constraints
-    hw/                             Gerbers, BOM, 3D model, assembly drawings
-    Netlist_*.enet                  KiCad-exported netlist (source of truth)
-  AC608/                        Cyclone 10 LP custom board (Quartus 25.1)
+  atari-800-rp2040-colorlight/  Unified RP2040 + Colorlight i5/i9 (ECP5) / i9+ (Artix) SODIMM base board
+  atari-800-rp2040-qmtech-xc7a100t/  Custom Artix-7 baseboard (HDMI pin decision + docs)
+  qm_xc7a100t_wukong/           Wukong board hardware notes (dual SDR + DDR3, pinouts)
   i5-7v0/                       Colorlight i5 v7.0 (ECP5 LFE5U-25F, yosys/nextpnr)
   i9-7v2/                       Colorlight i9 v7.2 (ECP5 LFE5U-45F, yosys/nextpnr)
-  i9plus-6v1/                   Colorlight i9+ v6.1 (XC7A50T, Vivado)
+  i9plus-6v1/                   Colorlight i9+ v6.1 (XC7A50T, Vivado) + hdmi_test/
 generated/               SpinalHDL output (.sv + .bin) — gitignored
-unused_scala/            Archived/inactive modules
 tools/
   atari_keyboard.py      Serial keyboard/joystick relay (host-side Python)
   atari_peek.py          Peek Atari RAM via the supervisor 'M' command
   atari_peek_raw.py      Raw 'M' peek for protocol debugging
-  ch376_keyboard.py      CH376T USB-host keyboard helper (host-side)
-  ch376_sdcard_test.py   CH376T SD-card protocol test
-  ch376_spi_test.py      CH376T SPI mode test
-  ch376s_test.py         CH376S SPI test (Pico MicroPython)
-  ch376s_uart_test.py    CH376S UART test (Pico MicroPython)
   pico_kbd_test/         Pi Pico USB HID test fixture (TinyUSB-based)
-Makefile                 Top-level build orchestration (legacy AC608 path)
 ```
 
 ## Building
@@ -202,80 +161,19 @@ Output lands in `generated/` (gitignored). The active boards drive it through
 their own build (`boards/atari-800-wukong-1080/Makefile`,
 `boards/atari-800-rp2040-qmtech-10cl025/atari_starraiders/Makefile`).
 
-### EP4CGX150 + DB_FPGA v4 builds
+### Board builds
 
-Each project lives in its own directory under
-`boards/db_fpga_v4/qmtech-ep4cgx150/`:
+Each active board builds from its own directory:
 
-```sh
-# Bare-metal (no JOP) — single PLL, BRAM-only
-cd boards/db_fpga_v4/qmtech-ep4cgx150/atari_ep4cgx150
-make generate   # SpinalHDL → generated/Atari800Ep4cgx150Top.sv
-make build      # Quartus compile
-make program    # JTAG via USB-Blaster
+- **Wukong (Artix-7, native 1080p60)** — `boards/atari-800-wukong-1080/`:
+  `make atari` (build the `.bit` → push it to the SD → the supervisor configures
+  the FPGA and boots the Atari, all over USB). See that board's `README.md`.
+- **10CL025 + RP2040-STAMP (720p)** — `boards/atari-800-rp2040-qmtech-10cl025/atari_starraiders/`:
+  `make build` (Quartus) → `quartus_cpf -o bitstream_compression=off *.sof *.rbf`,
+  then copy the `.rbf` to the SD as `/atari/800/core.rbf` (see `STATUS.md`).
 
-# Single-PLL JOP (56.67 MHz shared clock)
-cd boards/db_fpga_v4/qmtech-ep4cgx150/atari_ep4cgx150_jop
-make generate
-make build
-make program
-make download   # Serial boot AtariSupervisor.jop (500 kbaud)
-
-# Dual-PLL JOP (80 MHz JOP + 56.67 MHz Atari, recommended)
-cd boards/db_fpga_v4/qmtech-ep4cgx150/atari_ep4cgx150_dualpll
-make generate
-make build
-make program
-make download   # Serial boot AtariSupervisor.jop
-make run        # program + download + monitor in one step
-```
-
-All Quartus build artifacts go to `output_files/` per project. *(These EP4CGX150
-"JOP" projects are historical — their SpinalHDL tops were removed with the JOP
-soft-core; kept for the hardware/pin reference only.)*
-
-Cartridge ROM is set via `cartridge_rom` in the top-level Scala file
-(default: `roms/Star Raiders.rom`). Place `.rom` files in the `roms/` directory.
-
-### ATARI-800-LG-V1 base-board builds
-
-The LG-V1 base board houses one of two QMTECH core boards. Each core has
-its own per-project subtree under `boards/atari800-lg-v1/`:
-
-```sh
-# QMTECH EP4CGX150 — main dual-PLL Atari + JOP build
-cd boards/atari800-lg-v1/qmtech-ep4cgx150/atari800_lg_v1
-make generate        # → generated/Atari800Ep4cgx150DualPllTop.sv
-make build && make program
-
-# QMTECH EP4CGX150 — BRAM-only (no JOP, no SDRAM)
-cd boards/atari800-lg-v1/qmtech-ep4cgx150/atari800_lg_v1_bram
-make generate        # → generated/Atari800LgV1Top.sv
-make build && make program
-
-# QMTECH EP4CGX150 — CH376T standalone bring-up test
-cd boards/atari800-lg-v1/qmtech-ep4cgx150/ch376_test
-make generate && make build && make program
-
-# QMTECH EP4CGX150 — VGA test pattern (no SpinalHDL step)
-cd boards/atari800-lg-v1/qmtech-ep4cgx150/vga_test
-make build && make program
-
-# QMTECH 10CL025 — BRAM-only fit (40K RAM + cart + OS = 58 of 66 M9K)
-cd boards/atari800-lg-v1/qmtech-10cl025/atari800_lg_v1_10cl025
-make generate && make build && make program
-```
-
-### ATARI-800-LG-V1.1 pin assignments
-
-The next-rev base board uses a single 128-pin connector U9. There are no
-build projects yet — instead, `boards/atari800-lg-v1.1/` ships the
-schematic netlist, gerbers, and per-FPGA pin assignment scripts ready to
-source from a Quartus QSF or Vivado XDC:
-
-- `pin-mapping.md` — full U9 → FPGA pin cross-reference (EP4CGX150, 10CL025, XC7A100T)
-- `ep4cgx150/v1_1_pins.tcl`, `10cl025/v1_1_pins.tcl` — Quartus pin assignment scripts
-- `xc7a100t/v1_1_pins.xdc` — Vivado pin constraints
+OS, cartridge, and disk images come from the SD card (a JSON config), not baked
+into the bitstream.
 
 ### ECP5 synthesis (Colorlight i5 — LFE5U-25F)
 
@@ -302,12 +200,6 @@ cd boards/i9plus-6v1
 /opt/xilinx/2025.2/Vivado/bin/vivado -mode batch -source synth_check.tcl
 # Reports: synth_util.rpt, synth_timing.rpt
 ```
-
-### Legacy top-level build (AC608 / Cyclone 10 LP)
-
-The repo root retains a `Makefile` with the original AC608 build flow
-(`make generate`, `make quartus`, etc. — drives `boards/AC608/`). All
-other boards have moved to the per-project layout above.
 
 ## Simulation
 
@@ -354,48 +246,14 @@ mode 2 (ANTIC's 40-column text mode). Fix: `Gtia.scala` lines 611-612.
 
 ## Resource Utilisation
 
-OS and cartridge ROMs are loaded from binary `.rom` files at elaboration time
-into block RAM (bare-metal builds). In JOP supervisor builds, cartridge and
-BASIC ROMs can be loaded at runtime from SD card into internal RAM.
-All targets meet timing at their respective clock frequencies.
+The Atari (RAM + OS + cart) lives entirely in BRAM; the SDRAM carries only the
+video framebuffer. OS/cart/disk images load from the SD card at runtime.
 
-### Cyclone IV GX — EP4CGX150DF27I7 (QMTECH EP4CGX150, **hardware verified**)
+### Cyclone 10 LP — 10CL025 (10CL025 + RP2040-STAMP, 720p)
 
-Bare-metal bring-up top (no JOP). Atari 800 OS + 16K internal RAM + Star Raiders ROM.
-
-| Resource | Used | Available | % |
-|---|---|---|---|
-| Logic Elements | 3,604 | 149,760 | 2% |
-| Memory bits | 313,678 | 6,635,520 | 5% |
-| PLLs | 1 | 8 | 13% |
-
-Dual-PLL build (Atari + JOP + SDRAM, **hardware verified**).
-JOP at 80 MHz with 32 MB SDRAM, Atari at 56.67 MHz BRAM-only.
-
-| Resource | Used | Available | % |
-|---|---|---|---|
-| Logic Elements | 13,697 | 149,760 | 9% |
-| Memory bits | 659,600 | 6,635,520 | 10% |
-| DSP 9-bit | 8 | 720 | 1% |
-| PLLs | 2 | 8 | 25% |
-
-### Cyclone 10 LP — 10CL025YU256 (QMTECH 10CL025 + LG-V1, BRAM-only target)
-
-Atari 800 BRAM-only fit (no JOP, no SDRAM): 40K RAM + 8K cart + 10K OS
-ROM. Cart ROM auto-replaces upper RAM so total BRAM stays constant —
-~58 of 66 M9K used, leaving headroom for the I/O wrapper. Same Verilog
-as the EP4CGX150 LG-V1 BRAM build.
-
-### Cyclone 10 LP — 10CL025YU256C8G (custom board / AC608)
-
-Earlier custom-board fit, synthesised with Quartus Prime 25.1 Lite Edition.
-
-| Resource | Used | Available | % |
-|---|---|---|---|
-| Logic Elements | 15,411 | 24,624 | 63% |
-| Memory bits | 309,198 | 608,256 | 51% |
-| DSP 9-bit | 10 | 132 | 8% |
-| PLLs | 0 (stub) | 4 | 0% |
+The Atari-in-BRAM + the SDRAM framebuffer scaler + the on-screen text overlay fit
+the 10CL025 at **66 / 66 M9K** — the block-RAM budget is the tight constraint on
+this part (see the M9K-budget notes in `STATUS.md`). Logic ~45%.
 
 ### ECP5 — LFE5U-25F (Colorlight i5)
 
