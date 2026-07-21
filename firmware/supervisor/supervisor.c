@@ -18,6 +18,26 @@ static char names[16][CFG_NAME_LEN];       // last-listed folder names
 static int  nameCount;
 static bool g_turbo = false;               // 6502 turbo ('C' ctrl bit 6); persists pause/resume
 
+// ===== cart/disk picker: type-to-filter =====
+static char s_filter[CFG_NAME_LEN];        // current filter text within a pick
+#define PICK_LC(x) (((x) >= 'A' && (x) <= 'Z') ? (char)((x) + 32) : (x))
+static bool pick_match(const char *name) {           // case-insensitive substring
+  if (!s_filter[0]) return true;
+  int nl = (int)strlen(s_filter);
+  for (const char *p = name; *p; p++) {
+    int i = 0;
+    while (i < nl && p[i] && PICK_LC(p[i]) == PICK_LC(s_filter[i])) i++;
+    if (i == nl) return true;
+  }
+  return false;
+}
+static int pick_nth(int k) {                         // names[] index of k-th match, or -1
+  int seen = 0;
+  for (int i = 0; i < nameCount; i++)
+    if (pick_match(names[i])) { if (seen == k) return i; seen++; }
+  return -1;
+}
+
 bool sup_active(void) { return active; }
 
 static void sup_enter(void);
@@ -58,14 +78,19 @@ static void fb_render(void) {
   } else {
     fbtext_colors(0x0F, 0x00);
     fbtext_puts(2, 1, pending == PICK_CART ? "Choose cart:" : "Choose disk:");
-    int r = 3;
-    for (int i = 0; i < nameCount && r < FBT_ROWS - 1; i++, r++) {
-      char tag = (i < 10) ? (char)('0' + i) : (char)('a' + i - 10);
-      snprintf(buf, sizeof buf, " %c) %s", tag, names[i]);
-      fbtext_puts(r, 1, buf);
+    fbtext_colors(0x3E, 0x00);
+    snprintf(buf, sizeof buf, "Filter: %s_", s_filter);
+    fbtext_puts(3, 1, buf);
+    fbtext_colors(0x0F, 0x00);
+    fbtext_puts(4, 1, " 0) (none)");
+    int r = 5, shown = 0;
+    for (int i = 0; i < nameCount && r < FBT_ROWS - 1 && shown < 9; i++) {
+      if (!pick_match(names[i])) continue;
+      snprintf(buf, sizeof buf, " %d) %s", shown + 1, names[i]);
+      fbtext_puts(r++, 1, buf); shown++;
     }
     fbtext_colors(0x2C, 0x00);
-    fbtext_puts(FBT_ROWS - 1, 1, "[n] none   [x] cancel");
+    fbtext_puts(FBT_ROWS - 1, 1, "type=filter digit=pick esc=back");
   }
   fbtext_flush();
 }
@@ -91,15 +116,31 @@ static void print_menu(void) {
   fb_render();
 }
 
-static void list_folders(const char *subdir) {
-  nameCount = config_list_subdirs(live.machine, subdir, names, 16);
-  if (nameCount == 0) { cdc_printf("  (none found in %s)\r\n", subdir); return; }
+// Redraw the (filtered) pick list on the console + on-screen. Called on entry and
+// on every filter keystroke.
+static void render_pick(void) {
+  cdc_printf("\r\n%s  (filter: '%s')\r\n",
+             pending == PICK_CART ? "choose cart" : "choose disk", s_filter);
+  cdc_printf("  0) (none)\r\n");
+  int shown = 0, total = 0;
   for (int i = 0; i < nameCount; i++) {
-    char tag = (i < 10) ? (char)('0' + i) : (char)('a' + i - 10);
-    cdc_printf("  %c) %s\r\n", tag, names[i]);
+    if (!pick_match(names[i])) continue;
+    total++;
+    if (shown < 9) { cdc_printf("  %d) %s\r\n", shown + 1, names[i]); shown++; }
   }
-  cdc_printf("  [n] none   [x] cancel\r\n> ");
+  if (total > 9) cdc_printf("  (+%d more; type to narrow)\r\n", total - 9);
+  cdc_printf("  [type=filter  digit=pick  bksp=edit  esc=back]\r\n> ");
   fb_render();
+}
+
+// Apply a pick: idx into names[], or -1 for "(none)".
+static void do_pick(int idx) {
+  const char *nm = (idx < 0) ? NULL : names[idx];
+  bool ok = (pending == PICK_CART) ? config_select_cart(&live, nm)
+                                   : config_select_disk(&live, pendingDrive, nm);
+  if (!ok) cdc_printf("  (failed to load %s)\r\n", nm ? nm : "none");
+  pending = PICK_NONE;
+  print_menu();
 }
 
 // ===== transitions =====
@@ -125,41 +166,46 @@ static void sup_boot(void) {
   boot_run(&live);                          // applies live cart/disks + reset
 }
 
-// Map a listing tag char ('0'..'9','a'..'f') to an index, or -1.
-static int tag_index(char c) {
-  if (c >= '0' && c <= '9') return c - '0';
-  if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
-  return -1;
-}
-
 void sup_feed_key(char c) {
   if (!active) return;
 
   if (pending != PICK_NONE) {
-    if (c == 'x' || c == 0x1b) { pending = PICK_NONE; print_menu(); return; }
-    if (c == 'n') {
-      if (pending == PICK_CART) config_select_cart(&live, NULL);
-      else                      config_select_disk(&live, pendingDrive, NULL);
-      pending = PICK_NONE; print_menu(); return;
+    if (c == 0x1b) {                       // ESC: clear the filter, else cancel the pick
+      if (s_filter[0]) { s_filter[0] = 0; render_pick(); }
+      else { pending = PICK_NONE; print_menu(); }
+      return;
     }
-    int idx = tag_index(c);
-    if (idx >= 0 && idx < nameCount) {
-      bool ok = (pending == PICK_CART) ? config_select_cart(&live, names[idx])
-                                       : config_select_disk(&live, pendingDrive, names[idx]);
-      if (!ok) cdc_printf("  (failed to load %s)\r\n", names[idx]);
-      pending = PICK_NONE; print_menu();
+    if (c == 0x08 || c == 0x7f) {          // backspace: edit the filter
+      int l = (int)strlen(s_filter); if (l) s_filter[l - 1] = 0;
+      render_pick(); return;
+    }
+    if (c == '\r' || c == '\n') {          // Enter: pick the top filtered item
+      int idx = pick_nth(0); if (idx >= 0) do_pick(idx);
+      return;
+    }
+    if (c >= '0' && c <= '9') {            // digit: 0 = none, 1-9 = filtered item
+      if (c == '0') { do_pick(-1); return; }
+      int idx = pick_nth(c - '1'); if (idx >= 0) do_pick(idx);
+      return;
+    }
+    if (c >= ' ' && c < 0x7f) {            // printable: append to the filter
+      int l = (int)strlen(s_filter);
+      if (l < (int)sizeof(s_filter) - 1) { s_filter[l] = c; s_filter[l + 1] = 0; render_pick(); }
+      return;
     }
     return;
   }
 
   switch (c) {
     case 'c': case 'C':
-      pending = PICK_CART; cdc_printf("\r\nchoose cart:\r\n"); list_folders(live.cartDir);
+      pending = PICK_CART; s_filter[0] = 0;
+      nameCount = config_list_subdirs(live.machine, live.cartDir, names, 16);
+      render_pick();
       break;
     case '1': case '2': case '3': case '4':
-      pendingDrive = c - '1'; pending = PICK_DISK;
-      cdc_printf("\r\nchoose disk for D%d:\r\n", pendingDrive + 1);
-      list_folders(live.diskDir);
+      pendingDrive = c - '1'; pending = PICK_DISK; s_filter[0] = 0;
+      nameCount = config_list_subdirs(live.machine, live.diskDir, names, 16);
+      render_pick();
       break;
     case 'b': case 'B': sup_boot();   break;
     case 'q': case 'Q': case 0x1b: sup_resume(); break;
@@ -196,6 +242,9 @@ static char hid_to_ascii(uint8_t kc) {
   if (kc >= 0x1e && kc <= 0x26) return (char)('1' + (kc - 0x1e));  // 1..9
   if (kc == 0x27) return '0';
   if (kc == 0x29) return 0x1b;                                     // ESC
+  if (kc == 0x28) return '\r';                                     // Enter -> pick top match
+  if (kc == 0x2a) return 0x08;                                     // Backspace -> edit filter
+  if (kc == 0x2c) return ' ';                                      // Space -> filter char
   return 0;
 }
 
