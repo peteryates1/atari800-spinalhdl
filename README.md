@@ -96,9 +96,6 @@ boards/
   i9plus-6v1/                   Colorlight i9+ v6.1 (XC7A50T, Vivado) + hdmi_test/
 generated/               SpinalHDL output (.sv + .bin) — gitignored
 tools/
-  atari_keyboard.py      Serial keyboard/joystick relay (host-side Python)
-  atari_peek.py          Peek Atari RAM via the supervisor 'M' command
-  atari_peek_raw.py      Raw 'M' peek for protocol debugging
   pico_kbd_test/         Pi Pico USB HID test fixture (TinyUSB-based)
 ```
 
