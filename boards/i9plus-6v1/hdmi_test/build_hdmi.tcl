@@ -7,7 +7,7 @@
 set part [lindex $argv 0]
 set tag  [lindex $argv 1]
 set here [file dirname [file normalize [info script]]]
-set wuk  [file normalize [file join $here ../../atari-800-wukong-1080/vivado/src]]
+set wuk  [file normalize [file join $here ../../wukong-1080/vivado/src]]
 
 create_project -in_memory -part $part
 

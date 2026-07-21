@@ -56,8 +56,8 @@ roms/
 *.atr
 
 # Colorlight FPGA fit-check outputs
-boards/atari-800-rp2040-colorlight/fpga/fit/fit.json
-boards/atari-800-rp2040-colorlight/fpga/fit/fit.config
+boards/rp2040-colorlight/fpga/fit/fit.json
+boards/rp2040-colorlight/fpga/fit/fit.config
 
 generated/h720.json
 generated/h720.config

@@ -2,11 +2,11 @@
 
 Handoff snapshot. There are now **two hardware-verified Atari boards**:
 
-- **atari-800-rp2040-qmtech-10cl025** — QMTech Cyclone 10 LP + RP2040-STAMP + HDMI,
+- **rp2040-qmtech-10cl025** — QMTech Cyclone 10 LP + RP2040-STAMP + HDMI,
   **720p**. The original; detailed below.
-- **atari-800-wukong-1080** — QMTech Wukong (Xilinx Artix-7 XC7A100T) + Pico 2 W,
+- **wukong-1080** — QMTech Wukong (Xilinx Artix-7 XC7A100T) + Pico 2 W,
   **native 1080p60** and a fully self-contained SD appliance. Summarised in the next
-  section; full details in `boards/atari-800-wukong-1080/README.md`.
+  section; full details in `boards/wukong-1080/README.md`.
 
 Everything below is committed and hardware-verified unless noted.
 
@@ -31,7 +31,7 @@ min-pulse-width warning on the 371 MHz TMDS clock is a known model artifact).
 
 ## Second board — QMTech Wukong (native 1080p60 appliance)
 
-`boards/atari-800-wukong-1080/` (Xilinx Artix-7 XC7A100T + **Pico 2 W** supervisor).
+`boards/wukong-1080/` (Xilinx Artix-7 XC7A100T + **Pico 2 W** supervisor).
 Same core + video pipeline as the 10CL025, retargeted to Artix and **native
 1920×1080p60** (Digilent rgb2dvi/OSERDESE2), so the supervisor text is crisp with no
 monitor-upscale shimmer. Reuses the memory split (Atari fully in BRAM, W9825 SDRAM =
@@ -73,7 +73,7 @@ STAMP's **native-USB connector physically broke**, so on that board there is no 
 console / MSC drive / USB-Blaster: flash the firmware over **SWD** (`rp2040.cfg`;
 `build/` = BOARD=qmtech, PICO_BOARD=pico) and update the SD with a **card reader**.
 Rebuild its Altera FPGA for F8 in
-`boards/atari-800-rp2040-qmtech-10cl025/atari_starraiders` (`make build` →
+`boards/rp2040-qmtech-10cl025/atari_starraiders` (`make build` →
 `quartus_cpf -o bitstream_compression=off *.sof *.rbf` → copy to SD `/atari/800/core.rbf`).
 
 ## Architecture
@@ -219,7 +219,7 @@ recoverable from git history:
 # 1. Regenerate SystemVerilog from SpinalHDL (after Scala edits):
 sbt "atari/runMain atari800.Atari800Rp2040HdmiLgSv"
 # 2. Build the FPGA bitstream:
-cd boards/atari-800-rp2040-qmtech-10cl025/atari_starraiders
+cd boards/rp2040-qmtech-10cl025/atari_starraiders
 /opt/altera/25.1/quartus/bin/quartus_sh --flow compile atari_starraiders
 # 3a. DEV: program the .sof over the RP2040 USB-Blaster (volatile, lost on power-off):
 /opt/altera/25.1/quartus/bin/quartus_pgm -c 1 --mode=JTAG -o "P;output_files/atari_starraiders.sof@1"

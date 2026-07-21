@@ -7,9 +7,9 @@ hosts the USB keyboard, auto-boots from a JSON config, emulates SIO disk drives
 6502 runs at real, **cycle-accurate 1.79 MHz** (with a runtime turbo toggle).
 
 > **Active boards** — see **[STATUS.md](STATUS.md)** for the live snapshot:
-> - **atari-800-rp2040-qmtech-10cl025** — Cyclone 10 LP 10CL025 + RP2040-STAMP,
+> - **rp2040-qmtech-10cl025** — Cyclone 10 LP 10CL025 + RP2040-STAMP,
 >   **720p** HDMI. The original.
-> - **atari-800-wukong-1080** — QMTech Wukong (Xilinx Artix-7 XC7A100T) + Pico 2 W,
+> - **wukong-1080** — QMTech Wukong (Xilinx Artix-7 XC7A100T) + Pico 2 W,
 >   **native 1080p60**, a fully self-contained SD appliance (FPGA bitstream + OS +
 >   cart + disks all loaded from the card), with an optional **WiFi web UI** for
 >   managing the SD over the network.
@@ -32,11 +32,11 @@ Frame capture produces correct PAL-palette colour output.
 **Hardware verified on the two active boards** (see **[STATUS.md](STATUS.md)**):
 - **10CL025 + RP2040-STAMP** (720p): Star Raiders / Pole Position carts, DOS 2.5
   off an emulated SIO disk, the Alt-F12 on-screen menu, and SD-side FPGA boot.
-![Playing Star Raiders](boards/atari-800-rp2040-qmtech-10cl025/20260721_134809.jpg)
+![Playing Star Raiders](boards/rp2040-qmtech-10cl025/20260721_134809.jpg)
 - **Wukong (Artix-7) + Pico 2 W** (native 1080p60): a fully self-contained SD
   appliance — the Pico JTAG-configures the FPGA from the card, then loads OS +
   cart + disks from SD; plus an optional WiFi web UI for managing the card.
-![wukong-1080-experiment](boards/atari-800-wukong-1080/20260721_154628.jpg)
+![wukong-1080-experiment](boards/wukong-1080/20260721_154628.jpg)
 
 
 ## Origins
@@ -84,14 +84,14 @@ firmware/supervisor/     RP2040/Pico supervisor C firmware (config-boot, USB kbd
                          menu, SD-side FPGA config; Pico 2 W: WiFi + HTTP SD manager).
                          Build via CMake: -DBOARD=qmtech (STAMP) | wukong | colorlight
 boards/
-  atari-800-rp2040-qmtech-10cl025/  ACTIVE: Cyclone 10 LP 10CL025 + RP2040-STAMP, 720p
+  rp2040-qmtech-10cl025/  ACTIVE: Cyclone 10 LP 10CL025 + RP2040-STAMP, 720p
     atari_starraiders/                Quartus project (make build → .sof → .rbf for SD)
-  atari-800-wukong-1080/            ACTIVE: QMTech Wukong (Artix-7) + Pico 2 W, 1080p60
+  wukong-1080/            ACTIVE: QMTech Wukong (Artix-7) + Pico 2 W, 1080p60
     vivado/                           Vivado project (rgb2dvi HDMI, W9825 SDRAM); Makefile
     README.md                         board doc (architecture, wiring, make atari / push-core)
-  atari-800-rp2040-colorlight/  Unified RP2040 + Colorlight i5/i9 (ECP5) / i9+ (Artix) SODIMM base board
-  atari-800-rp2040-qmtech-xc7a100t/  Custom Artix-7 baseboard (HDMI pin decision + docs)
-  qm_xc7a100t_wukong/           Wukong board hardware notes (dual SDR + DDR3, pinouts)
+    HARDWARE.md / pin-mapping.md      board hardware ref (dual SDR+DDR3, pinouts, MiSTer bench)
+  rp2040-colorlight/  Unified RP2040 + Colorlight i5/i9 (ECP5) / i9+ (Artix) SODIMM base board
+  rp2040-qmtech-xc7a100t/  Custom Artix-7 baseboard (HDMI pin decision + docs)
   i5-7v0/                       Colorlight i5 (ECP5) 720p build scripts (oddrx2f_720/) + HDMI test
   i9plus-6v1/                   Colorlight i9+ v6.1 (XC7A50T, Vivado) + hdmi_test/
 generated/               SpinalHDL output (.sv + .bin) — gitignored
@@ -159,17 +159,17 @@ sbt "atari/runMain atari800.Atari800Rp2040HdmiLgSv"    # 10CL025 + RP2040-STAMP 
 ```
 
 Output lands in `generated/` (gitignored). The active boards drive it through
-their own build (`boards/atari-800-wukong-1080/Makefile`,
-`boards/atari-800-rp2040-qmtech-10cl025/atari_starraiders/Makefile`).
+their own build (`boards/wukong-1080/Makefile`,
+`boards/rp2040-qmtech-10cl025/atari_starraiders/Makefile`).
 
 ### Board builds
 
 Each active board builds from its own directory:
 
-- **Wukong (Artix-7, native 1080p60)** — `boards/atari-800-wukong-1080/`:
+- **Wukong (Artix-7, native 1080p60)** — `boards/wukong-1080/`:
   `make atari` (build the `.bit` → push it to the SD → the supervisor configures
   the FPGA and boots the Atari, all over USB). See that board's `README.md`.
-- **10CL025 + RP2040-STAMP (720p)** — `boards/atari-800-rp2040-qmtech-10cl025/atari_starraiders/`:
+- **10CL025 + RP2040-STAMP (720p)** — `boards/rp2040-qmtech-10cl025/atari_starraiders/`:
   `make build` (Quartus) → `quartus_cpf -o bitstream_compression=off *.sof *.rbf`,
   then copy the `.rbf` to the SD as `/atari/800/core.rbf` (see `STATUS.md`).
 
@@ -181,7 +181,7 @@ into the bitstream.
 - **ECP5 720p (Colorlight i5, hardware-verified)** — `Atari800Ecp5Hdmi720Top`,
   built via `boards/i5-7v0/oddrx2f_720/build_atari720.sh` (yosys → nextpnr-ecp5 →
   ecppack). The i9 module (LFE5U-45F) shares the flow with more headroom.
-- **Colorlight base board** (`boards/atari-800-rp2040-colorlight/`) — one RP2040
+- **Colorlight base board** (`boards/rp2040-colorlight/`) — one RP2040
   supervisor board taking either a Colorlight i5/i9 (ECP5) or i9+ (Artix XC7A50T)
   SODIMM module; FPGA pin constraints under `fpga/`.
 - **Artix-7 i9+ 1080p HDMI timing probe** — `boards/i9plus-6v1/hdmi_test/`
@@ -263,7 +263,7 @@ This project builds on a number of open-source works:
   description language and toolchain the entire core is written in.
 - **[Digilent rgb2dvi](https://github.com/Digilent/vivado-library)** — the
   TMDS / `OSERDESE2` encoder used for native 1080p60 HDMI on the Wukong (Artix-7)
-  board (bundled under `boards/atari-800-wukong-1080/vivado/src/rgb2dvi/`).
+  board (bundled under `boards/wukong-1080/vivado/src/rgb2dvi/`).
 
 **Inspiration / references**
 - **[MiST](https://github.com/mist-devel/mist-board)** and

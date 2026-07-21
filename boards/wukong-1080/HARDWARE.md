@@ -1,4 +1,9 @@
-# QMTech Wukong (XC7A100T) — board notes
+# QMTech Wukong (XC7A100T) — board hardware notes
+
+*Board-level hardware reference for this directory. The Atari 800 design that runs
+on this board — its build/deploy flow and firmware — is in [`README.md`](README.md);
+this file covers the board itself (memory, pinouts, reference designs, Pico wiring)
+and its use as a MiST/MiSTer porting bench.*
 
 Off-the-shelf **QMTech Wukong V3** dev board (`xc7a100tfgg676`, same die as the bare core board).
 Purpose here: an **experiment-first platform for porting MiST / MiSTer cores** to this project's
@@ -12,9 +17,9 @@ authoritative pinouts and working MIG/HDMI/SDRAM examples. Pinouts extracted int
 
 > **Status:** the first core is done — a full **Atari 800 at native 1080p60** with a Pico 2 W
 > supervisor and complete SD appliance boot (FPGA config + OS/cart/disks all from the card). That
-> design, its build/deploy flow (`make atari`), and the supervisor firmware live in
-> **`boards/atari-800-wukong-1080/`** (see its README). This file stays the board-level hardware
-> reference (memory, pinouts, reference designs, Pico wiring). MiST/MiSTer ports are the next use.
+> design, its build/deploy flow (`make atari`), and the supervisor firmware are documented in
+> [`README.md`](README.md). This file stays the board-level hardware reference; MiST/MiSTer ports
+> are the next use.
 
 ## Why the Wukong for MiST/MiSTer (see the memory discussion)
 
@@ -104,7 +109,7 @@ distro `/usr/share/openocd` only ships `rp2040.cfg`.
 
 ## Relationship to the other Artix board
 
-`boards/atari-800-rp2040-qmtech-xc7a100t/` is the **custom RP2040 baseboard** around the bare core
+`boards/rp2040-qmtech-xc7a100t/` is the **custom RP2040 baseboard** around the bare core
 board (single DDR3, RP2040 supervisor, our HDMI pin choice). This Wukong board is the **experiment
 bench** — dual memory, on-board everything — to prove out cores (esp. MiST/MiSTer) before committing
 them to the custom board. See `memory/project_xc7a100t_board`.

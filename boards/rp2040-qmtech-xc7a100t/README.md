@@ -12,7 +12,7 @@ and HDMI out. The Artix's hard `OSERDESE2` serializers can drive **native
 board — and give a proper-PCB home for reliable RM2 wireless and an optional FPGA
 crypto coprocessor.
 
-> The **Wukong** board (`../atari-800-wukong-1080/`) is the *proven* Artix 1080p60
+> The **Wukong** board (`../wukong-1080/`) is the *proven* Artix 1080p60
 > path (same `xc7a100tfgg676`, hardware-verified). This board is the custom-PCB
 > variant of that idea; reuse its RTL/video pipeline when the port begins.
 

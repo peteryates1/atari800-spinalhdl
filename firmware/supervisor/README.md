@@ -34,9 +34,9 @@ Board → build matrix:
 
 | Target board | `-DBOARD` | `-DPICO_BOARD` | WiFi |
 |---|---|---|---|
-| `atari-800-rp2040-qmtech-10cl025` (RP2040-STAMP) | `qmtech` | `pico` | — |
-| `atari-800-rp2040-colorlight` (i5 / i9+) | `colorlight` | `pico` / `pico_w` | opt |
-| `atari-800-wukong-1080` (Pico 2 W) | `wukong` | `pico2_w` | yes |
+| `rp2040-qmtech-10cl025` (RP2040-STAMP) | `qmtech` | `pico` | — |
+| `rp2040-colorlight` (i5 / i9+) | `colorlight` | `pico` / `pico_w` | opt |
+| `wukong-1080` (Pico 2 W) | `wukong` | `pico2_w` | yes |
 
 `qmtech` is the fallback pin map (the `#else` branch in `sd_spi.c` / `main.c` /
 `jtag.c` / `blaster.c`); `colorlight` and `wukong` are explicit `#ifdef`s.
@@ -66,7 +66,7 @@ openocd -f interface/cmsis-dap.cfg -f target/rp2040.cfg \
 
 > The RP2040-STAMP on the 10CL025 board has a **physically broken native-USB
 > connector** — SWD is the only way to flash it, and SD updates go via a card
-> reader. See [`../../boards/atari-800-rp2040-qmtech-10cl025/README.md`](../../boards/atari-800-rp2040-qmtech-10cl025/README.md).
+> reader. See [`../../boards/rp2040-qmtech-10cl025/README.md`](../../boards/rp2040-qmtech-10cl025/README.md).
 
 **BOOTSEL / UF2** (boards with working native USB): hold BOOTSEL while plugging in,
 then copy `build/supervisor.uf2` to the `RPI-RP2` / `RP2350` mass-storage drive.

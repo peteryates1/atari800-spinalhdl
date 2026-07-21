@@ -42,7 +42,8 @@ and a fully self-booting cold power cycle from the card alone.
   - Flashed over SWD with a Raspberry Pi Debug Probe (rp2350.cfg).
 
 FPGA pinout is in `vivado/constraints/wukong_atari.xdc`; board-level hardware notes
-and reference-design pinouts are in `../qm_xc7a100t_wukong/`.
+and QMTech reference-design pinouts are in [`HARDWARE.md`](HARDWARE.md) and
+[`pin-mapping.md`](pin-mapping.md).
 
 ## Architecture
 
