@@ -297,6 +297,15 @@ This project builds on a number of open-source works:
   TMDS / `OSERDESE2` encoder used for native 1080p60 HDMI on the Wukong (Artix-7)
   board (bundled under `boards/atari-800-wukong-1080/vivado/src/rgb2dvi/`).
 
+**Inspiration / references**
+- **[MiST](https://github.com/mist-devel/mist-board)** and
+  **[MiSTer](https://github.com/MiSTer-devel/Main_MiSTer)** — the FPGA
+  retro-computing platforms whose core-design conventions informed this project.
+  MiSTer's memory split in particular — low-latency SDR SDRAM for a core's main
+  RAM, DDR for the framebuffer/scaler — is exactly the arrangement the Wukong
+  board (W9825 SDR + MT41K DDR3) was chosen to provide, and the reference for
+  eventually porting MiST/MiSTer cores to this Xilinx + Pico-supervisor world.
+
 **RP2040 / Pico supervisor firmware** (`firmware/supervisor/`)
 - **[Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk)**
   (BSD-3-Clause) — the RP2040 / RP2350 platform, build system, and drivers.
