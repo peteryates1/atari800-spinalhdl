@@ -109,8 +109,10 @@ tools/
   - Vivado 2025.2 — Artix-7 (Wukong, i9+)
   - yosys + nextpnr-ecp5 + ecppack — ECP5 (Colorlight i5/i9)
 - **Supervisor firmware:** the Raspberry Pi **Pico SDK** + CMake (arm-none-eabi
-  toolchain), and **`pyserial`** for the host deploy tools (`push_file.py`, the
-  console scripts). `Pico-PIO-USB` is a submodule (USB-host keyboard).
+  toolchain), and **`pyserial`** for the host deploy tool (`push_file.py`).
+  `Pico-PIO-USB` is a submodule (USB-host keyboard). Build & flash instructions,
+  including the board → `-DBOARD=` matrix, are in
+  [`firmware/supervisor/README.md`](firmware/supervisor/README.md).
 
 ### Clone with submodule
 
