@@ -17,6 +17,9 @@ static int  pendingDrive;                  // drive index while PICK_DISK
 static char names[16][CFG_NAME_LEN];       // last-listed folder names
 static int  nameCount;
 static bool g_turbo = false;               // 6502 turbo ('C' ctrl bit 6); persists pause/resume
+#ifdef HAVE_WIFI
+static bool g_wifi_connecting = false;     // shown while the blocking wifi_on() runs
+#endif
 
 // ===== cart/disk picker: type-to-filter =====
 static char s_filter[CFG_NAME_LEN];        // current filter text within a pick
@@ -71,8 +74,9 @@ static void fb_render(void) {
     snprintf(buf, sizeof buf, "[t] turbo: %s", g_turbo ? "ON" : "off");
     fbtext_puts(12, 1, buf);
 #ifdef HAVE_WIFI
-    snprintf(buf, sizeof buf, "[w] wifi: %s %s", wifi_is_up() ? "ON" : "off",
-             wifi_is_up() ? wifi_ip() : "");
+    snprintf(buf, sizeof buf, "[w] wifi: %s %s",
+             g_wifi_connecting ? "connecting..." : (wifi_is_up() ? "ON" : "off"),
+             (!g_wifi_connecting && wifi_is_up()) ? wifi_ip() : "");
     fbtext_puts(13, 1, buf);
 #endif
   } else {
@@ -110,7 +114,9 @@ static void print_menu(void) {
   cdc_printf(" [s] save as default   [r] reload config\r\n");
   cdc_printf(" [t] turbo: %s\r\n", g_turbo ? "ON" : "off");
 #ifdef HAVE_WIFI
-  cdc_printf(" [w] wifi: %s  %s\r\n", wifi_is_up() ? "ON " : "off", wifi_is_up() ? wifi_ip() : "");
+  cdc_printf(" [w] wifi: %s  %s\r\n",
+             g_wifi_connecting ? "connecting..." : (wifi_is_up() ? "ON " : "off"),
+             (!g_wifi_connecting && wifi_is_up()) ? wifi_ip() : "");
 #endif
   cdc_printf("> ");
   fb_render();
@@ -225,8 +231,16 @@ void sup_feed_key(char c) {
       break;
 #ifdef HAVE_WIFI
     case 'w': case 'W':
-      if (wifi_is_up()) wifi_off(); else wifi_on();
-      print_menu();
+      if (wifi_is_up()) {
+        wifi_off();
+        print_menu();
+      } else {
+        g_wifi_connecting = true;
+        print_menu();            // paint "connecting..." to the overlay + console first
+        wifi_on();               // blocks a few seconds (cyw43 init + join)
+        g_wifi_connecting = false;
+        print_menu();            // final: ON + IP, or off if it failed
+      }
       break;
 #endif
     case '?': case 'h': print_menu(); break;
