@@ -1,16 +1,23 @@
 # atari800-spinalhdl
 
-Atari 800 FPGA core written in SpinalHDL, integrated with the
-[JOP](https://github.com/peteryates1/jop-spinalhdl) Java soft-core processor
-for SD card, USB, OSD, and configuration management.
+An **Atari 800 core written in SpinalHDL**, driven by an **RP2040 / Pico
+supervisor** (C firmware) that configures the FPGA from an SD card at power-on,
+hosts the USB keyboard, auto-boots from a JSON config, emulates SIO disk drives
+(D1:–D4: from ATR images), and provides an on-screen (HDMI) Alt-F12 menu. The
+6502 runs at real, **cycle-accurate 1.79 MHz** (with a runtime turbo toggle).
 
-> **Current focus:** the active target is the **atari-800-rp2040-qmtech-10cl025**
-> board (Cyclone 10 LP 10CL025 + RP2040-STAMP + HDMI), where an **RP2040
-> supervisor** (C firmware, not JOP) **configures the FPGA from the SD card at
-> power-on** and handles USB keyboard, config-driven auto-boot, SIO disk
-> emulation, and an **on-screen (HDMI) Alt-F12 menu**. The 6502 runs at real,
-> **cycle-accurate 1.79 MHz**. See **[STATUS.md](STATUS.md)** for the up-to-date
-> snapshot. The JOP/EP4CGX150 paths below remain valid for those boards.
+> **Active boards** — see **[STATUS.md](STATUS.md)** for the live snapshot:
+> - **atari-800-rp2040-qmtech-10cl025** — Cyclone 10 LP 10CL025 + RP2040-STAMP,
+>   **720p** HDMI. The original.
+> - **atari-800-wukong-1080** — QMTech Wukong (Xilinx Artix-7 XC7A100T) + Pico 2 W,
+>   **native 1080p60**, a fully self-contained SD appliance (FPGA bitstream + OS +
+>   cart + disks all loaded from the card), with an optional **WiFi web UI** for
+>   managing the SD over the network.
+>
+> Nothing proprietary lives in the FPGA image or firmware — the core `.rbf`/`.bit`,
+> OS, cart, and disks all come from the SD card. *Earlier EP4CGX150 boards used a
+> JOP Java soft-core as the supervisor; that has been removed in favour of the
+> RP2040/Pico firmware, so the JOP build paths below no longer apply.*
 
 ## Status
 
@@ -79,33 +86,31 @@ atari/                   Atari 800 core
     Atari800CoreSim.scala     Simulation top-level wrapper
     Atari800CoreSimTb.scala   Simulation testbench with frame capture
     Atari800DiskSimTb.scala   SIO disk simulation with ATR image loader
-    Atari800JopSim.scala      JOP-aware sim top
-    Atari800JopSimTb.scala    JOP-aware sim testbench
-    Atari800JopTop.scala      FPGA top-level (Atari + JOP + SDRAM arbiter)
-    Atari800Ep4cgx150Top.scala         Bare-metal bring-up top (EP4CGX150, no JOP)
-    Atari800Ep4cgx150JopTop.scala      Single-PLL JOP top (EP4CGX150)
-    Atari800Ep4cgx150DualPllTop.scala  Dual-PLL JOP top (80 MHz JOP + 56.67 MHz Atari)
-    Atari800LgV1Top.scala              ATARI-800-LG-V1 BRAM-only top
-    Atari800Ecp5BramTop.scala          ECP5 BRAM-only top (Colorlight i5)
-    JopCoreForAtari.scala     JOP configuration + AtariCtrl I/O device
-    JopCoreForAtariDualPll.scala  Dual-PLL JOP variant
-    AtariCtrl.scala           JOP I/O device for Atari core control
-    SioBridge.scala           Hardware SIO UART bridge (JOP I/O device)
-    SioBridgeSim.scala        SioBridge standalone simulation test
-    Ch376UsbKeyboard.scala    CH376T USB-host driver + standalone bring-up test
-    VgaTextOverlayDevice.scala  VGA text-mode overlay (JOP-driven OSD)
-    GenerateConstJava.scala   Const.java generator (drives jop ConstGenerator from atari config)
-    Debounce.scala            Per-bit debounce with configurable stable count
-java/apps/AtariSupervisor/   JOP application: Atari core supervisor (USB keyboard, serial relay)
-jop-spinalhdl/           JOP soft-core (git submodule, pure library — no Atari-specific code)
+    Atari800CoreSimTb.scala   (+ Atari800DiskSimTb) sim testbenches with frame capture
+    Atari800CoreSimpleSdram.scala  Core + SDRAM-framebuffer video wrapper (active boards)
+    Atari800Rp2040HdmiLgTop.scala  10CL025 + RP2040-STAMP top (720p HDMI)
+    Atari800WukongTop.scala        Wukong (Artix-7 XC7A100T) top (native 1080p60)
+    Atari800Wukong1080Top.scala    Wukong Phase-0 1080p colour-bar bring-up
+    Atari800Ecp5Hdmi720Top.scala   Colorlight i5 (ECP5) top (720p)
+    RpAtariKeyboard.scala     RP2040/Pico SPI link: keyboard, control, loader, SIO, text overlay
+    SioBridge.scala           Hardware SIO UART bridge (disk emulation)
+    HasBusIo.scala            Peripheral register-bus trait (mixed into SioBridge)
+    VideoFbWrite / VideoFbRead2 / SdramArbiter3 / SdramStatemachine  SDRAM framebuffer + DDA scaler
+    TextOverlay720.scala / TextOverlay1080.scala  FPGA-native on-screen menu text
+    GtiaPalette.scala         Full PAL/NTSC colour palette; Debounce.scala; Font8x16.scala
+firmware/supervisor/     RP2040/Pico supervisor C firmware (config-boot, USB kbd, SIO,
+                         menu, SD-side FPGA config; Pico 2 W: WiFi + HTTP SD manager).
+                         Build via CMake: -DBOARD=qmtech (STAMP) | wukong | colorlight
 boards/
+  atari-800-rp2040-qmtech-10cl025/  ACTIVE: Cyclone 10 LP 10CL025 + RP2040-STAMP, 720p
+    atari_starraiders/                Quartus project (make build → .sof → .rbf for SD)
+  atari-800-wukong-1080/            ACTIVE: QMTech Wukong (Artix-7) + Pico 2 W, 1080p60
+    vivado/                           Vivado project (rgb2dvi HDMI, W9825 SDRAM); Makefile
+    README.md                         board doc (architecture, wiring, make atari / push-core)
   common/                       Shared per-FPGA-family entities (PLLs, etc.)
-    cyclone4/                     Cyclone IV GX PLL primitive
-    cyclone10/                    Cyclone 10 LP PLL primitive
-  db_fpga_v4/qmtech-ep4cgx150/  QMTECH EP4CGX150 + DB_FPGA v4 (Cyclone IV GX, hardware verified)
-    atari_ep4cgx150/              Single-PLL bare-metal Atari (no JOP, BRAM-only)
-    atari_ep4cgx150_jop/          Single-PLL Atari + JOP supervisor (BRAM-only + CH376T)
-    atari_ep4cgx150_dualpll/      Dual-PLL JOP @80 MHz + Atari @56.67 MHz, shared SDRAM
+    cyclone4/ cyclone10/          PLL primitives
+  db_fpga_v4/qmtech-ep4cgx150/  HISTORICAL: QMTECH EP4CGX150 (Cyclone IV GX) — JOP-era,
+                                tops removed; hardware/pin reference only
   atari800-lg-v1/               ATARI-800-LG-V1 base board (CH340 UART, CH376T USB/SD, VGA, joysticks)
     qmtech-ep4cgx150/             EP4CGX150 core builds for V1 base board
       atari800_lg_v1/                Dual-PLL Atari + JOP (uses Atari800Ep4cgx150DualPllTop)
@@ -128,7 +133,7 @@ generated/               SpinalHDL output (.sv + .bin) — gitignored
 unused_scala/            Archived/inactive modules
 tools/
   atari_keyboard.py      Serial keyboard/joystick relay (host-side Python)
-  atari_peek.py          Peek Atari RAM via JOP supervisor 'M' command
+  atari_peek.py          Peek Atari RAM via the supervisor 'M' command
   atari_peek_raw.py      Raw 'M' peek for protocol debugging
   ch376_keyboard.py      CH376T USB-host keyboard helper (host-side)
   ch376_sdcard_test.py   CH376T SD-card protocol test
@@ -136,7 +141,6 @@ tools/
   ch376s_test.py         CH376S SPI test (Pico MicroPython)
   ch376s_uart_test.py    CH376S UART test (Pico MicroPython)
   pico_kbd_test/         Pi Pico USB HID test fixture (TinyUSB-based)
-jop-atari.json           JOP supervisor ROM/cart/disk configuration profiles
 Makefile                 Top-level build orchestration (legacy AC608 path)
 ```
 
@@ -190,8 +194,13 @@ Convert to PNG with ImageMagick: `convert frame.ppm frame.png`
 ### Generate SystemVerilog
 
 ```sh
-sbt "atari/runMain atari800.Atari800JopTopSv"
+sbt "atari/runMain atari800.Atari800WukongSv"          # Wukong (Artix-7, 1080p)
+sbt "atari/runMain atari800.Atari800Rp2040HdmiLgSv"    # 10CL025 + RP2040-STAMP (720p)
 ```
+
+Output lands in `generated/` (gitignored). The active boards drive it through
+their own build (`boards/atari-800-wukong-1080/Makefile`,
+`boards/atari-800-rp2040-qmtech-10cl025/atari_starraiders/Makefile`).
 
 ### EP4CGX150 + DB_FPGA v4 builds
 
@@ -221,18 +230,9 @@ make download   # Serial boot AtariSupervisor.jop
 make run        # program + download + monitor in one step
 ```
 
-All Quartus build artifacts go to `output_files/` per project.
-
-JOP software build chain (rebuild after Java source changes).
-Const.java generation and app compilation are driven entirely from
-atari800-spinalhdl — jop-spinalhdl is a pure reusable submodule:
-
-```sh
-# Run from either of the JOP-using project dirs above
-make const-java   # Generate Const.java from Atari JOP config (via sbt)
-make asm          # Build microcode (serial boot variant)
-make jop-app      # Build AtariSupervisor.jop (from java/apps/AtariSupervisor/)
-```
+All Quartus build artifacts go to `output_files/` per project. *(These EP4CGX150
+"JOP" projects are historical — their SpinalHDL tops were removed with the JOP
+soft-core; kept for the hardware/pin reference only.)*
 
 Cartridge ROM is set via `cartridge_rom` in the top-level Scala file
 (default: `roms/Star Raiders.rom`). Place `.rom` files in the `roms/` directory.
@@ -330,12 +330,16 @@ Configuration in `Atari800CoreSim.scala`:
 ## Architecture
 
 - **Atari 800 core**: 6502 CPU, ANTIC (DMA/display), GTIA (graphics/colour),
-  POKEY (sound/keyboard/timers), PIA (I/O ports), MMU, cartridge logic
-- **JOP soft-core**: Java bytecode processor with SD SPI, VGA text overlay,
-  UART debug, and external I/O bus to control the Atari core
-- **SDRAM arbiter**: Atari (priority) + JOP share W9825G6KH via SdramArbiter
-- **Video**: Scandoubler (15kHz→31kHz) with JOP OSD overlay, VGA + HDMI output
-- **Audio**: POKEY + Covox through sigma-delta PWM DAC
+  POKEY (sound/keyboard/timers), PIA (I/O ports), MMU, cartridge logic — RAM + OS
+  + cart all in **BRAM**, so ANTIC display DMA is never starved by contended SDRAM.
+- **RP2040/Pico supervisor** (C firmware, `firmware/supervisor/`): SD-side FPGA
+  config, USB-host keyboard, config-driven auto-boot, SIO disk emulation
+  (`SioBridge`), an Alt-F12 on-screen menu, and (Pico 2 W) an optional WiFi web UI.
+  Talks to the FPGA over a dedicated SPI link (`RpAtariKeyboard`).
+- **Video**: the raw GTIA frame is captured to an **SDRAM framebuffer**, DDA-scaled
+  to the output resolution (720p or 1080p) by `VideoFbRead2`, then `GtiaPalette` →
+  HDMI (Digilent `rgb2dvi` on Artix; an ECP5/Cyclone TMDS serializer elsewhere).
+- **Audio**: POKEY through a sigma-delta PWM DAC.
 
 ## Bugs Fixed
 
@@ -424,39 +428,47 @@ Note: i9 has 32-bit wide SDRAM (M12L64322A). SdramStatemachine configured for
 
 ## Acknowledgements
 
-This project stands on a number of open-source works:
+This project builds on a number of open-source works:
 
 **FPGA / HDL**
 - **[gyurco/Atari800XL](https://github.com/gyurco/Atari800XL)** (GPL-2.0) — the
   VHDL Atari 800 core this project is a ground-up SpinalHDL rewrite of.
 - **[SpinalHDL](https://github.com/SpinalHDL/SpinalHDL)** — the hardware
   description language and toolchain the entire core is written in.
-- **[JOP](https://github.com/peteryates1/jop-spinalhdl)** — Java Optimized
-  Processor soft-core (Martin Schoeberl), used as the earlier EP4CGX150
-  supervisor.
+- **[Digilent rgb2dvi](https://github.com/Digilent/vivado-library)** — the
+  TMDS / `OSERDESE2` encoder used for native 1080p60 HDMI on the Wukong (Artix-7)
+  board (bundled under `boards/atari-800-wukong-1080/vivado/src/rgb2dvi/`).
 
-**RP2040 supervisor firmware** (`firmware/supervisor/`)
+**RP2040 / Pico supervisor firmware** (`firmware/supervisor/`)
 - **[Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk)**
-  (BSD-3-Clause) — RP2040 platform, build system, and drivers.
+  (BSD-3-Clause) — the RP2040 / RP2350 platform, build system, and drivers.
 - **[TinyUSB](https://github.com/hathach/tinyusb)** (MIT, Ha Thach) — the USB
-  device stack (CDC console) and host stack.
+  device stack (CDC console, MSC drive, USB-Blaster vendor iface) and host stack.
 - **[Pico-PIO-USB](https://github.com/sekigon-gonnoc/Pico-PIO-USB)** (MIT,
-  sekigon-gonnoc) — bit-banged USB host over the RP2040 PIO, used for the USB
+  sekigon-gonnoc) — bit-banged USB host over the RP2040/RP2350 PIO, for the USB
   keyboard.
 - **[FatFs](http://elm-chan.org/fsw/ff/)** (1-clause BSD, ChaN) — FAT filesystem
   for reading OS/cart/disk images and JSON config from the SD card.
+- **[lwIP](https://savannah.nongnu.org/projects/lwip/)** + the **CYW43 driver**
+  (both via the Pico SDK) — TCP/IP and WiFi behind the Pico 2 W's on-network
+  HTTP SD manager.
 
-**FPGA programming (RP2040 JTAG loader)**
+**FPGA programming**
 - **[dirtyJTAG](https://github.com/jeanthom/DirtyJTAG)** (GPL-2.0, Jean THOMAS) —
-  reference for the RP2040 JTAG loader that now configures the FPGA both from the
-  host (via **Altera USB-Blaster emulation**, so Quartus programs a `.sof`
-  directly) and from the **SD card at power-on**, replacing the Altera Blaster
-  dependency.
+  reference for the on-Pico JTAG loader (host **USB-Blaster emulation** so tools
+  program directly, plus **SD-side FPGA config at power-on**).
+- **[openFPGALoader](https://github.com/trabucayre/openFPGALoader)** — host-side
+  FPGA programming (`dirtyJtag` / `usb-blaster` cables); its Xilinx `MEM_MODE`
+  bit-ordering guided the Pico's stream-a-`.bit`-over-JTAG config on the Wukong.
+
+**Historical**
+- **[JOP](https://github.com/jop-devel/jop)** — the Java Optimized Processor
+  soft-core (Martin Schoeberl) served as the earlier EP4CGX150 supervisor; it has
+  been removed in favour of the RP2040/Pico firmware.
 
 ## License
 
 See individual source files. The Atari 800 core is derived from
-[gyurco/Atari800XL](https://github.com/gyurco/Atari800XL) (GPL-2.0).
-The JOP soft-core is from [peteryates1/jop-spinalhdl](https://github.com/peteryates1/jop-spinalhdl).
-Bundled third-party firmware libraries retain their own licenses (see
+[gyurco/Atari800XL](https://github.com/gyurco/Atari800XL) (GPL-2.0). Bundled
+third-party firmware libraries retain their own licenses (see
 `firmware/supervisor/lib/*/LICENSE` and the Acknowledgements above).
