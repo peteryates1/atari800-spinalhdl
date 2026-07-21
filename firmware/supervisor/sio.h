@@ -1,5 +1,4 @@
-// SIO disk-drive emulator (D1:..D4:), ported from the JOP AtariSupervisor
-// SioDiskEmu.java to the RP2040 supervisor.
+// SIO disk-drive emulator (D1:..D4:) for the RP2040 supervisor.
 //
 // The FPGA SioBridge is the hardware serializer for the Atari SIO bus: it
 // deserializes command frames into an RX FIFO and serializes our responses

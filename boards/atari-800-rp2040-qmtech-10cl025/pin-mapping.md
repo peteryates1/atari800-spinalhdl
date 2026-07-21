@@ -14,8 +14,8 @@ Source: `~/Netlist_ATARI-800-QMTechCB-RP2040-STAMP-HDMI-LG_2026-05-20.enet`
 (KiCad netlist export). FPGA pin table from
 [`/srv/git/qmtech/QMTECH_Cyclone10_10CL006_025/10CL025YU256/Connectors.csv`](https://github.com/ChinaQMTECH/QMTECH_Cyclone10_10CL006_025/blob/master/10CL025YU256/Connectors.csv).
 
-See [QMTECH 10CL025 board doc](https://github.com/peteryates1/jop-spinalhdl/blob/main/docs/boards/qmtech-10cl025-board.md)
-for FPGA spec, U7/U8 connector layout, and pinout gotchas.
+See the QMTECH 10CL025 vendor documentation for FPGA spec, U7/U8 connector
+layout, and pinout gotchas.
 
 ## Convention
 

@@ -3,9 +3,8 @@ package atari800
 import spinal.core._
 
 /**
- * Standard register-bus interface for a peripheral (originally the JOP I/O bus
- * contract; copied here so SioBridge no longer depends on the jop-spinalhdl
- * submodule). A device mixes this in and implements the accessors:
+ * Standard register-bus interface for a peripheral: a device mixes this in and
+ * implements the accessors:
  *   - 4-bit sub-address, read/write strobes, 32-bit read/write data.
  */
 trait HasBusIo { self: Component =>

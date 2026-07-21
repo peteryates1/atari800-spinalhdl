@@ -10,7 +10,7 @@
 //   'S' (0x53): read reg   -> {0x53, addr} triggers a one-cycle bus read and
 //               latches the 16-bit result; a following status frame returns it
 //               in MISO bytes 25/26. Reads of addr 1 pop the RX FIFO; reads of
-//               addr 0 clear the sticky STATUS bits (same as the JOP path).
+//               addr 0 clear the sticky STATUS bits.
 //
 // SioBridge register map (see SioBridge.scala):
 //   0 STATUS  : b0 COMMAND(live, low in frame), b1 RX_READY, b2 TX_BUSY,

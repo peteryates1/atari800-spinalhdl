@@ -15,9 +15,7 @@ hosts the USB keyboard, auto-boots from a JSON config, emulates SIO disk drives
 >   managing the SD over the network.
 >
 > Nothing proprietary lives in the FPGA image or firmware — the core `.rbf`/`.bit`,
-> OS, cart, and disks all come from the SD card. *Earlier EP4CGX150 boards used a
-> JOP Java soft-core as the supervisor; that has been removed in favour of the
-> RP2040/Pico firmware, so the JOP build paths below no longer apply.*
+> OS, cart, and disks all come from the SD card.
 
 ## Status
 
@@ -192,8 +190,8 @@ into the bitstream.
   in that board's `README.md`.
 
 *(The older top-level `i5-7v0/Makefile`, the whole `i9-7v2/` directory, and
-`i9plus-6v1/synth_check.tcl` were JOP/BRAM-only fit-checks referencing tops that
-have been removed; they were deleted along with the JOP soft-core.)*
+`i9plus-6v1/synth_check.tcl` were fit-checks referencing tops that have since
+been removed, so they were deleted too.)*
 
 ## Simulation
 

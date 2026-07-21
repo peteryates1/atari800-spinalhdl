@@ -24,8 +24,8 @@ the 800 OS to a solid memo pad, from SD, with a USB keyboard, with every
 load content-verified.
 
 The same architecture is sized for what comes next: larger cores
-(Archimedes/Amiga class), a JOP coprocessor sharing the SDRAM, and a
-supervisor overlay UI for selecting ROMs/carts/disks.
+(Archimedes/Amiga class) and a supervisor overlay UI for selecting
+ROMs/carts/disks.
 
 ## System architecture
 
@@ -241,7 +241,7 @@ console switches.
 
 **Roadmap**: supervisor overlay/menu UI (it can already take the screen),
 disk images via SIO, RP2040→FPGA configuration from SD (the last step to
-a fully self-contained SD-boot board), JOP integration for the 10CL025.
+a fully self-contained SD-boot board).
 
 ---
 

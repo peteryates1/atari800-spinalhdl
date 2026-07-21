@@ -139,7 +139,7 @@ programs a `.sof` directly over the same JTAG pins — no Altera Blaster needed.
 
 ## SIO disk emulator (`firmware/supervisor/sio.c`)
 
-Port of the JOP `SioDiskEmu.java` to the RP2040, driving the `SioBridge.scala`
+The RP2040 SIO disk emulator drives the `SioBridge.scala`
 hardware serializer over SPI. `sio_poll()` drains command frames, services
 READ_SECTOR / GET_STATUS / GET_SPEED from ATR images via FatFs, streams sectors
 back (19200 baud, 8-bit end-around-carry checksums). Writes NAK (read-only).
@@ -173,14 +173,14 @@ ECP5/Artix (native 1080p60). See `memory/project_supervisor_menu.md`.
 
 ## Repo cleanup (2026-07-21)
 
-The **JOP Java soft-core supervisor was retired** (replaced by the RP2040/Pico
+The **legacy Java soft-core supervisor was retired** (replaced by the RP2040/Pico
 firmware) and the tree was swept for anything it left behind. Removed, all
 recoverable from git history:
 
-- **JOP + historical boards** — the `jop-spinalhdl` submodule, the `java/` tree, and
-  the EP4CGX150/JOP, LG-V1, AC608, CH376 board dirs + their SpinalHDL tops.
+- **Historical boards** — the old soft-core submodule, the `java/` tree, and the
+  EP4CGX150, LG-V1, AC608, CH376 board dirs + their SpinalHDL tops.
 - **Dead board fit-checks** — `i5-7v0/Makefile`, the whole `i9-7v2/` dir, and
-  `i9plus-6v1/synth_check.tcl` (JOP/BRAM fit-checks against deleted tops). The live
+  `i9plus-6v1/synth_check.tcl` (fit-checks against deleted tops). The live
   builds — `i5-7v0/oddrx2f_720/` (ECP5 720p) and `i9plus-6v1/hdmi_test/` (Artix 1080p
   timing probe) — were kept.
 - **12 unreachable Scala sources (~1,560 lines)** — `Mmu` (folded into
@@ -192,15 +192,15 @@ recoverable from git history:
 - **Firmware** — the unused `font8x16.h` (on-screen text is FPGA-rendered, not RP2040)
   and 2.8 MB of vendored FatFs HTML docs. The supervisor C code audited clean: every
   `.c` compiles into the target, no unused functions.
-- **README** refreshed throughout (de-JOP intro, Acknowledgements crediting
+- **README** refreshed throughout (updated intro, Acknowledgements crediting
   gyurco/Atari800XL + MiST/MiSTer inspiration, current build/sim/resource sections).
 
 ## Recent commit trail
 
 - `8df7c84`/`91f1ca9`/`a53892d` cleanup: remove dead firmware header + FatFs docs,
   12 unreachable Scala sources, and dead board fit-check files (see above)
-- `8be38c6`/`17af1c3` retire the JOP soft-core: drop `jop-spinalhdl` submodule, Java,
-  and the historical EP4CGX150/JOP/AC608/CH376 boards + tops
+- `8be38c6`/`17af1c3` retire the legacy soft-core supervisor: drop the old submodule,
+  Java, and the historical EP4CGX150/AC608/CH376 boards + tops
 - `50e1067` turbo mode: runtime 6502 speed toggle from the supervisor menu (`[t]`)
 - `13f8612` Config-driven boot, SIO disk emulator, and supervisor menu
 - `e15e68c` Add STATUS.md: handoff snapshot (Atari fully in BRAM, SDRAM fb-only)

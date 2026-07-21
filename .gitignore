@@ -23,12 +23,6 @@ boards/**/*.log
 # Firmware build/tool logs (build dirs are covered by firmware/**/build/ below)
 firmware/**/*.log
 
-# Quartus-copied generated files (from make quartus-prep)
-boards/AC608/Atari800JopTop.sv
-boards/AC608/Atari800JopTop.sv_*.bin
-boards/AC608/JopCoreForAtari.sv
-boards/AC608/JopCoreForAtari.sv_*.bin
-
 # ECP5 / nextpnr build dirs — any board (supersedes the old per-board lines)
 boards/**/build/
 
@@ -60,13 +54,6 @@ project/metals.sbt
 roms/
 *.rom
 *.atr
-
-# Java
-java/apps/*/build
-java/apps/*/*.jop
-java/apps/*/*.jop.txt
-java/apps/*/*.jop.link.txt
-
 
 # Colorlight FPGA fit-check outputs
 boards/atari-800-rp2040-colorlight/fpga/fit/fit.json

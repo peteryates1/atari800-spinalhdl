@@ -68,10 +68,10 @@ local tools — the JTAG *plumbing* (PIO bit-bang, TAP nav) carries over; only t
 - **`~/pico-pio-uart-jtag`** — intended base for the **autonomous supervisor**: its
   `jtag/fpga_xilinx.c` already does **on-device Xilinx 7-series config**
   (`JPROGRAM 0x0B` / `CFG_IN 0x05` / `JSTART 0x0C` + `.bit` parsing), IDCODE vendor auto-detect, SVF
-  player. **BUT it HANGS on RP2350 (2026-07-20):** it launches **core1** (for per-core JOP UARTs) and
+  player. **BUT it HANGS on RP2350 (2026-07-20):** it launches **core1** (for per-core UARTs) and
   the RP2350 multicore launch stalls **before USB enumeration** — the flashed image boots (BOOTSEL
   `2e8a:000f` and SWD both fine; CFSR clean) but never enumerates. Deferred for the supervisor until
-  the core1 launch is fixed or made single-core. Still the tool of choice for JOP multi-UART on
+  the core1 launch is fixed or made single-core. Still the tool of choice for multi-UART on
   RP2040.
 
 **Supervisor plan (Pico 2 W):** reuse `pico-pio-uart-jtag`'s `jtag/` core

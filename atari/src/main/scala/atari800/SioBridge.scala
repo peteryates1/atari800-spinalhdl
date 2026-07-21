@@ -3,7 +3,7 @@ package atari800
 import spinal.core._
 
 // SIO UART bridge: hardware serializer/deserializer for Atari SIO bus.
-// Allows JOP to monitor command frames and inject drive responses.
+// Allows the supervisor to monitor command frames and inject drive responses.
 //
 // RX path: Deserializes SIO_TXD (Atari→peripheral) using SIO_CLOCKOUT falling edge.
 // TX path: Serializes onto SIO_RXD (peripheral→Atari) using internal baud generator.
@@ -71,7 +71,7 @@ class SioBridge extends Component with HasBusIo {
 
   val rxReadData = rxMem.readAsync(rxRdPtr)
 
-  // Latch RX data on bus.rd to prevent JOP ioRdPending re-sampling corruption.
+  // Latch RX data on bus.rd to prevent read re-sampling corruption.
   // During re-sampling, rxRdPtr has already advanced; the latch holds the correct value.
   val rxReadLatch = Reg(Bits(16 bits)) init 0
   when(bus.rd && bus.addr === 1) {

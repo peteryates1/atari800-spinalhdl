@@ -276,7 +276,7 @@ class Atari800Rp2040HdmiLgTop extends Component {
 
     // -----------------------------------------------------------------
     // SDRAM controller — Atari RAM lives in SDRAM (internal_ram=0).
-    // Sole master (no JOP): the MiST/AC608 pattern. SdramStatemachine
+    // Sole master: the MiST/AC608 pattern. SdramStatemachine
     // handles the CLK_SYSTEM(57.69) <-> CLK_SDRAM(100) crossing internally.
     // -----------------------------------------------------------------
     // Hold controller reset low for SDRAM power-up (~568 us @57.69 MHz).
