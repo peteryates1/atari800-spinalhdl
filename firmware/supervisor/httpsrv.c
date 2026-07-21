@@ -131,7 +131,9 @@ static const char PAGE[] =
 "#drop.hi{border-color:#2b5c2b;color:#eee}#log{color:#8f8;font-size:13px;margin-top:8px;white-space:pre-wrap}"
 "</style>"
 "<header>Atari 800 &mdash; SD card manager</header><main>"
-"<div id=path></div><ul id=list></ul>"
+"<div id=path></div>"
+"<div style='margin:6px 0'><button id=mk>+ New folder</button></div>"
+"<ul id=list></ul>"
 "<div id=drop>Drop files here, or <button class=up id=pick>choose files</button> to upload to this folder"
 "<input id=file type=file multiple hidden></div><div id=log></div>"
 "<script>"
@@ -154,10 +156,13 @@ static const char PAGE[] =
 "   u.appendChild(li)})})"
 " .catch(e=>log('list failed: '+e))}"
 "function del(p){j('/api/delete?path='+encodeURIComponent(p),{method:'POST'}).then(()=>{log('deleted '+p);load()}).catch(e=>log('delete failed: '+e))}"
+"function mkdir(){const n=prompt('New folder name');if(!n)return;const p=(dir==='/'?'':dir)+'/'+n;"
+" j('/api/mkdir?path='+encodeURIComponent(p),{method:'POST'}).then(()=>{log('created '+n);load()}).catch(e=>log('mkdir failed: '+e))}"
 "function up(files){let i=0;(function nx(){if(i>=files.length){load();return}const f=files[i++];"
 " const p=(dir==='/'?'':dir)+'/'+f.name;log('uploading '+f.name+' ...');"
 " j('/api/upload?path='+encodeURIComponent(p),{method:'POST',body:f}).then(()=>{log('ok '+f.name);nx()}).catch(e=>{log('FAIL '+f.name+': '+e);nx()})})()}"
 "function log(m){$('#log').textContent=m}"
+"$('#mk').onclick=mkdir;"
 "$('#pick').onclick=()=>$('#file').click();"
 "$('#file').onchange=e=>up(e.target.files);"
 "const dz=$('#drop');"
@@ -231,6 +236,14 @@ static bool handle_headers(conn_t *c) {
         static FATFS fs; f_mount(&fs, "", 1);
         FRESULT r = f_unlink(p);
         return respond_text(c, r == FR_OK ? 200 : 500, r == FR_OK ? "ok" : "delete failed");
+    }
+
+    if (strncmp(c->path, "/api/mkdir", 10) == 0 && c->is_post) {
+        char p[300];
+        if (!query_param(c, "path", p, sizeof p) || !p[0]) return respond_text(c, 400, "no path");
+        static FATFS fs; f_mount(&fs, "", 1);
+        FRESULT r = f_mkdir(p);
+        return respond_text(c, r == FR_OK ? 200 : 500, r == FR_OK ? "ok" : "mkdir failed");
     }
 
     if (strcmp(c->path, "/") == 0) return respond(c, 200, "text/html", PAGE, sizeof PAGE - 1);
