@@ -2,6 +2,7 @@
 #include "ff.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>   // strcasecmp
 #include <stdlib.h>
 
 // ===== tiny JSON scanner (schema-specific, lenient) =====
@@ -203,6 +204,9 @@ int config_list_subdirs(const char *machine, const char *subdir,
     }
   }
   f_closedir(&dir);
+  // f_readdir returns directory order (roughly creation order); sort A-Z
+  // (case-insensitive) so the supervisor menu picker is predictable.
+  qsort(names, n, CFG_NAME_LEN, (int (*)(const void *, const void *))strcasecmp);
   return n;
 }
 
