@@ -61,7 +61,6 @@ atari/                   Atari 800 core
     Gtia.scala                GTIA (playfield/player-missile graphics, colours)
     Pokey.scala               POKEY (sound, keyboard, serial I/O, timers)
     Pia.scala                 PIA (parallel I/O, port B memory control)
-    Mmu.scala                 Memory management unit
     CartLogic.scala           Cartridge slot logic (8K/16K, RD4/RD5, OSS/XEGS variants)
     AddressDecoder.scala      Memory map, SDRAM/ROM/RAM routing
     InternalRomRam.scala      OS ROM + internal RAM (cart auto-replaces upper RAM)
