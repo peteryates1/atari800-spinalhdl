@@ -305,11 +305,6 @@ This project builds on a number of open-source works:
   capture the FPGA's debug taps (framebuffer/SPI-link bring-up). Used as a tool,
   not incorporated into this project's code.
 
-**Historical**
-- **[JOP](https://github.com/jop-devel/jop)** — the Java Optimized Processor
-  soft-core (Martin Schoeberl) served as the earlier EP4CGX150 supervisor; it has
-  been removed in favour of the RP2040/Pico firmware.
-
 ## License
 
 See individual source files. The Atari 800 core is derived from
