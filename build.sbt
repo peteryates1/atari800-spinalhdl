@@ -1,20 +1,17 @@
-// atari800-spinalhdl: Atari 800 FPGA core + JOP soft-core integration
+// atari800-spinalhdl: Atari 800 FPGA core (SpinalHDL) + RP2040/Pico supervisor.
 //
-// Unified build: single Scala version, JOP as direct dependency.
-//
-// Usage:
-//   sbt "atari/runMain atari800.Atari800JopTopSv"
-
-// Reference jop-spinalhdl submodule as an SBT project
-lazy val jopRef = RootProject(file("jop-spinalhdl"))
+// Usage (generate SystemVerilog for a board top):
+//   sbt "atari/runMain atari800.Atari800WukongSv"
+//   sbt "atari/runMain atari800.Atari800Rp2040HdmiLgSv"
 
 lazy val atari = (project in file("atari"))
-  .dependsOn(jopRef)
   .settings(
     name := "atari800",
     scalaVersion := "2.13.18",
-    libraryDependencies += compilerPlugin(
-      "com.github.spinalhdl" %% "spinalhdl-idsl-plugin" % "1.14.0"
+    libraryDependencies ++= Seq(
+      "com.github.spinalhdl" %% "spinalhdl-core" % "1.12.2",
+      "com.github.spinalhdl" %% "spinalhdl-lib"  % "1.12.2",
+      compilerPlugin("com.github.spinalhdl" %% "spinalhdl-idsl-plugin" % "1.12.2")
     ),
     libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % Test,
     fork := true,

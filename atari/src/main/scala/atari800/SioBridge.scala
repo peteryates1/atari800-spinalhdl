@@ -1,7 +1,6 @@
 package atari800
 
 import spinal.core._
-import jop.io.HasBusIo
 
 // SIO UART bridge: hardware serializer/deserializer for Atari SIO bus.
 // Allows JOP to monitor command frames and inject drive responses.
