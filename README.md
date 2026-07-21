@@ -34,11 +34,12 @@ Frame capture produces correct PAL-palette colour output.
 **Hardware verified on the two active boards** (see **[STATUS.md](STATUS.md)**):
 - **10CL025 + RP2040-STAMP** (720p): Star Raiders / Pole Position carts, DOS 2.5
   off an emulated SIO disk, the Alt-F12 on-screen menu, and SD-side FPGA boot.
+![Playing Star Raiders](boards/atari-800-rp2040-qmtech-10cl025/20260721_134809.jpg)
 - **Wukong (Artix-7) + Pico 2 W** (native 1080p60): a fully self-contained SD
   appliance — the Pico JTAG-configures the FPGA from the card, then loads OS +
   cart + disks from SD; plus an optional WiFi web UI for managing the card.
+![wukong-1080-experiment](boards/atari-800-wukong-1080/20260721_154628.jpg)
 
-![Playing Star Raiders](boards/atari-800-rp2040-qmtech-10cl025/20260721_134809.jpg)
 
 ## Origins
 
@@ -94,8 +95,7 @@ boards/
   atari-800-rp2040-colorlight/  Unified RP2040 + Colorlight i5/i9 (ECP5) / i9+ (Artix) SODIMM base board
   atari-800-rp2040-qmtech-xc7a100t/  Custom Artix-7 baseboard (HDMI pin decision + docs)
   qm_xc7a100t_wukong/           Wukong board hardware notes (dual SDR + DDR3, pinouts)
-  i5-7v0/                       Colorlight i5 v7.0 (ECP5 LFE5U-25F, yosys/nextpnr)
-  i9-7v2/                       Colorlight i9 v7.2 (ECP5 LFE5U-45F, yosys/nextpnr)
+  i5-7v0/                       Colorlight i5 (ECP5) 720p build scripts (oddrx2f_720/) + HDMI test
   i9plus-6v1/                   Colorlight i9+ v6.1 (XC7A50T, Vivado) + hdmi_test/
 generated/               SpinalHDL output (.sv + .bin) — gitignored
 tools/
@@ -192,9 +192,9 @@ into the bitstream.
   (`build_hdmi.tcl`), the OSERDES-on-real-pins check behind the i9+ 1080p analysis
   in that board's `README.md`.
 
-*(The older top-level `i5-7v0/Makefile`, `i9-7v2/Makefile`, and `i9plus-6v1/
-synth_check.tcl` were JOP/BRAM-only fit-checks and no longer build — the tops they
-referenced were removed.)*
+*(The older top-level `i5-7v0/Makefile`, the whole `i9-7v2/` directory, and
+`i9plus-6v1/synth_check.tcl` were JOP/BRAM-only fit-checks referencing tops that
+have been removed; they were deleted along with the JOP soft-core.)*
 
 ## Simulation
 

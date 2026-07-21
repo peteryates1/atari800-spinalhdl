@@ -5,8 +5,8 @@ FPGA module: **XC7A50T-FGG484** on a **DDR2-SODIMM-200P** module (Vivado flow,
 modules — the basis for one base board that accepts either family. On-module:
 8 MB SDRAM (M12L64322A-6B, 32-bit SDR, 166 MHz), SPI flash, 2× Gigabit PHY (B50612D).
 
-The Atari core uses ~23 % LUT / 17 % BRAM here (see `synth_util.rpt`), so logic/BRAM
-are not the constraint.
+The Atari core uses roughly a quarter of the LUTs and well under a fifth of the
+BRAM here, so logic/BRAM are not the constraint.
 
 **HDMI 1080p60 — achievable on a -2 module (corrected 2026-07-20).** An earlier note
 here claimed the 50T "caps at 720p, needs a -3." That was wrong — it read a
@@ -29,7 +29,7 @@ Reproduce with `hdmi_test/build_hdmi.tcl` (`-tclargs xc7a50tfgg484-{1,2} s{1,2}`
 
 **Two things still to confirm before trusting 1080p on this board:** (1) the module's
 **actual speed grade** — this doc's pinout note says -2, but verify the chip marking
-(`synth_check.tcl` had defaulted to -1); (2) **signal integrity** of 1.485 Gbps through
+(the earlier fit-check had defaulted to -1); (2) **signal integrity** of 1.485 Gbps through
 the SODIMM + base-board + AC-coupling caps — the FPGA closes timing, but the analog
 path over the connector is a separate hardware validation (see the differential-pair /
 length-match notes below). At -2 with clean SI, the i9+ is a 1080p60 board like the
