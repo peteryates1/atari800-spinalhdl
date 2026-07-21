@@ -38,6 +38,8 @@ Frame capture produces correct PAL-palette colour output.
   appliance — the Pico JTAG-configures the FPGA from the card, then loads OS +
   cart + disks from SD; plus an optional WiFi web UI for managing the card.
 
+![Playing Star Raiders](boards/atari-800-rp2040-qmtech-10cl025/20260721_134809.jpg)
+
 ## Origins
 
 This is a ground-up SpinalHDL rewrite of the **Atari 800 core from
@@ -49,7 +51,7 @@ and Atari hardware documentation.
 ## Project Structure
 
 ```
-build.sbt               Unified SBT build (Scala 2.13.18 / SpinalHDL 1.14.0)
+build.sbt               Unified SBT build (Scala 2.13.18 / SpinalHDL 1.12.2)
 atari/                   Atari 800 core
   src/main/scala/atari800/
     Atari800Core.scala        Top-level Atari 800 (CPU, ANTIC, GTIA, POKEY, PIA, MMU)
