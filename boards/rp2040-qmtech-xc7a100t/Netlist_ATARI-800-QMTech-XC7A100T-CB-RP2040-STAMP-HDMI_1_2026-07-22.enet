@@ -3,20 +3,20 @@
     "components": {
         "gge272": {
             "props": {
-                "Unique ID": "gge272",
                 "Add into BOM": "yes",
                 "Convert to PCB": "yes",
                 "Designator": "U2",
                 "Symbol": "ddd17bc78c6b5deb",
+                "Device": "449e10af6cf4a7c1",
+                "Unique ID": "gge272",
                 "Multi-Part Group": "",
                 "Relevance": "[]",
-                "Device": "449e10af6cf4a7c1",
                 "Name": "",
                 "Footprint": "c5b31396ac684c0e8dca4f3c00dc7f25",
-                "Description": "",
                 "Reuse Block": "",
                 "Group ID": "",
                 "Channel ID": "$1I99504",
+                "Description": "",
                 "DeviceName": "QMTECH XC7A100T CORE BOARD",
                 "FootprintName": "QMTECH CORE BOARD 64"
             },
@@ -40,7 +40,7 @@
                 "3": {
                     "name": "VCCO_34_35",
                     "number": "3",
-                    "net": "",
+                    "net": "3V3",
                     "props": {
                         "Pin Number": "3"
                     }
@@ -48,7 +48,7 @@
                 "4": {
                     "name": "VCCO_34_35",
                     "number": "4",
-                    "net": "",
+                    "net": "3V3",
                     "props": {
                         "Pin Number": "4"
                     }
@@ -136,7 +136,7 @@
                 "15": {
                     "name": "C2",
                     "number": "15",
-                    "net": "SW_RESET",
+                    "net": "",
                     "props": {
                         "Pin Number": "15"
                     }
@@ -144,7 +144,7 @@
                 "16": {
                     "name": "B2_VREF",
                     "number": "16",
-                    "net": "SW_OPTION",
+                    "net": "",
                     "props": {
                         "Pin Number": "16"
                     }
@@ -152,7 +152,7 @@
                 "17": {
                     "name": "E5",
                     "number": "17",
-                    "net": "SW_SELECT",
+                    "net": "",
                     "props": {
                         "Pin Number": "17"
                     }
@@ -160,7 +160,7 @@
                 "18": {
                     "name": "D5",
                     "number": "18",
-                    "net": "SW_START",
+                    "net": "",
                     "props": {
                         "Pin Number": "18"
                     }
@@ -216,7 +216,7 @@
                 "25": {
                     "name": "G4",
                     "number": "25",
-                    "net": "AUDIO_L",
+                    "net": "",
                     "props": {
                         "Pin Number": "25"
                     }
@@ -248,7 +248,7 @@
                 "29": {
                     "name": "J4",
                     "number": "29",
-                    "net": "AUDIO_R",
+                    "net": "SDRAM_A4",
                     "props": {
                         "Pin Number": "29"
                     }
@@ -256,7 +256,7 @@
                 "30": {
                     "name": "H4",
                     "number": "30",
-                    "net": "",
+                    "net": "SDRAM_A5",
                     "props": {
                         "Pin Number": "30"
                     }
@@ -264,7 +264,7 @@
                 "31": {
                     "name": "H2",
                     "number": "31",
-                    "net": "",
+                    "net": "SDRAM_A6",
                     "props": {
                         "Pin Number": "31"
                     }
@@ -272,7 +272,7 @@
                 "32": {
                     "name": "H1",
                     "number": "32",
-                    "net": "",
+                    "net": "SDRAM_A7",
                     "props": {
                         "Pin Number": "32"
                     }
@@ -280,7 +280,7 @@
                 "33": {
                     "name": "H9",
                     "number": "33",
-                    "net": "",
+                    "net": "SDRAM_A8",
                     "props": {
                         "Pin Number": "33"
                     }
@@ -288,7 +288,7 @@
                 "34": {
                     "name": "G9_VREF",
                     "number": "34",
-                    "net": "",
+                    "net": "SDRAM_A9",
                     "props": {
                         "Pin Number": "34"
                     }
@@ -296,7 +296,7 @@
                 "35": {
                     "name": "M2",
                     "number": "35",
-                    "net": "",
+                    "net": "SDRAM_A11",
                     "props": {
                         "Pin Number": "35"
                     }
@@ -304,7 +304,7 @@
                 "36": {
                     "name": "L2",
                     "number": "36",
-                    "net": "",
+                    "net": "SDRAM_A12",
                     "props": {
                         "Pin Number": "36"
                     }
@@ -312,7 +312,7 @@
                 "37": {
                     "name": "L5",
                     "number": "37",
-                    "net": "",
+                    "net": "SDRAM_CKE",
                     "props": {
                         "Pin Number": "37"
                     }
@@ -320,7 +320,7 @@
                 "38": {
                     "name": "K5",
                     "number": "38",
-                    "net": "",
+                    "net": "SDRAM_CLK",
                     "props": {
                         "Pin Number": "38"
                     }
@@ -328,7 +328,7 @@
                 "39": {
                     "name": "M4",
                     "number": "39",
-                    "net": "",
+                    "net": "SDRAM_UDQM",
                     "props": {
                         "Pin Number": "39"
                     }
@@ -336,7 +336,7 @@
                 "40": {
                     "name": "L4",
                     "number": "40",
-                    "net": "",
+                    "net": "SDRAM_DQ8",
                     "props": {
                         "Pin Number": "40"
                     }
@@ -344,7 +344,7 @@
                 "41": {
                     "name": "N3",
                     "number": "41",
-                    "net": "",
+                    "net": "SDRAM_DQ9",
                     "props": {
                         "Pin Number": "41"
                     }
@@ -352,7 +352,7 @@
                 "42": {
                     "name": "N2",
                     "number": "42",
-                    "net": "",
+                    "net": "SDRAM_DQ10",
                     "props": {
                         "Pin Number": "42"
                     }
@@ -360,7 +360,7 @@
                 "43": {
                     "name": "M6",
                     "number": "43",
-                    "net": "",
+                    "net": "SDRAM_DQ11",
                     "props": {
                         "Pin Number": "43"
                     }
@@ -368,7 +368,7 @@
                 "44": {
                     "name": "M5_VREF",
                     "number": "44",
-                    "net": "",
+                    "net": "SDRAM_DQ12",
                     "props": {
                         "Pin Number": "44"
                     }
@@ -376,7 +376,7 @@
                 "45": {
                     "name": "K1",
                     "number": "45",
-                    "net": "",
+                    "net": "SDRAM_DQ13",
                     "props": {
                         "Pin Number": "45"
                     }
@@ -384,7 +384,7 @@
                 "46": {
                     "name": "J1",
                     "number": "46",
-                    "net": "",
+                    "net": "SDRAM_DQ14",
                     "props": {
                         "Pin Number": "46"
                     }
@@ -392,7 +392,7 @@
                 "47": {
                     "name": "R3",
                     "number": "47",
-                    "net": "",
+                    "net": "SDRAM_DQ15",
                     "props": {
                         "Pin Number": "47"
                     }
@@ -408,7 +408,7 @@
                 "49": {
                     "name": "T4",
                     "number": "49",
-                    "net": "",
+                    "net": "AUDIO_L",
                     "props": {
                         "Pin Number": "49"
                     }
@@ -424,7 +424,7 @@
                 "51": {
                     "name": "P6",
                     "number": "51",
-                    "net": "",
+                    "net": "AUDIO_R",
                     "props": {
                         "Pin Number": "51"
                     }
@@ -584,7 +584,7 @@
                 "71": {
                     "name": "D26",
                     "number": "71",
-                    "net": "",
+                    "net": "SW_SELECT",
                     "props": {
                         "Pin Number": "71"
                     }
@@ -592,7 +592,7 @@
                 "72": {
                     "name": "E26",
                     "number": "72",
-                    "net": "",
+                    "net": "SW_START",
                     "props": {
                         "Pin Number": "72"
                     }
@@ -600,7 +600,7 @@
                 "73": {
                     "name": "D25",
                     "number": "73",
-                    "net": "",
+                    "net": "SW_RESET",
                     "props": {
                         "Pin Number": "73"
                     }
@@ -608,7 +608,7 @@
                 "74": {
                     "name": "E25",
                     "number": "74",
-                    "net": "",
+                    "net": "SW_OPTION",
                     "props": {
                         "Pin Number": "74"
                     }
@@ -680,7 +680,7 @@
                 "83": {
                     "name": "G21",
                     "number": "83",
-                    "net": "",
+                    "net": "GPIO24",
                     "props": {
                         "Pin Number": "83"
                     }
@@ -688,7 +688,7 @@
                 "84": {
                     "name": "G20",
                     "number": "84",
-                    "net": "",
+                    "net": "GPIO25",
                     "props": {
                         "Pin Number": "84"
                     }
@@ -696,7 +696,7 @@
                 "85": {
                     "name": "H22",
                     "number": "85",
-                    "net": "",
+                    "net": "GPIO22",
                     "props": {
                         "Pin Number": "85"
                     }
@@ -704,7 +704,7 @@
                 "86": {
                     "name": "H21",
                     "number": "86",
-                    "net": "",
+                    "net": "GPIO23",
                     "props": {
                         "Pin Number": "86"
                     }
@@ -712,7 +712,7 @@
                 "87": {
                     "name": "J21",
                     "number": "87",
-                    "net": "GPIO25",
+                    "net": "SPI0_CIPO",
                     "props": {
                         "Pin Number": "87"
                     }
@@ -720,7 +720,7 @@
                 "88": {
                     "name": "K21",
                     "number": "88",
-                    "net": "",
+                    "net": "GPIO21",
                     "props": {
                         "Pin Number": "88"
                     }
@@ -728,7 +728,7 @@
                 "89": {
                     "name": "K26",
                     "number": "89",
-                    "net": "GPIO24",
+                    "net": "SPI0_CLK",
                     "props": {
                         "Pin Number": "89"
                     }
@@ -736,7 +736,7 @@
                 "90": {
                     "name": "K25",
                     "number": "90",
-                    "net": "GPIO23",
+                    "net": "SPI0_COPI",
                     "props": {
                         "Pin Number": "90"
                     }
@@ -744,7 +744,7 @@
                 "91": {
                     "name": "K23",
                     "number": "91",
-                    "net": "GPIO22",
+                    "net": "SDRAM_A3",
                     "props": {
                         "Pin Number": "91"
                     }
@@ -752,7 +752,7 @@
                 "92": {
                     "name": "K22",
                     "number": "92",
-                    "net": "GPIO21",
+                    "net": "GPIO17",
                     "props": {
                         "Pin Number": "92"
                     }
@@ -760,7 +760,7 @@
                 "93": {
                     "name": "M26",
                     "number": "93",
-                    "net": "SPI0_CIPO",
+                    "net": "SDRAM_A1",
                     "props": {
                         "Pin Number": "93"
                     }
@@ -768,7 +768,7 @@
                 "94": {
                     "name": "N26",
                     "number": "94",
-                    "net": "SPI0_COPI",
+                    "net": "SDRAM_A2",
                     "props": {
                         "Pin Number": "94"
                     }
@@ -776,7 +776,7 @@
                 "95": {
                     "name": "L23",
                     "number": "95",
-                    "net": "SPI0_CLK",
+                    "net": "SDRAM_A10",
                     "props": {
                         "Pin Number": "95"
                     }
@@ -784,7 +784,7 @@
                 "96": {
                     "name": "L22",
                     "number": "96",
-                    "net": "GPIO17",
+                    "net": "SDRAM_A0",
                     "props": {
                         "Pin Number": "96"
                     }
@@ -792,7 +792,7 @@
                 "97": {
                     "name": "P26",
                     "number": "97",
-                    "net": "",
+                    "net": "SDRAM_BS0",
                     "props": {
                         "Pin Number": "97"
                     }
@@ -800,7 +800,7 @@
                 "98": {
                     "name": "R26",
                     "number": "98",
-                    "net": "",
+                    "net": "SDRAM_BS1",
                     "props": {
                         "Pin Number": "98"
                     }
@@ -808,7 +808,7 @@
                 "99": {
                     "name": "M25",
                     "number": "99",
-                    "net": "",
+                    "net": "SDRAM_RASN",
                     "props": {
                         "Pin Number": "99"
                     }
@@ -816,7 +816,7 @@
                 "100": {
                     "name": "M24",
                     "number": "100",
-                    "net": "",
+                    "net": "SDRAM_CSN",
                     "props": {
                         "Pin Number": "100"
                     }
@@ -824,7 +824,7 @@
                 "101": {
                     "name": "N22",
                     "number": "101",
-                    "net": "",
+                    "net": "SDRAM_WEN",
                     "props": {
                         "Pin Number": "101"
                     }
@@ -832,7 +832,7 @@
                 "102": {
                     "name": "N21",
                     "number": "102",
-                    "net": "",
+                    "net": "SDRAM_CASN",
                     "props": {
                         "Pin Number": "102"
                     }
@@ -840,7 +840,7 @@
                 "103": {
                     "name": "P24",
                     "number": "103",
-                    "net": "",
+                    "net": "SDRAM_DQ7",
                     "props": {
                         "Pin Number": "103"
                     }
@@ -848,7 +848,7 @@
                 "104": {
                     "name": "P23",
                     "number": "104",
-                    "net": "",
+                    "net": "SDRAM_LDQM",
                     "props": {
                         "Pin Number": "104"
                     }
@@ -856,7 +856,7 @@
                 "105": {
                     "name": "P25",
                     "number": "105",
-                    "net": "",
+                    "net": "SDRAM_DQ5",
                     "props": {
                         "Pin Number": "105"
                     }
@@ -864,7 +864,7 @@
                 "106": {
                     "name": "R25",
                     "number": "106",
-                    "net": "",
+                    "net": "SDRAM_DQ6",
                     "props": {
                         "Pin Number": "106"
                     }
@@ -872,7 +872,7 @@
                 "107": {
                     "name": "T25",
                     "number": "107",
-                    "net": "",
+                    "net": "SDRAM_DQ3",
                     "props": {
                         "Pin Number": "107"
                     }
@@ -880,7 +880,7 @@
                 "108": {
                     "name": "T24",
                     "number": "108",
-                    "net": "",
+                    "net": "SDRAM_DQ4",
                     "props": {
                         "Pin Number": "108"
                     }
@@ -888,7 +888,7 @@
                 "109": {
                     "name": "V21",
                     "number": "109",
-                    "net": "",
+                    "net": "SDRAM_DQ1",
                     "props": {
                         "Pin Number": "109"
                     }
@@ -896,7 +896,7 @@
                 "110": {
                     "name": "U21",
                     "number": "110",
-                    "net": "",
+                    "net": "SDRAM_DQ2",
                     "props": {
                         "Pin Number": "110"
                     }
@@ -912,7 +912,7 @@
                 "112": {
                     "name": "V23",
                     "number": "112",
-                    "net": "",
+                    "net": "SDRAM_DQ0",
                     "props": {
                         "Pin Number": "112"
                     }
@@ -936,7 +936,7 @@
                 "115": {
                     "name": "AA25",
                     "number": "115",
-                    "net": "",
+                    "net": "JS1_RIGHT",
                     "props": {
                         "Pin Number": "115"
                     }
@@ -944,7 +944,7 @@
                 "116": {
                     "name": "Y25",
                     "number": "116",
-                    "net": "JS1_RIGHT",
+                    "net": "",
                     "props": {
                         "Pin Number": "116"
                     }
@@ -952,7 +952,7 @@
                 "117": {
                     "name": "AC24",
                     "number": "117",
-                    "net": "",
+                    "net": "JS1_LEFT",
                     "props": {
                         "Pin Number": "117"
                     }
@@ -960,7 +960,7 @@
                 "118": {
                     "name": "AB24",
                     "number": "118",
-                    "net": "JS1_LEFT",
+                    "net": "",
                     "props": {
                         "Pin Number": "118"
                     }
@@ -968,7 +968,7 @@
                 "119": {
                     "name": "Y21",
                     "number": "119",
-                    "net": "JS1_TRIG",
+                    "net": "JS1_DOWN",
                     "props": {
                         "Pin Number": "119"
                     }
@@ -976,7 +976,7 @@
                 "120": {
                     "name": "W21",
                     "number": "120",
-                    "net": "JS1_DOWN",
+                    "net": "JS1_TRIG",
                     "props": {
                         "Pin Number": "120"
                     }
@@ -984,7 +984,7 @@
                 "121": {
                     "name": "Y26",
                     "number": "121",
-                    "net": "",
+                    "net": "JS1_UP",
                     "props": {
                         "Pin Number": "121"
                     }
@@ -992,7 +992,7 @@
                 "122": {
                     "name": "W25",
                     "number": "122",
-                    "net": "JS1_UP",
+                    "net": "",
                     "props": {
                         "Pin Number": "122"
                     }
@@ -2875,7 +2875,7 @@
                 "29": {
                     "name": "GPIO28",
                     "number": "29",
-                    "net": "JS2_POT1",
+                    "net": "JS2_POT0",
                     "props": {
                         "Pin Number": "29"
                     }
@@ -2883,7 +2883,7 @@
                 "30": {
                     "name": "GPIO29",
                     "number": "30",
-                    "net": "JS2_POT0",
+                    "net": "JS2_POT1",
                     "props": {
                         "Pin Number": "30"
                     }
@@ -2955,7 +2955,7 @@
                 "39": {
                     "name": "~{RESET}",
                     "number": "39",
-                    "net": "$1N96835",
+                    "net": "PICO_RESETN",
                     "props": {
                         "Pin Number": "39"
                     }
@@ -2963,7 +2963,7 @@
                 "40": {
                     "name": "BOOTSEL",
                     "number": "40",
-                    "net": "$1N84409",
+                    "net": "PICO_BOOTSEL",
                     "props": {
                         "Pin Number": "40"
                     }
@@ -3234,57 +3234,6 @@
                 "Temperature Coefficient": "X5R",
                 "Description": "Capacitance:10uF Tolerance:±10% Tolerance:±10% Voltage Rating:25V Temperature Coefficient:X5R",
                 "DeviceName": "CL21A106KAYNNNE_C15850",
-                "FootprintName": "C0805"
-            },
-            "pinInfoMap": {
-                "1": {
-                    "name": "1",
-                    "number": "1",
-                    "net": "GND",
-                    "props": {
-                        "Pin Number": "1"
-                    }
-                },
-                "2": {
-                    "name": "2",
-                    "number": "2",
-                    "net": "3V3",
-                    "props": {
-                        "Pin Number": "2"
-                    }
-                }
-            }
-        },
-        "gge188": {
-            "props": {
-                "Add into BOM": "yes",
-                "Convert to PCB": "yes",
-                "Symbol": "1cde8ecaf5a347c29e75587993f45255",
-                "Designator": "C9",
-                "Name": "={Value}",
-                "Device": "0beb3b934c6149c68ac9768ea4c49d02",
-                "Reuse Block": "",
-                "Group ID": "",
-                "Channel ID": "$1e87146",
-                "Unique ID": "gge188",
-                "LCSC Part Name": "100nF ±10% 50V",
-                "Supplier Part": "C49678",
-                "Manufacturer": "YAGEO(国巨)",
-                "Manufacturer Part": "CC0805KRX7R9BB104",
-                "Supplier Footprint": "0805",
-                "JLCPCB Part Class": "Basic Part",
-                "Datasheet": "https://item.szlcsc.com/datasheet/CC0805KRX7R9BB104/50686.html",
-                "Supplier": "LCSC",
-                "Footprint": "341e06c38b524522a9711478f9a1198f",
-                "3D Model": "8c88e81f49c6409b980720ec8953afb6",
-                "3D Model Title": "C0805_L2.0-W1.3-H1.3",
-                "3D Model Transform": "78.74,51.181,0,0,0,0,0,0.0005,0",
-                "Value": "100nF",
-                "Tolerance": "±10%",
-                "Voltage Rating": "50V",
-                "Temperature Coefficient": "X7R",
-                "Description": "Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:50V Temperature Coefficient:X7R",
-                "DeviceName": "CC0805KRX7R9BB104",
                 "FootprintName": "C0805"
             },
             "pinInfoMap": {
@@ -4560,7 +4509,7 @@
                 "1": {
                     "name": "1",
                     "number": "1",
-                    "net": "$1N84409",
+                    "net": "PICO_BOOTSEL",
                     "props": {
                         "Pin Number": "1"
                     }
@@ -4642,7 +4591,7 @@
                 "1": {
                     "name": "1",
                     "number": "1",
-                    "net": "$1N96835",
+                    "net": "PICO_RESETN",
                     "props": {
                         "Pin Number": "1"
                     }
@@ -4669,97 +4618,6 @@
                     "net": "",
                     "props": {
                         "Pin Number": "4"
-                    }
-                }
-            }
-        },
-        "gge270": {
-            "props": {
-                "Add into BOM": "yes",
-                "Convert to PCB": "yes",
-                "Symbol": "fe05d623f3324a3f8c1ba14221a2b59a",
-                "Designator": "U6",
-                "Device": "c76ce932a3d24bdaa755c0123d127cc6",
-                "Unique ID": "gge270",
-                "LCSC Part Name": "1x3P 间距:1mm 立贴 系列:SH",
-                "Supplier Part": "C160389",
-                "Manufacturer": "JST",
-                "Manufacturer Part": "BM03B-SRSS-TB(LF)(SN)",
-                "Supplier Footprint": "SMD,P=1mm",
-                "JLCPCB Part Class": "Extended Part",
-                "Datasheet": "https://item.szlcsc.com/datasheet/BM03B-SRSS-TB(LF)(SN)/171769.html",
-                "Supplier": "LCSC",
-                "Footprint": "84d3bc99472a419bb1815cee67d7dd37",
-                "3D Model": "126a3fda1a8a43ad963bee752fac39e7",
-                "3D Model Title": "CONN-SMD_SR1.00-LS-3P",
-                "3D Model Transform": "196.85,142.1257,0,180,0,0,0,-5.906,0",
-                "Pins Structure": "1x3P",
-                "Pitch": "1mm",
-                "Mounting Type": "Surface Mount,Vertical",
-                "Reference Series": "SH",
-                "Number of Pins": "3P",
-                "Number of Rows": "1",
-                "Number of PINs Per Row": "3",
-                "Row Spacing": "-",
-                "Current Rating": "1A",
-                "Contact Material": "Copper Alloy",
-                "Contact Plating": "Tin",
-                "Operating Temperature": "-25℃~+85℃",
-                "Voltage Rating": "50V",
-                "Plastic Material": "PA",
-                "Flame Retardant Rating": "UL94V-0",
-                "Supplementary Features": "Auxiliary Solder Pin",
-                "Color": "White",
-                "Z-Height of the Board": "4.25mm",
-                "X-Length of Bottom Edge on Board (Spacing Line)": "5mm",
-                "Y-Width of Bottom Edge on Board": "3.6mm",
-                "Name": "={Manufacturer Part}",
-                "Description": "Pins Structure:1x3P Pitch:1mm Mounting Type:Surface Mount,Vertical Reference Series:SH Number of Pins:3P Number of Rows:1 Number of PINs Per Row:3 Row Spacing:- Current Rating:1A Contact Material:Copper Alloy Contact Plating:Tin Operating Temperature:-25℃",
-                "Reuse Block": "",
-                "Group ID": "",
-                "Channel ID": "$1I99479",
-                "DeviceName": "BM03B-SRSS-TB(LF)(SN)",
-                "FootprintName": "CONN-SMD-3P-P1.00_BM03B-SRSS-TB-LF-SN"
-            },
-            "pinInfoMap": {
-                "1": {
-                    "name": "1",
-                    "number": "1",
-                    "net": "$1N84413",
-                    "props": {
-                        "Pin Number": "1"
-                    }
-                },
-                "2": {
-                    "name": "2",
-                    "number": "2",
-                    "net": "GND",
-                    "props": {
-                        "Pin Number": "2"
-                    }
-                },
-                "3": {
-                    "name": "3",
-                    "number": "3",
-                    "net": "$1N84412",
-                    "props": {
-                        "Pin Number": "3"
-                    }
-                },
-                "4": {
-                    "name": "4",
-                    "number": "4",
-                    "net": "",
-                    "props": {
-                        "Pin Number": "4"
-                    }
-                },
-                "5": {
-                    "name": "5",
-                    "number": "5",
-                    "net": "",
-                    "props": {
-                        "Pin Number": "5"
                     }
                 }
             }
@@ -4856,57 +4714,6 @@
                 }
             }
         },
-        "gge188_0": {
-            "props": {
-                "Add into BOM": "yes",
-                "Convert to PCB": "yes",
-                "Symbol": "1cde8ecaf5a347c29e75587993f45255",
-                "Designator": "C17",
-                "Device": "0beb3b934c6149c68ac9768ea4c49d02",
-                "Name": "={Value}",
-                "Reuse Block": "",
-                "Group ID": "",
-                "Channel ID": "$1I99487",
-                "Unique ID": "gge188_0",
-                "LCSC Part Name": "100nF ±10% 50V",
-                "Supplier Part": "C49678",
-                "Manufacturer": "YAGEO(国巨)",
-                "Manufacturer Part": "CC0805KRX7R9BB104",
-                "Supplier Footprint": "0805",
-                "JLCPCB Part Class": "Basic Part",
-                "Datasheet": "https://item.szlcsc.com/datasheet/CC0805KRX7R9BB104/50686.html",
-                "Supplier": "LCSC",
-                "Footprint": "341e06c38b524522a9711478f9a1198f",
-                "3D Model": "8c88e81f49c6409b980720ec8953afb6",
-                "3D Model Title": "C0805_L2.0-W1.3-H1.3",
-                "3D Model Transform": "78.74,51.181,0,0,0,0,0,0.0005,0",
-                "Value": "100nF",
-                "Tolerance": "±10%",
-                "Voltage Rating": "50V",
-                "Temperature Coefficient": "X7R",
-                "Description": "Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:50V Temperature Coefficient:X7R",
-                "DeviceName": "CC0805KRX7R9BB104",
-                "FootprintName": "C0805"
-            },
-            "pinInfoMap": {
-                "1": {
-                    "name": "1",
-                    "number": "1",
-                    "net": "GND",
-                    "props": {
-                        "Pin Number": "1"
-                    }
-                },
-                "2": {
-                    "name": "2",
-                    "number": "2",
-                    "net": "RM_3V3",
-                    "props": {
-                        "Pin Number": "2"
-                    }
-                }
-            }
-        },
         "gge191_1": {
             "props": {
                 "Add into BOM": "yes",
@@ -4937,57 +4744,6 @@
                 "Temperature Coefficient": "X5R",
                 "Description": "Capacitance:10uF Tolerance:±10% Tolerance:±10% Voltage Rating:25V Temperature Coefficient:X5R",
                 "DeviceName": "CL21A106KAYNNNE_C15850",
-                "FootprintName": "C0805"
-            },
-            "pinInfoMap": {
-                "1": {
-                    "name": "1",
-                    "number": "1",
-                    "net": "GND",
-                    "props": {
-                        "Pin Number": "1"
-                    }
-                },
-                "2": {
-                    "name": "2",
-                    "number": "2",
-                    "net": "5V",
-                    "props": {
-                        "Pin Number": "2"
-                    }
-                }
-            }
-        },
-        "gge188_1": {
-            "props": {
-                "Add into BOM": "yes",
-                "Convert to PCB": "yes",
-                "Symbol": "1cde8ecaf5a347c29e75587993f45255",
-                "Designator": "C19",
-                "Device": "0beb3b934c6149c68ac9768ea4c49d02",
-                "Name": "={Value}",
-                "Reuse Block": "",
-                "Group ID": "",
-                "Channel ID": "$1I99489",
-                "Unique ID": "gge188_1",
-                "LCSC Part Name": "100nF ±10% 50V",
-                "Supplier Part": "C49678",
-                "Manufacturer": "YAGEO(国巨)",
-                "Manufacturer Part": "CC0805KRX7R9BB104",
-                "Supplier Footprint": "0805",
-                "JLCPCB Part Class": "Basic Part",
-                "Datasheet": "https://item.szlcsc.com/datasheet/CC0805KRX7R9BB104/50686.html",
-                "Supplier": "LCSC",
-                "Footprint": "341e06c38b524522a9711478f9a1198f",
-                "3D Model": "8c88e81f49c6409b980720ec8953afb6",
-                "3D Model Title": "C0805_L2.0-W1.3-H1.3",
-                "3D Model Transform": "78.74,51.181,0,0,0,0,0,0.0005,0",
-                "Value": "100nF",
-                "Tolerance": "±10%",
-                "Voltage Rating": "50V",
-                "Temperature Coefficient": "X7R",
-                "Description": "Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:50V Temperature Coefficient:X7R",
-                "DeviceName": "CC0805KRX7R9BB104",
                 "FootprintName": "C0805"
             },
             "pinInfoMap": {
@@ -5060,57 +4816,6 @@
                 }
             }
         },
-        "gge188_2": {
-            "props": {
-                "Add into BOM": "yes",
-                "Convert to PCB": "yes",
-                "Symbol": "1cde8ecaf5a347c29e75587993f45255",
-                "Designator": "C21",
-                "Device": "0beb3b934c6149c68ac9768ea4c49d02",
-                "Name": "={Value}",
-                "Reuse Block": "",
-                "Group ID": "",
-                "Channel ID": "$1I99493",
-                "Unique ID": "gge188_2",
-                "LCSC Part Name": "100nF ±10% 50V",
-                "Supplier Part": "C49678",
-                "Manufacturer": "YAGEO(国巨)",
-                "Manufacturer Part": "CC0805KRX7R9BB104",
-                "Supplier Footprint": "0805",
-                "JLCPCB Part Class": "Basic Part",
-                "Datasheet": "https://item.szlcsc.com/datasheet/CC0805KRX7R9BB104/50686.html",
-                "Supplier": "LCSC",
-                "Footprint": "341e06c38b524522a9711478f9a1198f",
-                "3D Model": "8c88e81f49c6409b980720ec8953afb6",
-                "3D Model Title": "C0805_L2.0-W1.3-H1.3",
-                "3D Model Transform": "78.74,51.181,0,0,0,0,0,0.0005,0",
-                "Value": "100nF",
-                "Tolerance": "±10%",
-                "Voltage Rating": "50V",
-                "Temperature Coefficient": "X7R",
-                "Description": "Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:50V Temperature Coefficient:X7R",
-                "DeviceName": "CC0805KRX7R9BB104",
-                "FootprintName": "C0805"
-            },
-            "pinInfoMap": {
-                "1": {
-                    "name": "1",
-                    "number": "1",
-                    "net": "GND",
-                    "props": {
-                        "Pin Number": "1"
-                    }
-                },
-                "2": {
-                    "name": "2",
-                    "number": "2",
-                    "net": "3V3",
-                    "props": {
-                        "Pin Number": "2"
-                    }
-                }
-            }
-        },
         "gge191_3": {
             "props": {
                 "Add into BOM": "yes",
@@ -5162,67 +4867,16 @@
                 }
             }
         },
-        "gge188_3": {
-            "props": {
-                "Add into BOM": "yes",
-                "Convert to PCB": "yes",
-                "Symbol": "1cde8ecaf5a347c29e75587993f45255",
-                "Designator": "C23",
-                "Device": "0beb3b934c6149c68ac9768ea4c49d02",
-                "Name": "={Value}",
-                "Reuse Block": "",
-                "Group ID": "",
-                "Channel ID": "$1I99497",
-                "Unique ID": "gge188_3",
-                "LCSC Part Name": "100nF ±10% 50V",
-                "Supplier Part": "C49678",
-                "Manufacturer": "YAGEO(国巨)",
-                "Manufacturer Part": "CC0805KRX7R9BB104",
-                "Supplier Footprint": "0805",
-                "JLCPCB Part Class": "Basic Part",
-                "Datasheet": "https://item.szlcsc.com/datasheet/CC0805KRX7R9BB104/50686.html",
-                "Supplier": "LCSC",
-                "Footprint": "341e06c38b524522a9711478f9a1198f",
-                "3D Model": "8c88e81f49c6409b980720ec8953afb6",
-                "3D Model Title": "C0805_L2.0-W1.3-H1.3",
-                "3D Model Transform": "78.74,51.181,0,0,0,0,0,0.0005,0",
-                "Value": "100nF",
-                "Tolerance": "±10%",
-                "Voltage Rating": "50V",
-                "Temperature Coefficient": "X7R",
-                "Description": "Capacitance:100nF Tolerance:±10% Tolerance:±10% Voltage Rating:50V Temperature Coefficient:X7R",
-                "DeviceName": "CC0805KRX7R9BB104",
-                "FootprintName": "C0805"
-            },
-            "pinInfoMap": {
-                "1": {
-                    "name": "1",
-                    "number": "1",
-                    "net": "GND",
-                    "props": {
-                        "Pin Number": "1"
-                    }
-                },
-                "2": {
-                    "name": "2",
-                    "number": "2",
-                    "net": "5V",
-                    "props": {
-                        "Pin Number": "2"
-                    }
-                }
-            }
-        },
         "gge0737b150028c934f_1": {
             "props": {
                 "Add into BOM": "yes",
                 "Convert to PCB": "yes",
                 "Symbol": "c35b0efb3f0d4c0eba78f0e68709d3ab",
                 "Designator": "U5",
+                "Device": "63658856ee2b40a1aad62b6f17d1ca14",
                 "Footprint": "96aac7f341cc4f9b8c421f153b2a4541",
                 "Origin Footprint": "DSN-MINI-360",
                 "Unique ID": "gge0737b150028c934f_1",
-                "Device": "63658856ee2b40a1aad62b6f17d1ca14",
                 "Name": "DSN-MINI-360",
                 "Manufacturer": "",
                 "Manufacturer Part": "",
@@ -5271,6 +4925,1108 @@
                     "net": "GND",
                     "props": {
                         "Pin Number": "4"
+                    }
+                }
+            }
+        },
+        "gge273": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Symbol": "f9bffce8a3a040ff8bdfb6cb17e31c23",
+                "Designator": "U7",
+                "Device": "d77bb979a829427387bd597fdeade8a7",
+                "Unique ID": "gge273",
+                "LCSC Part Name": "4M×4存储体×16位SDRAM",
+                "Supplier Part": "C62246",
+                "Manufacturer": "Winbond(华邦)",
+                "Manufacturer Part": "W9825G6KH-6",
+                "Supplier Footprint": "TSOP-54-10.2mm",
+                "JLCPCB Part Class": "Extended Part",
+                "Datasheet": "https://item.szlcsc.com/datasheet/W9825G6KH-6/63303.html",
+                "Supplier": "LCSC",
+                "Footprint": "161ec9515eef4bc5b838d3e206b5a8e4",
+                "3D Model": "7a6e7ff1989b45ab8156150a5717c2f6",
+                "3D Model Title": "TSOP-54_L22.2-W10.2-H1.2-LS11.8-P0.80",
+                "3D Model Transform": "464.567,872.538,0,90,0,0,0,-0.0005,0",
+                "Memory Size": "256Mbit",
+                "Clock Frequency": "166MHz",
+                "Voltage - Supply": "3V~3.6V",
+                "Operating Temperature": "0℃~+70℃",
+                "Name": "={Manufacturer Part}",
+                "Description": "Memory Size:256Mbit Clock Frequency:166MHz Voltage - Supply:3V~3.6V Voltage - Supply:3V~3.6V Operating Temperature:0℃~+70℃ Operating Temperature:0℃~+70℃",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99510",
+                "DeviceName": "W9825G6KH-6",
+                "FootprintName": "TSOP-54_L22.2-W10.2-P0.80-LS11.8-BL"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "VDD",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "DQ0",
+                    "number": "2",
+                    "net": "SDRAM_DQ0",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                },
+                "3": {
+                    "name": "VDDQ",
+                    "number": "3",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "3"
+                    }
+                },
+                "4": {
+                    "name": "DQ1",
+                    "number": "4",
+                    "net": "SDRAM_DQ1",
+                    "props": {
+                        "Pin Number": "4"
+                    }
+                },
+                "5": {
+                    "name": "DQ2",
+                    "number": "5",
+                    "net": "SDRAM_DQ2",
+                    "props": {
+                        "Pin Number": "5"
+                    }
+                },
+                "6": {
+                    "name": "VSSQ",
+                    "number": "6",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "6"
+                    }
+                },
+                "7": {
+                    "name": "DQ3",
+                    "number": "7",
+                    "net": "SDRAM_DQ3",
+                    "props": {
+                        "Pin Number": "7"
+                    }
+                },
+                "8": {
+                    "name": "DQ4",
+                    "number": "8",
+                    "net": "SDRAM_DQ4",
+                    "props": {
+                        "Pin Number": "8"
+                    }
+                },
+                "9": {
+                    "name": "VDDQ",
+                    "number": "9",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "9"
+                    }
+                },
+                "10": {
+                    "name": "DQ5",
+                    "number": "10",
+                    "net": "SDRAM_DQ5",
+                    "props": {
+                        "Pin Number": "10"
+                    }
+                },
+                "11": {
+                    "name": "DQ6",
+                    "number": "11",
+                    "net": "SDRAM_DQ6",
+                    "props": {
+                        "Pin Number": "11"
+                    }
+                },
+                "12": {
+                    "name": "VSSQ",
+                    "number": "12",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "12"
+                    }
+                },
+                "13": {
+                    "name": "DQ7",
+                    "number": "13",
+                    "net": "SDRAM_DQ7",
+                    "props": {
+                        "Pin Number": "13"
+                    }
+                },
+                "14": {
+                    "name": "VDD",
+                    "number": "14",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "14"
+                    }
+                },
+                "15": {
+                    "name": "LDQM",
+                    "number": "15",
+                    "net": "SDRAM_LDQM",
+                    "props": {
+                        "Pin Number": "15"
+                    }
+                },
+                "16": {
+                    "name": "WE#",
+                    "number": "16",
+                    "net": "SDRAM_WEN",
+                    "props": {
+                        "Pin Number": "16"
+                    }
+                },
+                "17": {
+                    "name": "CAS#",
+                    "number": "17",
+                    "net": "SDRAM_CASN",
+                    "props": {
+                        "Pin Number": "17"
+                    }
+                },
+                "18": {
+                    "name": "RAS#",
+                    "number": "18",
+                    "net": "SDRAM_RASN",
+                    "props": {
+                        "Pin Number": "18"
+                    }
+                },
+                "19": {
+                    "name": "CS#",
+                    "number": "19",
+                    "net": "SDRAM_CSN",
+                    "props": {
+                        "Pin Number": "19"
+                    }
+                },
+                "20": {
+                    "name": "BS0",
+                    "number": "20",
+                    "net": "SDRAM_BS0",
+                    "props": {
+                        "Pin Number": "20"
+                    }
+                },
+                "21": {
+                    "name": "BS1",
+                    "number": "21",
+                    "net": "SDRAM_BS1",
+                    "props": {
+                        "Pin Number": "21"
+                    }
+                },
+                "22": {
+                    "name": "A10/AP",
+                    "number": "22",
+                    "net": "SDRAM_A10",
+                    "props": {
+                        "Pin Number": "22"
+                    }
+                },
+                "23": {
+                    "name": "A0",
+                    "number": "23",
+                    "net": "SDRAM_A0",
+                    "props": {
+                        "Pin Number": "23"
+                    }
+                },
+                "24": {
+                    "name": "A1",
+                    "number": "24",
+                    "net": "SDRAM_A1",
+                    "props": {
+                        "Pin Number": "24"
+                    }
+                },
+                "25": {
+                    "name": "A2",
+                    "number": "25",
+                    "net": "SDRAM_A2",
+                    "props": {
+                        "Pin Number": "25"
+                    }
+                },
+                "26": {
+                    "name": "A3",
+                    "number": "26",
+                    "net": "SDRAM_A3",
+                    "props": {
+                        "Pin Number": "26"
+                    }
+                },
+                "27": {
+                    "name": "VDD",
+                    "number": "27",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "27"
+                    }
+                },
+                "28": {
+                    "name": "VSS",
+                    "number": "28",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "28"
+                    }
+                },
+                "29": {
+                    "name": "A4",
+                    "number": "29",
+                    "net": "SDRAM_A4",
+                    "props": {
+                        "Pin Number": "29"
+                    }
+                },
+                "30": {
+                    "name": "A5",
+                    "number": "30",
+                    "net": "SDRAM_A5",
+                    "props": {
+                        "Pin Number": "30"
+                    }
+                },
+                "31": {
+                    "name": "A6",
+                    "number": "31",
+                    "net": "SDRAM_A6",
+                    "props": {
+                        "Pin Number": "31"
+                    }
+                },
+                "32": {
+                    "name": "A7",
+                    "number": "32",
+                    "net": "SDRAM_A7",
+                    "props": {
+                        "Pin Number": "32"
+                    }
+                },
+                "33": {
+                    "name": "A8",
+                    "number": "33",
+                    "net": "SDRAM_A8",
+                    "props": {
+                        "Pin Number": "33"
+                    }
+                },
+                "34": {
+                    "name": "A9",
+                    "number": "34",
+                    "net": "SDRAM_A9",
+                    "props": {
+                        "Pin Number": "34"
+                    }
+                },
+                "35": {
+                    "name": "A11",
+                    "number": "35",
+                    "net": "SDRAM_A11",
+                    "props": {
+                        "Pin Number": "35"
+                    }
+                },
+                "36": {
+                    "name": "A12",
+                    "number": "36",
+                    "net": "SDRAM_A12",
+                    "props": {
+                        "Pin Number": "36"
+                    }
+                },
+                "37": {
+                    "name": "CKE",
+                    "number": "37",
+                    "net": "SDRAM_CKE",
+                    "props": {
+                        "Pin Number": "37"
+                    }
+                },
+                "38": {
+                    "name": "CLK",
+                    "number": "38",
+                    "net": "SDRAM_CLK",
+                    "props": {
+                        "Pin Number": "38"
+                    }
+                },
+                "39": {
+                    "name": "UDQM",
+                    "number": "39",
+                    "net": "SDRAM_UDQM",
+                    "props": {
+                        "Pin Number": "39"
+                    }
+                },
+                "40": {
+                    "name": "NC",
+                    "number": "40",
+                    "net": "",
+                    "props": {
+                        "Pin Number": "40"
+                    }
+                },
+                "41": {
+                    "name": "VSS",
+                    "number": "41",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "41"
+                    }
+                },
+                "42": {
+                    "name": "DQ8",
+                    "number": "42",
+                    "net": "SDRAM_DQ8",
+                    "props": {
+                        "Pin Number": "42"
+                    }
+                },
+                "43": {
+                    "name": "VDDQ",
+                    "number": "43",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "43"
+                    }
+                },
+                "44": {
+                    "name": "DQ9",
+                    "number": "44",
+                    "net": "SDRAM_DQ9",
+                    "props": {
+                        "Pin Number": "44"
+                    }
+                },
+                "45": {
+                    "name": "DQ10",
+                    "number": "45",
+                    "net": "SDRAM_DQ10",
+                    "props": {
+                        "Pin Number": "45"
+                    }
+                },
+                "46": {
+                    "name": "VSSQ",
+                    "number": "46",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "46"
+                    }
+                },
+                "47": {
+                    "name": "DQ11",
+                    "number": "47",
+                    "net": "SDRAM_DQ11",
+                    "props": {
+                        "Pin Number": "47"
+                    }
+                },
+                "48": {
+                    "name": "DQ12",
+                    "number": "48",
+                    "net": "SDRAM_DQ12",
+                    "props": {
+                        "Pin Number": "48"
+                    }
+                },
+                "49": {
+                    "name": "VDDQ",
+                    "number": "49",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "49"
+                    }
+                },
+                "50": {
+                    "name": "DQ13",
+                    "number": "50",
+                    "net": "SDRAM_DQ13",
+                    "props": {
+                        "Pin Number": "50"
+                    }
+                },
+                "51": {
+                    "name": "DQ14",
+                    "number": "51",
+                    "net": "SDRAM_DQ14",
+                    "props": {
+                        "Pin Number": "51"
+                    }
+                },
+                "52": {
+                    "name": "VSSQ",
+                    "number": "52",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "52"
+                    }
+                },
+                "53": {
+                    "name": "DQ15",
+                    "number": "53",
+                    "net": "SDRAM_DQ15",
+                    "props": {
+                        "Pin Number": "53"
+                    }
+                },
+                "54": {
+                    "name": "VSS",
+                    "number": "54",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "54"
+                    }
+                }
+            }
+        },
+        "gge274": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C19",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge274",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99514",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "5V",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge275": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C25",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge275",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99515",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge276": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C21",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge276",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99516",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge277": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C23",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge277",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99517",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "5V",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge278": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C26",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge278",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99520",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge279": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C27",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge279",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99521",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge280": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C28",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge280",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99522",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge281": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C29",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge281",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99523",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge282": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C9",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge282",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99524",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge274_0": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C17",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge274_0",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99525",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "RM_3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge281_0": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C30",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge281_0",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99526",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge281_1": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Designator": "C31",
+                "Symbol": "c7be8ae357e147538b3e620e6862bfde",
+                "Device": "9f66ad744a1b45789d89a668f79caab4",
+                "Unique ID": "gge281_1",
+                "Supplier Part": "C1525",
+                "Supplier Footprint": "0402",
+                "Footprint": "b3d6d9081d2b4b4c916615bbc549d6a9",
+                "3D Model": "b7d13df3e9464d7a99d0651d1a5b4d57",
+                "3D Model Title": "C0402_L1.0-W0.5-H0.5",
+                "3D Model Transform": "39.37,19.685,0,0,0,0,0,0,0",
+                "Value": "100nF",
+                "Name": "={Value}",
+                "Description": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99527",
+                "DeviceName": "CAP_0402",
+                "FootprintName": "C0402"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge283": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Symbol": "c753df8dc92d484590ed067dc7e31e05",
+                "Designator": "H1",
+                "Device": "2aac7e68f6d34352997257e14a8bad74",
+                "Unique ID": "gge283",
+                "Supplier Footprint": "Through",
+                "Footprint": "65c1fe846068432681be09753754b31a",
+                "3D Model": "e506c2b6a89c4aacb020357246aab725",
+                "3D Model Title": "HDR-M-2.54_1x2",
+                "3D Model Transform": "200,100,0,0,0,0,0,0,-118.11",
+                "Description": "",
+                "Name": "",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99529",
+                "DeviceName": "HDR-M_2.54_1x2P",
+                "FootprintName": "HDR-TH_2P-P2.54-V-M-1"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "3V3",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "RM_3V3",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                }
+            }
+        },
+        "gge284": {
+            "props": {
+                "Add into BOM": "yes",
+                "Convert to PCB": "yes",
+                "Symbol": "77425b55cbf84883a617f351e2e32dd2",
+                "Designator": "U8",
+                "Device": "9b0446f0b171429a9b566fb1b4cfda1f",
+                "Unique ID": "gge284",
+                "LCSC Part Name": "1x3P 间距:1mm 卧贴 系列:SH",
+                "Supplier Part": "C160403",
+                "Manufacturer": "JST",
+                "Manufacturer Part": "SM03B-SRSS-TB(LF)(SN)",
+                "Supplier Footprint": "SMD,P=1mm,卧贴",
+                "JLCPCB Part Class": "Extended Part",
+                "Datasheet": "https://item.szlcsc.com/datasheet/SM03B-SRSS-TB(LF)(SN)/171783.html",
+                "Supplier": "LCSC",
+                "Footprint": "b75ead30ba404422bcafa1dea3c88e9f",
+                "3D Model": "ddb640eb430944ee8bd703e33fce1f62",
+                "3D Model Title": "CONN-SMD_SR1.00-WS-3P",
+                "3D Model Transform": "196.85,194.8815,0,0,0,0,-0.003,-4.213,0",
+                "Pins Structure": "1x3P",
+                "Pitch": "1mm",
+                "Mounting Type": "Surface Mount, Right Angle",
+                "Reference Series": "SH",
+                "Number of Pins": "3P",
+                "Number of Rows": "1",
+                "Number of PINs Per Row": "3",
+                "Row Spacing": "-",
+                "Current Rating": "1A",
+                "Contact Material": "Copper Alloy",
+                "Contact Plating": "Tin",
+                "Operating Temperature": "-25℃~+85℃",
+                "Voltage Rating": "50V",
+                "Plastic Material": "PA",
+                "Flame Retardant Rating": "UL94V-0",
+                "Supplementary Features": "Auxiliary Solder Pin",
+                "Color": "White",
+                "Z-Height of the Board": "2.9mm",
+                "X-Length of Bottom Edge on Board (Spacing Line)": "5mm",
+                "Y-Width of Bottom Edge on Board": "4.32mm",
+                "Name": "={Manufacturer Part}",
+                "Description": "Pins Structure:1x3P Pitch:1mm Mounting Type:Surface Mount, Right Angle Reference Series:SH Number of Pins:3P Number of Rows:1 Number of PINs Per Row:3 Row Spacing:- Current Rating:1A Contact Material:Copper Alloy Contact Plating:Tin Operating Temperature:",
+                "Reuse Block": "",
+                "Group ID": "",
+                "Channel ID": "$1I99530",
+                "DeviceName": "SM03B-SRSS-TB(LF)(SN)",
+                "FootprintName": "CONN-SMD_SM03B-SRSS-TB-LF-SN-P"
+            },
+            "pinInfoMap": {
+                "1": {
+                    "name": "1",
+                    "number": "1",
+                    "net": "$1N84413",
+                    "props": {
+                        "Pin Number": "1"
+                    }
+                },
+                "2": {
+                    "name": "2",
+                    "number": "2",
+                    "net": "GND",
+                    "props": {
+                        "Pin Number": "2"
+                    }
+                },
+                "3": {
+                    "name": "3",
+                    "number": "3",
+                    "net": "$1N84412",
+                    "props": {
+                        "Pin Number": "3"
+                    }
+                },
+                "4": {
+                    "name": "4",
+                    "number": "4",
+                    "net": "",
+                    "props": {
+                        "Pin Number": "4"
+                    }
+                },
+                "5": {
+                    "name": "5",
+                    "number": "5",
+                    "net": "",
+                    "props": {
+                        "Pin Number": "5"
                     }
                 }
             }
@@ -5502,8 +6258,8 @@
                     "TrackPhysics": ""
                 }
             },
-            "$1N84409": {
-                "net": "$1N84409",
+            "PICO_BOOTSEL": {
+                "net": "PICO_BOOTSEL",
                 "ruleMap": {
                     "TrackPhysics": ""
                 }
@@ -5748,8 +6504,8 @@
                     "TrackPhysics": ""
                 }
             },
-            "$1N96835": {
-                "net": "$1N96835",
+            "PICO_RESETN": {
+                "net": "PICO_RESETN",
                 "ruleMap": {
                     "TrackPhysics": ""
                 }
@@ -5804,6 +6560,240 @@
             },
             "GPIO25": {
                 "net": "GPIO25",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ0": {
+                "net": "SDRAM_DQ0",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ1": {
+                "net": "SDRAM_DQ1",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ2": {
+                "net": "SDRAM_DQ2",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ3": {
+                "net": "SDRAM_DQ3",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ4": {
+                "net": "SDRAM_DQ4",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ5": {
+                "net": "SDRAM_DQ5",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ6": {
+                "net": "SDRAM_DQ6",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ7": {
+                "net": "SDRAM_DQ7",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ8": {
+                "net": "SDRAM_DQ8",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ9": {
+                "net": "SDRAM_DQ9",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ10": {
+                "net": "SDRAM_DQ10",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ11": {
+                "net": "SDRAM_DQ11",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ12": {
+                "net": "SDRAM_DQ12",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ13": {
+                "net": "SDRAM_DQ13",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ14": {
+                "net": "SDRAM_DQ14",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_DQ15": {
+                "net": "SDRAM_DQ15",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A0": {
+                "net": "SDRAM_A0",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A1": {
+                "net": "SDRAM_A1",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A2": {
+                "net": "SDRAM_A2",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A3": {
+                "net": "SDRAM_A3",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A4": {
+                "net": "SDRAM_A4",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A5": {
+                "net": "SDRAM_A5",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A6": {
+                "net": "SDRAM_A6",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A7": {
+                "net": "SDRAM_A7",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A8": {
+                "net": "SDRAM_A8",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A9": {
+                "net": "SDRAM_A9",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A10": {
+                "net": "SDRAM_A10",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A11": {
+                "net": "SDRAM_A11",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_A12": {
+                "net": "SDRAM_A12",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_BS0": {
+                "net": "SDRAM_BS0",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_BS1": {
+                "net": "SDRAM_BS1",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_LDQM": {
+                "net": "SDRAM_LDQM",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_UDQM": {
+                "net": "SDRAM_UDQM",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_WEN": {
+                "net": "SDRAM_WEN",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_CASN": {
+                "net": "SDRAM_CASN",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_RASN": {
+                "net": "SDRAM_RASN",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_CSN": {
+                "net": "SDRAM_CSN",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_CKE": {
+                "net": "SDRAM_CKE",
+                "ruleMap": {
+                    "TrackPhysics": ""
+                }
+            },
+            "SDRAM_CLK": {
+                "net": "SDRAM_CLK",
                 "ruleMap": {
                     "TrackPhysics": ""
                 }

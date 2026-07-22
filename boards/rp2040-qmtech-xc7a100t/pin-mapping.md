@@ -8,8 +8,8 @@ Sources (all under `/srv/git/qmtech/QMTECH_XC7A75T-100T-200T_Core_Board/XC7A100T
   (part `.1` = **U2**, banks 13/14/15; part `.2` = **U4**, banks 34/35).
 - `xc7a100tfgg676pkg.txt` — Xilinx package file (ball → bank → differential pair).
 - `QMTECH_Artix-7_XC7A100T_Core_Board_User_Manual(Hardware)_V01.pdf` and the schematic PDF.
-- `Netlist_ATARI-800-QMTech-XC7A100T-CB-RP2040-STAMP-HDMI_2026-07-19.enet` — the baseboard netlist
-  (reviewed; the assignments below are realized in it).
+- `Netlist_ATARI-800-QMTech-XC7A100T-CB-RP2040-STAMP-HDMI_1_2026-07-22.enet` — the baseboard netlist
+  (v2, reviewed; the assignments below are realized in it, and the FPGA↔RP2040 SPI link is present).
 
 ## Header → bank map
 
