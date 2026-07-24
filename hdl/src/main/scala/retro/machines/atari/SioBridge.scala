@@ -1,4 +1,4 @@
-package retro.link
+package retro.machines.atari
 import retro.common.util._
 import retro.common.video._
 import retro.common.scaler._

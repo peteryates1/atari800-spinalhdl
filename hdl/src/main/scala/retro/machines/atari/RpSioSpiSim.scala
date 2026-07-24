@@ -18,7 +18,7 @@ import scala.collection.mutable.ArrayBuffer
 //   3. Read RX_DATA ('S' 1) x5 -> expect the frame bytes with cmd-byte indices.
 //   4. Push an ACK ('Q' 2) + enable TX ('Q' 0) -> expect 0x41 back on sioRxd.
 //
-// Run: sbt "atari/runMain retro.link.RpSioSpiSim"
+// Run: sbt "hdl/runMain retro.link.RpSioSpiSim"
 class SioSpiTestDut extends Component {
   val io = new Bundle {
     val spiSck  = in  Bool()

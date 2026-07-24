@@ -11,7 +11,7 @@ import spinal.core.sim._
 // Reproduces the i5 HDMI top's EXACT Atari config + SDRAM stub in sim, to see whether the
 // embedded-ROM model (internal_rom=3, internal_ram=49152, Star Raiders) actually boots with
 // SDRAM_REQUEST_COMPLETE looped back and SDRAM_DO=0 (the hardware stub). Traces CPU PC pages,
-// COLBK, and first non-black video. Run: sbt "atari/runMain retro.machines.atari.Atari800Ecp5BootSimTb"
+// COLBK, and first non-black video. Run: sbt "hdl/runMain retro.machines.atari.Atari800Ecp5BootSimTb"
 class Atari800Ecp5BootHarness extends Component {
   val io = new Bundle {
     val vs      = out Bool()

@@ -15,7 +15,7 @@ import spinal.core.sim._
 //   * integer ratio (x4) -> every stripe is exactly N px (even) => crisp.
 // The DDA math is deterministic, so this confirms the 320->1280 (x4) supervisor
 // scaler produces geometrically-exact, wobble-free output.
-// Run: sbt "atari/runMain retro.common.scaler.SupervisorScaleSimTb"
+// Run: sbt "hdl/runMain retro.common.scaler.SupervisorScaleSimTb"
 object SupervisorScaleSimTb extends App {
   def runCase(name: String, srcW: Int, hActive: Int): Boolean = {
     val SRC_H = 4; val STRIDE_LOG2 = 9; val FB_BASE = 0x400; val VA = 12

@@ -1,12 +1,12 @@
-// atari800-spinalhdl: Atari 800 FPGA core (SpinalHDL) + RP2040/Pico supervisor.
+// atari800-spinalhdl: retro FPGA cores (SpinalHDL) + RP2040/Pico supervisor.
 //
 // Usage (generate SystemVerilog for a board top):
-//   sbt "atari/runMain retro.boards.Atari800WukongSv"
-//   sbt "atari/runMain retro.boards.Atari800Rp2040HdmiLgSv"
+//   sbt "hdl/runMain retro.boards.Atari800WukongSv"
+//   sbt "hdl/runMain retro.boards.Atari800Rp2040HdmiLgSv"
 
-lazy val atari = (project in file("atari"))
+lazy val hdl = (project in file("hdl"))
   .settings(
-    name := "atari800",
+    name := "hdl",
     scalaVersion := "2.13.18",
     libraryDependencies ++= Seq(
       "com.github.spinalhdl" %% "spinalhdl-core" % "1.12.2",

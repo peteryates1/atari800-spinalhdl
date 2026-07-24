@@ -13,7 +13,7 @@ import java.nio.file.{Files, Paths}
 // behavioral SDRAM at the AddressDecoder's OS window (0x704000 + addr[13:0]),
 // exactly as the RP2040 supervisor loads it on hardware. Reproduces the
 // hardware symptom bench: does the CPU get past the reset vector?
-// Run: sbt "atari/runMain retro.machines.atari.Atari800RomInRamSimTb"
+// Run: sbt "hdl/runMain retro.machines.atari.Atari800RomInRamSimTb"
 object Atari800RomInRamSimTb extends App {
   val compiled = SimConfig
     .withConfig(SpinalConfig(

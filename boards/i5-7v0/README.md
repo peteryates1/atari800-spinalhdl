@@ -16,7 +16,7 @@ device **`--25k --package CABGA381 --speed 6`**, programmed with **openFPGALoade
 Self-contained (no Atari core): 25 MHz → PLL → fixed supervisor-style text → HDMI. Used to
 eyeball jitter/shimmer on sharp text — **hardware-verified "solid as a rock", crisp**. Four
 steps:
-1. `sbt "atari/runMain retro.boards.Atari800Ecp5HdmiTestSv"` → generates `Atari800Ecp5HdmiTestTop.sv`
+1. `sbt "hdl/runMain retro.boards.Atari800Ecp5HdmiTestSv"` → generates `Atari800Ecp5HdmiTestTop.sv`
 2. `yosys synth_ecp5` over `pll_hdmi_ecp5.sv` + `ecp5_ddr_out.v` + the generated top → `build/hdmitest.json`
 3. `nextpnr-ecp5 --25k --package CABGA381 --speed 6 --lpf hdmi_test.lpf`
 4. `ecppack --compress` → `build/hdmitest.bit`

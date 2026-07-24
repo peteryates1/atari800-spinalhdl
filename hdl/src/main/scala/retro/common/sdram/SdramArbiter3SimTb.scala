@@ -10,7 +10,7 @@ import spinal.core.sim._
 // Simulation for the 3-port SDRAM arbiter, driven through Arb3Harness
 // (SdramArbiter3 + faithful RTL MockSdram). Verifies each port reads/writes
 // correctly through the arbiter, plus a concurrent burst.
-// Run: sbt "atari/runMain retro.common.sdram.SdramArbiter3SimTb"
+// Run: sbt "hdl/runMain retro.common.sdram.SdramArbiter3SimTb"
 object SdramArbiter3SimTb extends App {
   SimConfig.withConfig(SpinalConfig(defaultClockDomainFrequency = FixedFrequency(100 MHz)))
     .compile(new Arb3Harness)

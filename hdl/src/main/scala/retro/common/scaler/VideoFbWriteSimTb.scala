@@ -13,7 +13,7 @@ import scala.collection.mutable
 // Drives a small synthetic video frame (a few active lines of a known pattern,
 // with blanking and hsync/vsync), models the SDRAM write-request handshake as a
 // behavioral sink, and checks every pixel landed at the expected framebuffer
-// address with the expected data. Run: sbt "atari/runMain retro.common.scaler.VideoFbWriteSimTb"
+// address with the expected data. Run: sbt "hdl/runMain retro.common.scaler.VideoFbWriteSimTb"
 object VideoFbWriteSimTb extends App {
   val W = 8      // active pixels per line (small for sim)
   val H = 4      // active lines per frame

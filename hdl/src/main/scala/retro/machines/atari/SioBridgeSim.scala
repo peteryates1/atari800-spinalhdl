@@ -1,4 +1,4 @@
-package retro.link
+package retro.machines.atari
 import retro.common.util._
 import retro.common.video._
 import retro.common.scaler._
@@ -13,7 +13,7 @@ import spinal.core.sim._
  * Tests S2P deserializer, P2S serializer, COMMAND detection, and interrupt
  * signal using Verilator.
  *
- * Run: sbt "atari/runMain retro.link.SioBridgeSim"
+ * Run: sbt "hdl/runMain retro.link.SioBridgeSim"
  */
 object SioBridgeSim extends App {
 

@@ -11,7 +11,7 @@ import scala.collection.mutable
 // Simulation for the Stage 2 read/scaler path (VideoFbRead).
 // Pre-fills a framebuffer, models the SDRAM read handshake, captures one output
 // frame and checks nearest-neighbour upscale: out[oy][ox] == fb[oy*srcH/vActive][ox*srcW/hActive].
-// Run: sbt "atari/runMain retro.common.scaler.VideoFbReadSimTb"
+// Run: sbt "hdl/runMain retro.common.scaler.VideoFbReadSimTb"
 object VideoFbReadSimTb extends App {
   val SRC_W = 8; val SRC_H = 4
   val STRIDE_LOG2 = 9

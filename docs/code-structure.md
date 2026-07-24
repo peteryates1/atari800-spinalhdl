@@ -1,13 +1,13 @@
 # SpinalHDL code structure
 
-The SpinalHDL sources (sbt module `atari`, at `atari/`) are organised into packages under
+The SpinalHDL sources (sbt module `hdl`, at `hdl/`) are organised into packages under
 a machine-neutral root, **`retro`**, so that reusable IP is cleanly separated from
 machine-specific cores ahead of adding a second machine (Archimedes).
 
 ## Packages
 
 ```
-atari/src/main/scala/retro/
+hdl/src/main/scala/retro/
   common/            reusable across machines — depends on nothing above it
     util/            Synchronizer, SharedEnable, counters, delay lines, RegFile,
                      FileRom, HasBusIo, BlackBoxes, Plls, …
@@ -16,18 +16,20 @@ atari/src/main/scala/retro/
     scaler/          framebuffer scaler + OSD overlay: VideoFbRead/Write,
                      Scandoubler, Hdmi720Scaler, FbPipeline, TextOverlay*, Font8x16
     sdram/           SdramStatemachine, SdramArbiter3, SdramBist, MockSdram
-  link/              FPGA side of the RP2040 supervisor link: SioBridge, sims.
-                     (Sector-server, ioctl, hps-ext framer land here during the
-                     Archimedes port.)
+  link/              FPGA side of the RP2040 supervisor link. RESERVED / empty
+                     today — the machine-neutral pieces (sector-server, ioctl,
+                     hps-ext framer) get extracted here during the Archimedes port.
+                     (SioBridge is Atari SIO, so it currently lives under machines/atari.)
   machines/
     atari/           the Atari 800: Antic, Gtia, Pokey*, Cpu(65xx), Pia, Cart,
-                     Freezer, Atari800Core*, Atari*SimTb, RpAtariKeyboard, AtariHidMap
+                     Freezer, Atari800Core*, Atari*SimTb, SioBridge (Atari SIO),
+                     RpAtariKeyboard, AtariHidMap, Scandoubler
     archimedes/      (future) Amber (blackbox), Memc, Vidc, Ioc, Fdc, Ide, ArchieHpsExt
   boards/            board tops + their `*Sv` generators: Atari800WukongTop,
                      Atari800Rp2040HdmiLgTop, Atari800Ecp5*Top, SdramTestTop, Hdmi*Bars
 ```
 
-Tests mirror this under `atari/src/test/scala/retro/`.
+Tests mirror this under `hdl/src/test/scala/retro/`.
 
 ## The dependency rule
 
@@ -46,13 +48,13 @@ boundary has proven itself against the second machine.
 
 ## Build / run
 
-The sbt module id is still `atari`; only the Scala namespace changed. Entry points are now
+The sbt module id is `hdl`; the Scala namespace root is `retro`. Entry points are now
 fully-qualified under `retro`:
 
 ```
-sbt "atari/runMain retro.boards.Atari800WukongSv"          # Wukong (Artix-7, 1080p)
-sbt "atari/runMain retro.boards.Atari800Rp2040HdmiLgSv"    # 10CL025 + RP2040-STAMP (720p)
-sbt "atari/runMain retro.machines.atari.Atari800CoreSimTb" # a simulation
+sbt "hdl/runMain retro.boards.Atari800WukongSv"          # Wukong (Artix-7, 1080p)
+sbt "hdl/runMain retro.boards.Atari800Rp2040HdmiLgSv"    # 10CL025 + RP2040-STAMP (720p)
+sbt "hdl/runMain retro.machines.atari.Atari800CoreSimTb" # a simulation
 ```
 
 ## Root name

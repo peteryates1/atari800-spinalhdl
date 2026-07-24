@@ -188,7 +188,7 @@ recoverable from git history:
   VGA overlay muxes (superseded by `TextOverlay720/1080`), `SdramArbiter`+`BmbToSdramReq`
   (superseded by `SdramArbiter3`), and the unwired `PicoBus`/`I2cSlave`/`HdmiLineBuf`/
   `AudioPwm`/`Bundles`. A reachability audit from the live roots confirmed nothing else
-  is dead; `atari/src/main` is now 98 Scala files, all reachable.
+  is dead; `hdl/src/main` is now 98 Scala files, all reachable.
 - **Firmware** — the unused `font8x16.h` (on-screen text is FPGA-rendered, not RP2040)
   and 2.8 MB of vendored FatFs HTML docs. The supervisor C code audited clean: every
   `.c` compiles into the target, no unused functions.
@@ -217,7 +217,7 @@ recoverable from git history:
 
 ```bash
 # 1. Regenerate SystemVerilog from SpinalHDL (after Scala edits):
-sbt "atari/runMain retro.boards.Atari800Rp2040HdmiLgSv"
+sbt "hdl/runMain retro.boards.Atari800Rp2040HdmiLgSv"
 # 2. Build the FPGA bitstream:
 cd boards/rp2040-qmtech-10cl025/atari_starraiders
 /opt/altera/25.1/quartus/bin/quartus_sh --flow compile atari_starraiders

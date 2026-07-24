@@ -15,7 +15,7 @@ import java.nio.file.{Files, Paths}
 // of a behavioral model driving the core's interface directly. A request-
 // pulse-shape or toggle-handshake bug in the ROM fetch path shows up here
 // and nowhere else. OS window at 0x140000 (current decoder map).
-// Run: sbt "atari/runMain retro.machines.atari.Atari800ArbBootSimTb"
+// Run: sbt "hdl/runMain retro.machines.atari.Atari800ArbBootSimTb"
 class Atari800ArbBootHarness(cartMode: Int = 0) extends Component {
   val io = new Bundle {
     val videoVs   = out Bool()
@@ -149,7 +149,7 @@ object Atari800ArbBootSimTb extends App {
 // Cart-boot variant: OS at flat $D800/$E000 AND an 8K cart at flat $A000,
 // with emulated_cartridge_select=1 (CART_MODE_8K). Confirms the flat cart
 // read + OS cart-detection works before hardware.
-// Run: sbt "atari/runMain retro.machines.atari.Atari800CartBootSimTb"
+// Run: sbt "hdl/runMain retro.machines.atari.Atari800CartBootSimTb"
 object Atari800CartBootSimTb extends App {
   val compiled = SimConfig
     .withConfig(SpinalConfig(

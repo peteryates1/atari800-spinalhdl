@@ -141,7 +141,7 @@ WiFi — no card-pulling, no MSC/eject. **Off by default**; bring it up from the
 - `vivado/src/rgb2dvi_wrapper.vhd` + `rgb2dvi/` — Digilent TMDS encoder (VHDL-2008)
 - `vivado/constraints/wukong_atari.xdc` — pinout (clk, HDMI, SPI link, W9825 SDRAM)
 - `vivado/tcl/create_atari.tcl`, `build_atari.tcl` — Vivado project + build
-- RTL: `atari/src/main/scala/atari800/Atari800WukongTop.scala` (top),
+- RTL: `hdl/src/main/scala/retro/boards/Atari800WukongTop.scala` (top),
   `TextOverlay1080.scala`, `RpAtariKeyboard.scala`, and the shared LG video pipeline
 - Firmware: `firmware/supervisor/` (`-DBOARD=wukong`), notably `fpga_config.c`
   (`fpga_config_from_sd`), `main.c` (config-boot, `U`/`F`/`T`/`N`), `sd_spi.c`,

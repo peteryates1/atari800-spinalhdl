@@ -10,7 +10,7 @@ import spinal.core.sim._
 // Stage 2 integration sim: drive a source frame into the write path, let it flow
 // through the arbiter into MockSdram, then capture a read-side output frame and
 // verify the write->SDRAM->read->upscale round-trip.
-// Run: sbt "atari/runMain retro.common.scaler.FbPipelineSimTb"
+// Run: sbt "hdl/runMain retro.common.scaler.FbPipelineSimTb"
 object FbPipelineSimTb extends App {
   val SRC_W = 8; val SRC_H = 4; val HA = 16; val VA = 12
 

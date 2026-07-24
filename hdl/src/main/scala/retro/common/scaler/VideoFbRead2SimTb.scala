@@ -10,7 +10,7 @@ import spinal.core.sim._
 // Two-clock simulation for VideoFbRead2: pixel (output) and fetch (SDRAM) clocks
 // run at different asynchronous periods, exercising the per-line CDC handshake.
 // Verifies nearest-neighbour upscale end to end.
-// Run: sbt "atari/runMain retro.common.scaler.VideoFbRead2SimTb"
+// Run: sbt "hdl/runMain retro.common.scaler.VideoFbRead2SimTb"
 object VideoFbRead2SimTb extends App {
   val SRC_W = 8; val SRC_H = 4; val STRIDE_LOG2 = 9; val FB_BASE = 0x400
   val HA = 16; val VA = 12

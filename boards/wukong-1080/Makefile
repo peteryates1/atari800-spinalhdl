@@ -23,7 +23,7 @@ CABLE     := dirtyJtag
         push-core deploy-core
 
 generate:
-	cd $(REPO_ROOT) && sbt "atari/runMain retro.boards.Atari800Wukong1080Sv"
+	cd $(REPO_ROOT) && sbt "hdl/runMain retro.boards.Atari800Wukong1080Sv"
 
 create: generate
 	$(VIVADO) -mode batch -source $(VDIR)/tcl/create_project.tcl
@@ -40,7 +40,7 @@ all: build program
 ABIT := $(VDIR)/build/wukong_atari/wukong_atari.runs/impl_1/Atari800WukongTop.bit
 
 generate-atari:
-	cd $(REPO_ROOT) && sbt "atari/runMain retro.boards.Atari800WukongSv"
+	cd $(REPO_ROOT) && sbt "hdl/runMain retro.boards.Atari800WukongSv"
 
 create-atari: generate-atari
 	$(VIVADO) -mode batch -source $(VDIR)/tcl/create_atari.tcl

@@ -51,35 +51,16 @@ and Atari hardware documentation.
 
 ```
 build.sbt               Unified SBT build (Scala 2.13.18 / SpinalHDL 1.12.2)
-atari/                   Atari 800 core
-  src/main/scala/atari800/
-    Atari800Core.scala        Top-level Atari 800 (CPU, ANTIC, GTIA, POKEY, PIA, MMU)
-    Cpu65xx.scala             MOS 6502 CPU core
-    Antic.scala               ANTIC (display list DMA, character/bitmap modes)
-    Gtia.scala                GTIA (playfield/player-missile graphics, colours)
-    Pokey.scala               POKEY (sound, keyboard, serial I/O, timers)
-    Pia.scala                 PIA (parallel I/O, port B memory control)
-    CartLogic.scala           Cartridge slot logic (8K/16K, RD4/RD5, OSS/XEGS variants)
-    AddressDecoder.scala      Memory map, SDRAM/ROM/RAM routing
-    InternalRomRam.scala      OS ROM + internal RAM (cart auto-replaces upper RAM)
-    FileRom.scala             Generic ROM from binary .rom file (loaded at elaboration)
-    Scandoubler.scala         15kHz→31kHz VGA scandoubler
-    GtiaPalette.scala         Full PAL/NTSC colour palette (256 entries)
-    Atari800CoreSim.scala     Simulation top-level wrapper
-    Atari800CoreSimTb.scala   Simulation testbench with frame capture
-    Atari800DiskSimTb.scala   SIO disk simulation with ATR image loader
-    Atari800CoreSimTb.scala   (+ Atari800DiskSimTb) sim testbenches with frame capture
-    Atari800CoreSimpleSdram.scala  Core + SDRAM-framebuffer video wrapper (active boards)
-    Atari800Rp2040HdmiLgTop.scala  10CL025 + RP2040-STAMP top (720p HDMI)
-    Atari800WukongTop.scala        Wukong (Artix-7 XC7A100T) top (native 1080p60)
-    Atari800Wukong1080Top.scala    Wukong Phase-0 1080p colour-bar bring-up
-    Atari800Ecp5Hdmi720Top.scala   Colorlight i5 (ECP5) top (720p)
-    RpAtariKeyboard.scala     RP2040/Pico SPI link: keyboard, control, loader, SIO, text overlay
-    SioBridge.scala           Hardware SIO UART bridge (disk emulation)
-    HasBusIo.scala            Peripheral register-bus trait (mixed into SioBridge)
-    VideoFbWrite / VideoFbRead2 / SdramArbiter3 / SdramStatemachine  SDRAM framebuffer + DDA scaler
-    TextOverlay720.scala / TextOverlay1080.scala  FPGA-native on-screen menu text
-    GtiaPalette.scala         Full PAL/NTSC colour palette; Debounce.scala; Font8x16.scala
+hdl/                     SpinalHDL sources — packages under machine-neutral root `retro`
+  src/main/scala/retro/
+    common/{util,video,scaler,sdram}   reusable IP: TMDS/DVI out, framebuffer scaler,
+                                       SDRAM controller, utilities
+    link/                              FPGA side of the RP2040 supervisor link (SioBridge)
+    machines/atari/                    Atari 800 core: 6502, ANTIC, GTIA, POKEY, PIA,
+                                       cart, Scandoubler, GtiaPalette, sim testbenches
+    boards/                            board tops + *Sv generators (Wukong, Rp2040-LG, i5)
+  src/test/scala/retro/                SpinalSim specs
+                         Full layout + dependency rule: docs/code-structure.md
 firmware/supervisor/     RP2040/Pico supervisor C firmware (config-boot, USB kbd, SIO,
                          menu, SD-side FPGA config; Pico 2 W: WiFi + HTTP SD manager).
                          Build via CMake: -DBOARD=qmtech (STAMP) | wukong | colorlight
@@ -141,7 +122,7 @@ your own. Expected filenames (under `roms/`):
 
 ```sh
 # Boot with Star Raiders cartridge (default configuration)
-sbt "atari/runMain retro.machines.atari.Atari800CoreSimTb"
+sbt "hdl/runMain retro.machines.atari.Atari800CoreSimTb"
 
 # To change the cartridge, edit Atari800CoreSimTb.scala:
 #   cartridge_rom = "roms/YourGame.rom"
@@ -154,8 +135,8 @@ Convert to PNG with ImageMagick: `convert frame.ppm frame.png`
 ### Generate SystemVerilog
 
 ```sh
-sbt "atari/runMain retro.boards.Atari800WukongSv"          # Wukong (Artix-7, 1080p)
-sbt "atari/runMain retro.boards.Atari800Rp2040HdmiLgSv"    # 10CL025 + RP2040-STAMP (720p)
+sbt "hdl/runMain retro.boards.Atari800WukongSv"          # Wukong (Artix-7, 1080p)
+sbt "hdl/runMain retro.boards.Atari800Rp2040HdmiLgSv"    # 10CL025 + RP2040-STAMP (720p)
 ```
 
 Output lands in `generated/` (gitignored). The active boards drive it through
