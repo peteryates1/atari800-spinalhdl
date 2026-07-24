@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 ROOT=../../..
 mkdir -p build
 echo "== 1/4 generate SV =="
-( cd $ROOT && sbt "atari/runMain atari800.Atari800Ecp5Hdmi720TestSv" )
+( cd $ROOT && sbt "atari/runMain retro.boards.Atari800Ecp5Hdmi720TestSv" )
 echo "== 2/4 synth =="
 yosys -p "read_verilog -sv pll_hdmi_ecp5.sv ecp5_clkgen720.v ecp5_oddrx2x4.v \
   $ROOT/generated/Atari800Ecp5Hdmi720TestTop.sv; \

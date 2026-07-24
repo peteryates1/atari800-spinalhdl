@@ -217,7 +217,7 @@ recoverable from git history:
 
 ```bash
 # 1. Regenerate SystemVerilog from SpinalHDL (after Scala edits):
-sbt "atari/runMain atari800.Atari800Rp2040HdmiLgSv"
+sbt "atari/runMain retro.boards.Atari800Rp2040HdmiLgSv"
 # 2. Build the FPGA bitstream:
 cd boards/rp2040-qmtech-10cl025/atari_starraiders
 /opt/altera/25.1/quartus/bin/quartus_sh --flow compile atari_starraiders

@@ -11,7 +11,7 @@ ROOT=../../..
 mkdir -p build
 
 echo "== 1/4 generate SV =="
-( cd $ROOT && sbt "atari/runMain atari800.Atari800Ecp5Hdmi720Sv" )
+( cd $ROOT && sbt "atari/runMain retro.boards.Atari800Ecp5Hdmi720Sv" )
 
 echo "== 2/4 synth (from generated/ for ROM .bin) =="
 ( cd $ROOT/generated && \

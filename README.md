@@ -141,7 +141,7 @@ your own. Expected filenames (under `roms/`):
 
 ```sh
 # Boot with Star Raiders cartridge (default configuration)
-sbt "atari/runMain atari800.Atari800CoreSimTb"
+sbt "atari/runMain retro.machines.atari.Atari800CoreSimTb"
 
 # To change the cartridge, edit Atari800CoreSimTb.scala:
 #   cartridge_rom = "roms/YourGame.rom"
@@ -154,8 +154,8 @@ Convert to PNG with ImageMagick: `convert frame.ppm frame.png`
 ### Generate SystemVerilog
 
 ```sh
-sbt "atari/runMain atari800.Atari800WukongSv"          # Wukong (Artix-7, 1080p)
-sbt "atari/runMain atari800.Atari800Rp2040HdmiLgSv"    # 10CL025 + RP2040-STAMP (720p)
+sbt "atari/runMain retro.boards.Atari800WukongSv"          # Wukong (Artix-7, 1080p)
+sbt "atari/runMain retro.boards.Atari800Rp2040HdmiLgSv"    # 10CL025 + RP2040-STAMP (720p)
 ```
 
 Output lands in `generated/` (gitignored). The active boards drive it through

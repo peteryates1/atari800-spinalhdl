@@ -8,7 +8,7 @@ SOF_FILE = output_files/$(QP).sof
 # Re-generate the Atari core SV from SpinalHDL (only needed if the Scala
 # source changes — output lands at $(ROOT)/generated/Atari800Rp2040HdmiLgTop.sv).
 generate:
-	cd $(ROOT) && sbt "atari/runMain atari800.Atari800Rp2040HdmiLgSv"
+	cd $(ROOT) && sbt "atari/runMain retro.boards.Atari800Rp2040HdmiLgSv"
 
 build:
 	$(QUARTUS)/quartus_sh --flow compile $(QP)
