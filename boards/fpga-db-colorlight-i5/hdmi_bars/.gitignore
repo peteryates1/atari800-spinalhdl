@@ -1,0 +1,7 @@
+build/
+build_se*/
+*.jou
+*.log
+*.out
+.Xil/
+clockInfo.txt

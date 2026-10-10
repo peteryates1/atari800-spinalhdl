@@ -89,9 +89,12 @@ stream on the +pin — swap the P/N ball map in the constraints, or invert the l
   the method reproduces CLK/TX0 independently and diverges only on the swapped lanes.)
 
 ### Driving them
-- **Artix (i9+):** `OBUFDS` (true differential), fed by `OSERDESE2` (master+slave for
-  10:1) at the 5× serial clock from an `MMCM` → 1080p60. Bank 34 is HR (3.3 V) and has
-  clock-capable pins for the `BUFIO` serial clock.
+- **Artix (i9+):** *(corrected 2026-10-10)* NOT `OBUFDS`/TMDS_33 on the fpga-db base board:
+  that board AC-couples every lane, and TMDS_33 then gives no signal (measured, see
+  [`../fpga-db-colorlight-i5/README.md`](../fpga-db-colorlight-i5/README.md#hdmi-on-hardware-2026-10-10)).
+  Drive pseudo-differential LVCMOS33 instead (true + complement on the two balls), so the
+  inversion table above does not apply. `OBUFDS` fed by an `OSERDESE2` master+slave pair is
+  only right for a DC-coupled sink. Bank 34 is HR (3.3 V).
 - **ECP5 (i5/i9):** drive the pair with `LVCMOS33D` (3.3 V pseudo-diff, as our working
   `Ecp5DvidOut` already does) or `LVDS` if that bank is set to 2.5 V VCCIO. Because
   these are *matched* pairs (unlike the ext-board's scrambled HDMI pins), routing is
