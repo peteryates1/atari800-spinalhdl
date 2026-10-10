@@ -219,7 +219,18 @@ i9+ module, this board with all connectors fitted, a monitor on HDMI1. Test bits
 - **720p needs a gearbox.** A 10:1 `OSERDESE2` is a master/slave pair that borrows the partner
   ball's OLOGIC, which the complement output needs. Each pin needs its own 8:1 DDR `OSERDESE2`
   fed by a 10→8 gearbox.
-- **🚩 OPEN: the picture blanks intermittently.** The whole screen goes for about a second, more
+- **Board decision (Peter, 2026-10-10): this board is an i9+ board**, because a board is tied to one
+  module family once its pogo pins are fitted. So C1–C7 and C10 are being replaced by **0 Ω links**,
+  and the Artix drives `TMDS_33` DC-coupled, as the Wukong does (verified at 1080p).
+  `hdmi_bars/hdmi_bars_top.v` (720p, CLK/TX1/TX2 inverted) is the build for that.
+  **With the links fitted, NEVER load the `hdmi_se*` / `hdmi720_se*` (pseudo-diff LVCMOS33)
+  builds:** a push-pull 3.3 V output DC-coupled into the sink's 50 Ω to 3.3 V sinks about
+  66 mA per pin. Keep the HDMI cable out at power-up until our bitstream is loaded, because the
+  module's factory flash image drives pins on this board.
+- **Pseudo-diff, as fitted with caps:** DRIVE 16 and DRIVE 8 blanked more and more over minutes.
+  DRIVE 4 (higher output impedance, so less swing into 50 Ω) held a clean 640×480 picture. 720p
+  pseudo-diff at DRIVE 16 was noisy, then blanked: 742 Mb/s is too much for this path.
+- **Superseded — the picture blanks intermittently.** The whole screen goes for about a second, more
   often and for longer as the board runs. It was first seen at `DRIVE 16 SLEW FAST`, which
   drives far more swing into 50 Ω than TMDS needs. Lower-drive variants are under test
   (`build_se.tcl -tclargs <part> <drive> <slew>`).
