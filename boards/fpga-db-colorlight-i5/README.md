@@ -209,7 +209,7 @@ i9+ module, this board with all connectors fitted, a monitor on HDMI1. Test bits
   healthy (MMCM locked, frames counted on the LEDs). The build was
   `hdmi_bars/hdmi_bars_top.v`: 720p with Digilent rgb2dvi.
 - **Pseudo-differential LVCMOS33 WORKS:** two single-ended outputs per lane, one the complement
-  of the other, as the ECP5's `LVCMOS33D` does. The build is `hdmi_bars/hdmi_se_top.v`: 640×480,
+  of the other, as the ECP5's `LVCMOS33D` does. The build was `hdmi_se_top.v` (commit 5ac462d): 640×480,
   a 10-bit shift register at 125 MHz feeding one `ODDR` per pin. The monitor shows the border,
   the eight bars in the right order (so all three lanes are right) and the moving box.
 - **Polarity is free with pseudo-diff.** The ports are named by CONNECTOR polarity: + on AB1
@@ -223,17 +223,15 @@ i9+ module, this board with all connectors fitted, a monitor on HDMI1. Test bits
   module family once its pogo pins are fitted. So C1–C7 and C10 are being replaced by **0 Ω links**,
   and the Artix drives `TMDS_33` DC-coupled, as the Wukong does (verified at 1080p).
   `hdmi_bars/hdmi_bars_top.v` (720p, CLK/TX1/TX2 inverted) is the build for that.
-  **With the links fitted, NEVER load the `hdmi_se*` / `hdmi720_se*` (pseudo-diff LVCMOS33)
-  builds:** a push-pull 3.3 V output DC-coupled into the sink's 50 Ω to 3.3 V sinks about
-  66 mA per pin. Keep the HDMI cable out at power-up until our bitstream is loaded, because the
-  module's factory flash image drives pins on this board.
-- **Pseudo-diff, as fitted with caps:** DRIVE 16 and DRIVE 8 blanked more and more over minutes.
+  **The pseudo-diff builds are DELETED from the tree** (last present in d77c30e) so they can't be
+  loaded onto a board with links: there, a push-pull 3.3 V output DC-coupled into the sink's
+  50 Ω to 3.3 V would sink roughly 20-45 mA per pin, depending on DRIVE. Revive them only for an
+  i9+ board that keeps its caps. Keep the HDMI cable out at power-up until a known image is in
+  the module flash, because the factory image drives pins on this board.
+- **Pseudo-diff, as fitted with caps (history):** DRIVE 16 and DRIVE 8 blanked more and more over minutes.
   DRIVE 4 (higher output impedance, so less swing into 50 Ω) held a clean 640×480 picture. 720p
-  pseudo-diff at DRIVE 16 was noisy, then blanked: 742 Mb/s is too much for this path.
-- **Superseded — the picture blanks intermittently.** The whole screen goes for about a second, more
-  often and for longer as the board runs. It was first seen at `DRIVE 16 SLEW FAST`, which
-  drives far more swing into 50 Ω than TMDS needs. Lower-drive variants are under test
-  (`build_se.tcl -tclargs <part> <drive> <slew>`).
+  pseudo-diff (`hdmi720_se_top.v`) at DRIVE 16 was noisy, then blanked: 742 Mb/s is too much
+  for this path.
 - `hdmi_bars/continuity/`: a conductor-by-conductor test, i9+ → HDMI cable → Wukong (a distinct
   square wave per conductor, edge counts on the Wukong's console). Built, not needed once the
   picture came up.
@@ -248,7 +246,7 @@ i9+ module, this board with all connectors fitted, a monitor on HDMI1. Test bits
 | `pinmap.csv` | SODIMM ↔ net ↔ i5 / i9 / i9+ ball ↔ status; 90 signal rows |
 | `fit/boardpins_fit.sv`, `fit/fit_i5.lpf` | i5 pin-validity fit-check, 82 pins |
 | `BOM_fpga-db-colorlight-i5_fpga-db-colorlight-i5_2026-08-14.csv` | bill of materials |
-| `hdmi_bars/` | i9+ HDMI test bitstreams (Vivado, `vivado -mode batch -source build_se.tcl`); see [HDMI on hardware](#hdmi-on-hardware-2026-10-10) |
+| `hdmi_bars/` | i9+ HDMI test bitstream, TMDS_33 720p (Vivado, `vivado -mode batch -source build.tcl`); see [HDMI on hardware](#hdmi-on-hardware-2026-10-10) |
 
 Not generated yet: `i5.lpf` / `i9plus.xdc` constraint files (needs per-net direction) — take the
 [`../rp2040-colorlight/fpga/`](../rp2040-colorlight/fpga/) generator and re-point it at this

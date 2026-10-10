@@ -1,6 +1,4 @@
 build/
-build_se*/
-build720_se*/
 *.jou
 *.log
 *.out
